@@ -77,7 +77,7 @@ int main() {
     r.set_priority(DRIVER, 3, birthday::EVERY);
     okf(r.has_priority(), "priority set");
     Card c;
-    int pri = 0, total = 400;
+    int pri = 0, total = 2000;
     std::set<int> circuits_seen, drivers_seen;
     for (int i = 0; i < total; i++) {
       r.next(c);
@@ -95,6 +95,11 @@ int main() {
         "priority slot alone", pri, total, expect);
     okf(pri <= expect + total / drivers::N + 4,
         "birthday card appeared %d times in %d - too often, it is taking over",
+        pri, total);
+    // The rate must stay well under the "wallpaper" threshold 5.13 warns about.
+    // One card in eight would be visible on almost every glance.
+    okf(pri < total / 8,
+        "birthday card is %d of %d cards - too frequent to stay special",
         pri, total);
     // and nothing is starved: the rotation resumes where it was.
     okf((int) circuits_seen.size() == 40, "circuits still fully reached (%zu/40)",
@@ -121,8 +126,8 @@ int main() {
     okf(!r.has_priority(), "priority cleared");
     Card c;
     int pri = 0;
-    for (int i = 0; i < 200; i++) { r.next(c); if (c.type == DRIVER && c.index == 3) pri++; }
-    okf(pri < 10, "after clearing, the card is ordinary again (%d in 200)", pri);
+    for (int i = 0; i < 400; i++) { r.next(c); if (c.type == DRIVER && c.index == 3) pri++; }
+    okf(pri < 10, "after clearing, the card is ordinary again (%d in 400)", pri);
   }
   {
     // An out-of-range priority index must be ignored, not crash or stall.

@@ -61,11 +61,29 @@ inline int count_today(int month, int day) {
   return n;
 }
 
-// How often the birthday card is injected. Every 4th card means it appears
-// roughly once every three minutes at the default 45 s interval - noticeable
-// across a day without becoming the only thing on screen, which is the balance
-// 5.13's "rare beats frequent" rule asks for even on a good day.
-inline constexpr int EVERY = 4;
+// How often the birthday card is injected, as a count of cards.
+//
+// The first attempt used 4 and was far too frequent. The arithmetic, which is
+// worth keeping because the intuition is bad:
+//
+//   The rotation is circuit -> driver -> circuit -> legend, so drivers are one
+//   card in four. With 23 drivers, any ONE of them appears naturally every 92
+//   cards - about once an hour at the 45 s default, 21 times a day.
+//
+//   every 4th : every  3 min, 480/day, 23.0x the natural rate   <- wallpaper
+//   every 12th: every  9 min, 160/day,  7.7x
+//   every 20th: every 15 min,  96/day,  4.6x                    <- chosen
+//   every 46th: every 35 min,  42/day,  2.0x                    <- barely a bias
+//
+// 5.13's rule is "rare beats frequent": a thing that appears constantly becomes
+// wallpaper within a week, and a birthday lasts one day. 4.6x is enough that
+// someone glancing at the device through the day will meet it several times
+// and notice, without it becoming what the device is showing.
+//
+// Note this is a CARD count, not a time: at the 15 s minimum interval it is one
+// every 5 minutes, and at the 120 s maximum one every 40. That spread is
+// acceptable - someone who sets a 15 s carousel has asked for more churn.
+inline constexpr int EVERY = 20;
 
 }  // namespace birthday
 }  // namespace f1

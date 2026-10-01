@@ -10,8 +10,8 @@ ESP32-4848S040 — the same board, font stack and UI cues as `sky-tracker`.
   circuit's map with facts, a profile of every current driver, and a profile of
   an F1 legend. Each profile carries a portrait, a nationality flag and the
   full career record.
-- **On a driver's birthday** their card is badged in gold and shown every 4th
-  card in the rotation.
+- **On a driver's birthday** their card is badged in gold and shown about five
+  times as often as usual — once every 15 minutes rather than once an hour.
 - **One driver is watched.** It ships watching **Max Verstappen** and raises an
   alert when he is racing, when his grid slot is known, when his result lands,
   and when he passes a career milestone — a full-width banner for events, a

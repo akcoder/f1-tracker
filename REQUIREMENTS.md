@@ -3,8 +3,8 @@
 **Target hardware:** Guition ESP32-4848S040 (ESP32-S3, 4.0" 480×480 IPS)
 **Framework:** ESPHome (ESP-IDF)
 **Status:** Draft rev 2 — living document, updated as decisions are made
-**Last updated:** 2026-10-01 (rev 15: **M0–M7 built**, glyph coverage gated,
-birthdays added — §14.1 is all that remains)
+**Last updated:** 2026-10-01 (rev 16: **M0–M7 built**, glyph coverage gated,
+birthdays at a defensible rate — §14.1 is all that remains)
 
 ---
 
@@ -2422,7 +2422,8 @@ exists.
 | 139 | **The OTA panel names the phase it is in**: `UPLOADING` while the bytes arrive, `UPGRADING` once they are being applied, `UPLOAD FAILED` on error. Every phase previously said `UPGRADING`, which is wrong for the part that takes longest and is the part a watcher is waiting on | 2026-10-01 | **asked for by owner** |
 | 140 | **`tools/check_glyphs.py` is built and is a `deploy.sh` gate** (decision 52). 1,901 strings from the YAML, the C++ headers and the **generated tables** — the last being where the risk lives, because nobody reads those files. A font's effective set is what it requests **intersected with what the typeface provides** | 2026-10-01 | implements 52 |
 | 141 | **The checker's first version made the very mistake decision 52 warns about**, in the opposite direction: it measured every string against one shared set and flagged the gear symbol, which `montserrat_28` draws perfectly well. It now resolves each label's **effective** font | 2026-10-01 | active |
-| 142 | **On a driver's birthday their card is badged in gold and injected every 4th card.** The priority slot does not consume a cursor, so nothing is starved and the rotation resumes where it was; a birthday never overrides a content filter that excludes drivers | 2026-10-01 | **asked for by owner** |
+| 142 | **On a driver's birthday their card is badged in gold and injected every 20th card.** The priority slot does not consume a cursor, so nothing is starved and the rotation resumes where it was; a birthday never overrides a content filter that excludes drivers | 2026-10-01 | **asked for by owner**, rate revised by 145 |
+| 145 | **Every 4th card was far too frequent** — 480 appearances a day, **23× the natural rate**, which §5.13 calls wallpaper. The rotation is circuit→driver→circuit→legend, so with 23 drivers any one of them appears naturally every 92 cards: about hourly. **Every 20th** gives one every 15 minutes, 96 a day, **4.6×** natural — enough to be met several times through a day without becoming what the device is showing. The arithmetic is kept in the header because the intuition is bad | 2026-10-01 | **corrected by owner** |
 | 143 | **Birthdays are scoped to CURRENT DRIVERS.** Legends carry a date of birth but **no date of death**, so the device cannot tell a living driver's birthday from the anniversary of someone long dead — `BIRTHDAY` over Ayrton Senna would be the worst thing it could display. `LEGENDS_INCLUDED` is named so the reasoning is in the code, not only here | 2026-10-01 | active |
 | 144 | **A 29 February birthday falls back to the 28th** in a non-leap year, rather than being skipped three years in four | 2026-10-01 | active |
 | 90 | **A Sprint is a first-class race day** (RACE-14) — its own grid, result and race page, labelled `SPRINT`. A sprint weekend has two race days. Sprint wins must **not** count toward career win milestones; Jolpica keeps them in a separate endpoint | 2026-10-01 | **decided by owner**, closes open question 6 |
