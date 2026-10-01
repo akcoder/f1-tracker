@@ -3,9 +3,8 @@
 **Target hardware:** Guition ESP32-4848S040 (ESP32-S3, 4.0" 480×480 IPS)
 **Framework:** ESPHome (ESP-IDF)
 **Status:** Draft rev 2 — living document, updated as decisions are made
-**Last updated:** 2026-10-01 (rev 6: target season **2027**, sprints are race
-days, **louder** alerts, 240×320 portraits, and open question 3 **answered by
-measurement** — §6.3.1)
+**Last updated:** 2026-10-01 (rev 7: season is **resolved at runtime, never
+fixed** — the device follows the rollover for its whole life, §4.2.1)
 
 ---
 
@@ -791,45 +790,85 @@ database.
       guessed at. Copy, do not factor a shared library — `plane-tracker`
       decision 31, and the same reasoning applies a third time.
 
-### 4.2.1 Target season: 2027 (RACE-13)
-**Decision 89: the device is built for the 2027 season.** 2026 is test data.
+### 4.2.1 The season is resolved at runtime, never fixed (RACE-13)
+**Decision 89: the device tracks the _current_ season, resolved from the API at
+runtime. No season year appears anywhere in the firmware, the YAML or the
+generated headers as a target.**
 
-This settles open question 5 by making it moot — the 2026 calendar Jolpica
-serves is provisional and internally odd (23 rounds against 24 circuits, a
-round named *"Bahrain Grand Prix in Malaysia"* at Sepang, §3.4), and none of
-that matters if the device ships into 2027.
+This is a device meant to sit on a wall for years. A fixed season would mean a
+firmware rebuild every winter, and a device that silently shows a stale year if
+nobody does one. Following the rollover is the whole difference between an
+appliance and a project.
 
-**Measured 2026-10-01, and it is the thing to design around:**
+**Measured 2026-10-01 — the endpoints that make this cheap:**
 
-| Query | Result |
-|---|---|
-| `/ergast/f1/2027/races/` | `total = 0` — **no 2027 calendar yet** |
-| `/ergast/f1/2027/drivers/` | `total = 0` — **no 2027 entry list yet** |
-| `/ergast/f1/current/` | `total = 23` — `current` still resolves to 2026 |
+| Query | Result | Role |
+|---|---|---|
+| `/ergast/f1/current/?limit=1` | `season = 2026`, `total = 23` | **the season resolver** — tiny, and states the season explicitly |
+| `/ergast/f1/current/next/` | season 2026, round 16, 2026-10-04 | next session; **goes empty when the season is over** |
+| `/ergast/f1/current/last/` | season 2026, round 15 | most recent completed round |
+| `/ergast/f1/2027/races/` | `total = 0` | a future season simply does not exist until it is published |
 
-- [ ] **RACE-13a: the device must handle "the target season does not exist
-      yet."** This is the *normal* state from the end of one season until the
-      next calendar is published, which is months. It is not an error, and it
-      must not look like one.
-- [ ] **Never hard-code a season year.** Resolve the season as: the latest
-      season Jolpica serves a non-empty calendar for, preferring the newest.
-      `current` is a good hint but it lagged into October 2026, so it cannot be
-      the only signal.
-- [ ] **`OFF_SEASON` is the state that covers this**, and it is the state the
-      device will be in when it is first switched on. It must be the
-      best-looking idle screen in the project, not a placeholder — the carousel
-      runs on compiled-in data regardless (§4.3), so there is plenty to show.
-- [ ] **Build the compiled-in calendar from whatever is newest at build time**
-      and record the season in the generated header. A device flashed before
-      the 2027 calendar exists ships with 2026 baked in and picks 2027 up over
-      the network the moment it appears — which is exactly what §4.3 is for.
-- [ ] **The 2027 entry list is also unavailable**, so the watched-driver
-      `select` (§6.14.1) and the driver carousel cards (§5.6) are built from
-      the newest available season and refreshed when 2027 lands. Verstappen's
-      `driverId` is stable across this, which is the point of decision 77.
+- [ ] **RACE-13a: resolve the season from `/current/`**, which names it in a
+      response of a few hundred bytes. Re-resolve on the ordinary `IDLE` /
+      `OFF_SEASON` cadence (§3.6) — a season changes once a year, so this costs
+      nothing.
+- [ ] **RACE-13b: `/current/next/` returning empty is the end-of-season
+      signal**, not an error. Measured shape: an empty `Races` array. When it
+      is empty and the last round has run, the device is in `OFF_SEASON` and
+      waits for `/current/` to name a new season.
+- [ ] **RACE-13c: the gap between seasons is months, and it is normal.** From
+      the last race until the next calendar is published, there is no future
+      session anywhere. Measured today: no 2027 calendar and no 2027 entry list
+      exist. **This must not look like a fault** — it is not a "no data" state
+      (§6.12), it is `OFF_SEASON`, and the carousel runs the whole time on
+      compiled-in data (§4.3).
+- [ ] **`OFF_SEASON` is therefore a first-class screen**, not a placeholder.
+      It is where the device spends a good part of every year and it is the
+      state it will be in when first switched on. Show the completed season's
+      champion and final standings, and the carousel; say *"2026 season
+      complete — 2027 calendar not yet published"* rather than anything that
+      reads as broken.
+- [ ] **Compile in whatever is newest at build time and record the season in
+      the generated header** (§4.3). A fetched season always supersedes it. A
+      device flashed in one year and never rebuilt follows the calendar
+      forward on its own.
+- [ ] **A season rollover must need no firmware update.** Make this an explicit
+      host test: feed the state machine a `current` that advances a year
+      mid-run and assert the calendar, the entry list, the driver carousel and
+      the watched-driver resolution all follow.
+
+#### 4.2.1.1 What rolling over costs — two consequences worth designing for
+Tracking the current season at runtime collides with two things that are
+generated at build time (§5.6), and both need handling.
+
+- [ ] **RACE-13d: resolve the legend/current-driver overlap at _runtime_, not
+      at build time.** This **corrects decision 86.** If the overlap were baked
+      and the season advanced without a rebuild, a driver who retired would be
+      suppressed from the legend rotation (because the build marked him
+      "current") *and* absent from the driver rotation (because he is no longer
+      in the entry list) — he would **vanish entirely**. Ship the legend record
+      for every legend, including those currently racing, and decide **per
+      card, at runtime**, against the live entry list:
+      in the entry list → driver card with a `LEGEND` badge; not in it →
+      legend card. Hamilton retiring then moves him into the legend rotation on
+      the next poll, with no rebuild.
+- [ ] **RACE-13e: a driver with no compiled profile still gets a card.** A
+      rookie who joins after the firmware was built has no portrait and no
+      career record. Render a **text-only card** from the live entry list —
+      name, flag, number, team — and omit the portrait and the stats rather
+      than skipping the driver. The card degrades to exactly what is known,
+      which for a rookie is very nearly everything anyway.
+- [ ] Show the **profile data's build date** on the debug page beside the
+      calendar's source and age (§4.3), so a device running two-year-old
+      portraits is visible rather than mysterious.
+- [ ] **Portraits are the one thing a rebuild is genuinely needed for.** Say so
+      in the README rather than pretending otherwise: the device follows the
+      season on its own, and an occasional reflash refreshes the faces.
 - [ ] Keep the **2026 fixtures as test data** (`reference/samples/`). They are
-      a complete, real season's shapes and they exercise every data-quality
-      case in §3.4 — a better test corpus than a clean 2027 would be.
+      a complete real season's shapes, they exercise every data-quality case in
+      §3.4, and they are now also the **rollover fixture** — a season that ends
+      while a newer one does not yet exist is precisely the edge case above.
 
 ### 4.3 The season calendar is compiled in, then refreshed (DATA-3)
 A generated header carries the calendar as built, and the network refreshes it.
@@ -1069,15 +1108,16 @@ response.** This is the whole technique:
 **Decision 75 is settled: the list below ships.** Delegated to me by the owner,
 so the selection criteria matter more than my taste: **every multiple World
 Champion**, plus **single champions of lasting significance**, plus **great
-drivers who never won a title**. Thirty-one rows.
+drivers who never won a title**. Thirty-two rows.
 
 | Group | `driverId`s |
 |---|---|
-| Multiple champions (16) | `fangio` · `ascari` · `brabham` · `clark` · `stewart` · `lauda` · `prost` · `senna` · `michael_schumacher` · `vettel` · `fittipaldi` · `piquet` · `hakkinen` · `graham_hill` · `alonso`\* · `hamilton`\* |
+| Multiple champions (17) | `fangio` · `ascari` · `brabham` · `clark` · `stewart` · `lauda` · `prost` · `senna` · `michael_schumacher` · `vettel` · `fittipaldi` · `piquet` · `hakkinen` · `graham_hill` · `alonso`\* · `hamilton`\* · `max_verstappen`\* |
 | Single champions of note (10) | `hunt` · `mansell` · `rindt` · `jacques_villeneuve` · `damon_hill` · `hawthorn` · `surtees` · `rosberg` (Nico) · `raikkonen` · `button` |
 | Never champion (5) | `moss` · `gilles_villeneuve` · `amon` · `ickx` · `peterson` |
 
-\* also a current driver — see the overlap rule below.
+\* currently racing — the runtime overlap rule (RACE-13d) shows these as driver
+cards today and as legend cards once they retire. **32 rows.**
 
 Two corrections to the draft list, recorded because both were real errors:
 - **Jack Brabham appeared twice**, as `Brabham` and `Jack Brabham`. One row.
@@ -1089,22 +1129,26 @@ Two corrections to the draft list, recorded because both were real errors:
   won a title*, and he is a tier below the other five.
 
 #### Overlap with current drivers — measured
-Checked against the 2026 entry list: **three proposed legends are still
-racing** — `alonso`, `hamilton` and `max_verstappen`.
+Checked against the 2026 entry list: **three listed legends are still
+racing** — `alonso`, `hamilton` and `max_verstappen`. That set changes on its
+own as drivers retire, which is why the rule is evaluated at runtime.
 
 - [ ] **Show each driver once.** A driver in both sets gets their
       **current-driver card**, not a second legend card, and that card carries
       a **`LEGEND` badge** beside the `DRIVER` type badge (§6.4, UI-20b) plus
       the full career record. One card, both facts.
-- [ ] **Resolve the overlap at build time by `driverId`** against the current
-      entry list, never by hand. Verstappen is already in the current set and
-      is deliberately **absent from the legends table above** for that reason;
-      Alonso and Hamilton are listed because they belong there on record and
-      the overlap rule handles them automatically if they stop racing.
-- [ ] **This cannot be left to drift.** When a current driver retires, the
-      overlap rule must move them into the legend rotation on the next build
-      with no edit — which is exactly why it is a generated rule and not a
-      curated flag.
+- [ ] **Resolve the overlap at _runtime_ against the live entry list**
+      (RACE-13d) — **not** at build time, which was decision 86's original
+      wording and is wrong for a device that follows the season (§4.2.1.1).
+      The legend record is **always compiled in**, including for drivers
+      currently racing; which card renders is decided per card, per poll.
+- [ ] **`max_verstappen` is therefore listed in the legends table too**, not
+      omitted. He is a four-time champion on record; the runtime rule shows him
+      as a driver card while he is racing and moves him to the legend rotation
+      the day he stops, with no rebuild and no edit.
+- [ ] **This cannot be left to drift**, and runtime resolution is what prevents
+      it: there is no build step that can go stale, and a retirement is picked
+      up on the next entry-list poll.
 - [ ] Keep the table **editable, with the group recorded per row**, so the
       carousel can weight or filter by group later.
 - [ ] **DATA-7 applies to most of this list** — no `code`, no
@@ -2193,10 +2237,15 @@ exists.
 | 83 | **Red night mode is declined** — not ported, not shipped disabled, absent. Both siblings are instruments watched in the dark; this is a living-room object showing a sport, and at 61.58 N a dusk trigger would hold the screen red up to 19 h a day in December. Auto-dim (§6.8) answers the same problem without destroying team colours and flags | 2026-10-01 | **decided by owner**, closes open question 2 |
 | 84 | **No hardware yet.** Work stops at `esphome compile`; §14.1 collects every hardware-gated item. The generators, data layer, state machine and test suite are all host work and carry most of the project's risk, so this costs little | 2026-10-01 | **decided by owner** |
 | 85 | **The legends list is settled at 31 rows** (§5.6.4), delegated by the owner. Two errors in the draft fixed: Jack Brabham was duplicated, and Räikkönen and Button were missing. Barrichello dropped on the stated bar | 2026-10-01 | settles 75 |
-| 86 | **A driver in both sets gets one card** — their current-driver card with a `LEGEND` badge. The overlap is resolved at build time by `driverId` against the entry list, so a retirement moves a driver into the legend rotation with no edit. Measured overlap: Alonso, Hamilton, Verstappen | 2026-10-01 | active |
+| 86 | **A driver in both sets gets one card** — their current-driver card with a `LEGEND` badge. Measured overlap: Alonso, Hamilton, Verstappen | 2026-10-01 | **corrected by 96** — the resolution is at runtime, not build time |
 | 87 | **DATA-10: the season driver list is not the race entry list.** Measured: 32 rows for 2026, only 23 with a `code` and number; the rest are reserves. Build the watched-driver `select` from the round's own data, not the season pool | 2026-10-01 | active |
 | 88 | **22 order rows fit at `mono12`, 18 px per row, TEAM column kept** — measured by rendering the real layout with real font metrics and the real entry list (§6.3.1). The fallback of dropping TEAM is unnecessary. 19 px puts P22 flush to the edge; 17 px removes padding entirely | 2026-10-01 | **answers open question 3** |
-| 89 | **Target season is 2027**; 2026 becomes test data. Measured: Jolpica serves **no 2027 calendar or entry list yet** (`total = 0`), so "the target season does not exist yet" is the normal state for months and must not look like an error. Never hard-code a season year | 2026-10-01 | **decided by owner**, moots open question 5 |
+| 89 | ~~Target season is 2027~~ | 2026-10-01 | **superseded by 94** |
+| 94 | **The season is resolved at runtime from `/current/`, never fixed.** No season year appears in the firmware, YAML or generated headers as a target. This is a device meant to sit on a wall for years; a fixed season means a rebuild every winter and a stale year if nobody does one | 2026-10-01 | **decided by owner**, supersedes 89 |
+| 95 | **An empty `/current/next/` is the end-of-season signal, not an error**, and the months-long gap until the next calendar is published is `OFF_SEASON` — a first-class screen showing the champion, the final standings and the carousel, never a "no data" state | 2026-10-01 | active |
+| 96 | **RACE-13d: the legend/current-driver overlap is resolved at _runtime_**, against the live entry list. **Corrects decision 86.** Baked overlap + a runtime season rollover would make a newly retired driver vanish from both rotations. `max_verstappen` is therefore listed in the legends table (32 rows), not omitted | 2026-10-01 | **corrects 86** |
+| 97 | **RACE-13e: a driver with no compiled profile still gets a text-only card** from the live entry list. A rookie who joins after the build has no portrait and no career record; render what is known rather than skipping them. **Portraits are the one thing a rebuild is genuinely needed for**, and the README says so | 2026-10-01 | active |
+| 98 | **A season rollover must need no firmware update**, and that is a host test: advance `current` by a year mid-run and assert the calendar, entry list, driver carousel and watched-driver resolution all follow | 2026-10-01 | active |
 | 90 | **A Sprint is a first-class race day** (RACE-14) — its own grid, result and race page, labelled `SPRINT`. A sprint weekend has two race days. Sprint wins must **not** count toward career win milestones; Jolpica keeps them in a separate endpoint | 2026-10-01 | **decided by owner**, closes open question 6 |
 | 91 | **Portraits are 240×320**, not 150×200. The brief asked to show the picture; at 480 px wide, 150×200 reads as a thumbnail. Budget restated against the **app slot** (~6.5–7.8 MB), not total flash: portraits are 25–30 % of one slot | 2026-10-01 | **delegated**, answers open question 13 |
 | 92 | **Alerts are loud** (§6.14.3): full-width banner for events, brief full-screen takeover for milestones. Safe here specifically because **nothing underneath is changing** — no live timing (58) — which is not a general licence. Nothing ever requires dismissing; a tap only dismisses early. An `Alert style: loud/quiet` setting ships with loud as the default | 2026-10-01 | **decided by owner**, closes open question 12 |
@@ -2225,10 +2274,9 @@ exists.
    an unattributable image (§5.6.3, decisions 72–73). OpenF1's `headshot_url`
    is not used.
 5. ~~**Is the 2026 calendar Jolpica serves correct?**~~ **MOOT 2026-10-01** —
-   the target season is **2027** (decision 89). 2026's oddities become test
-   data rather than a problem. Replaced by a sharper question: **the 2027
-   calendar does not exist yet** (`total = 0`), so RACE-13a — handling that
-   gracefully for months — is now the requirement.
+   the device tracks **whatever season is current** (decision 94), so a given
+   year's oddities are data to tolerate (§3.4), not a target to validate.
+   2026's quirks become test fixtures.
 6. ~~**What is "race day" for a sprint weekend?**~~ **CLOSED 2026-10-01 — yes,
    first-class** (decision 90). Own grid, own result, own race page, labelled
    `SPRINT`; a sprint weekend has two race days.
@@ -2268,7 +2316,7 @@ exists.
 |---|---|---|---|
 | 8 | Gated OpenF1 response shape — defensive only since NET-14 | me | a live session happening |
 | 11 | True lag at OpenF1's +30 min boundary | me | the first race the device sees |
-| 14 | **When does Jolpica publish the 2027 calendar?** RACE-13a handles its absence, but the first real end-to-end test needs it | me | Jolpica |
+| 14 | **When does the next calendar get published?** RACE-13c handles the gap, but the first real end-to-end rollover test needs one to actually happen | me | Jolpica, and the turn of a season |
 
 **Every question that needed an owner decision is closed.** The three above are
 measurements waiting on the world, not choices — and **none of them blocks M0,
@@ -2358,7 +2406,12 @@ project's real risk.
    - [ ] Host tests for the state machine, **including a `04:00Z` race read
          from Alaska**
    - [ ] Calendar refresh superseding the compiled floor; source + age
-         diagnostic
+         diagnostic, plus the **profile build date** (RACE-13e)
+   - [ ] **Season resolution from `/current/`** and the `OFF_SEASON` gap
+         (RACE-13a–c)
+   - [ ] **Rollover host test** (decision 98): advance `current` by a year
+         mid-run and assert the calendar, entry list, driver carousel and
+         watched-driver resolution all follow with no rebuild
 5. **M4 — Race day**
    - [ ] `race_page`: header, state line, map, top-5 strip
    - [ ] `order_page`: 22 rows, flags, team-colour bars
@@ -2381,6 +2434,8 @@ project's real risk.
    - [ ] Auto-dim (§6.8) and the lat/lon-vs-timezone note
 7. **M6 — Detail cards, standings and the post-session summary**
    - [ ] Driver and circuit detail cards; headshot as best-effort enrichment
+   - [ ] **Runtime legend/driver overlap** (RACE-13d) and the text-only card
+         for a driver with no compiled profile (RACE-13e)
    - [ ] `standings_page`
    - [ ] **`summary_page`** (§8.1) — fastest lap, pit stops, tyre strategy
          strips, flags that occurred, weather. All free once the window closes,

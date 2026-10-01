@@ -14,7 +14,9 @@ ESP32-4848S040 — the same board, font stack and UI cues as `sky-tracker`.
   alert when he is racing, when his grid slot is known, when his result lands,
   and when he passes a career milestone — a full-width banner for events, a
   brief full-screen takeover for milestones. The watched driver is a setting.
-- **Target season: 2027.** Sprints are first-class race days.
+- **The season is resolved at runtime**, never fixed — the device follows the
+  calendar forward on its own, year after year, with no firmware update.
+  Sprints are first-class race days.
 - Latitude and longitude are stored for **one purpose only** — computing
   sunrise and sunset so the display can auto-dim (a checkbox setting).
 
@@ -68,7 +70,9 @@ with links in its web UI.
 | `plane-tracker` (`../plane-tracker`) | document style, requirement-ID convention, and 65 decisions already distilled from `sky-tracker` |
 
 Driver and legend portraits come from Wikimedia Commons with the photographer
-credited on each card. All licensing terms are accepted; this is a personal,
+credited on each card. Portraits are the one thing an occasional reflash is
+needed for: the device follows the season by itself, but a driver who joins
+after the firmware was built gets a text-only card until the next build. All licensing terms are accepted; this is a personal,
 non-commercial, single-device project.
 
 Not affiliated with, endorsed by, or connected to Formula 1. `F1`, `FORMULA 1`
