@@ -2,7 +2,7 @@
 CXX      ?= c++
 CXXFLAGS ?= -std=c++17 -O1 -g -Wall -Wextra -Werror -Wno-unused-parameter
 HDRS     := $(wildcard ../f1-tracker/*.h)
-BINS     := test_m1 test_state test_json
+BINS     := test_m1 test_state test_json test_watch
 
 .PHONY: all clean
 all: $(BINS)
@@ -18,4 +18,7 @@ clean:
 	rm -f $(BINS)
 
 test_json: test_json.cpp $(HDRS)
+	$(CXX) $(CXXFLAGS) -o $@ $<
+
+test_watch: test_watch.cpp $(HDRS)
 	$(CXX) $(CXXFLAGS) -o $@ $<
