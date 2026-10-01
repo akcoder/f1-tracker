@@ -15,6 +15,7 @@
 
 #include "f1_flags.h"
 #include "f1_state.h"
+#include "f1_store.h"
 
 namespace f1 {
 namespace order {
@@ -34,18 +35,7 @@ inline constexpr uint32_t COL_WATCH_BG = 0x1A2547;
 inline constexpr uint32_t COL_WATCH_TX = 0xFFFFFF;
 inline constexpr uint32_t COL_OUT = 0x5A6687;   // retired: greyed, never removed
 
-struct Entry {
-  int pos = 0;                 // 0 = no position yet (ENTRY LIST)
-  int number = 0;
-  char code[8] = {0};
-  char name[20] = {0};         // surname, upper case
-  char team[20] = {0};
-  char iso3[4] = {0};          // "" = draw NO flag (decision 20)
-  char gap[12] = {0};
-  uint32_t colour = 0x888888;  // team_colour, cached (6.10)
-  bool out = false;            // retired: keeps its row, greyed (6.3)
-  bool watched = false;
-};
+using store::Entry;
 
 struct Row {
   lv_obj_t *bg = nullptr;

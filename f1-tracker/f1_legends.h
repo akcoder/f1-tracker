@@ -6,7 +6,7 @@
 // 5.6.4, decision 85. INCLUDES drivers who are still racing: RACE-13d
 // resolves the overlap at RUNTIME against the live entry list, so a
 // retirement moves a driver into the legend rotation with no rebuild.
-// Built 2026-10-01 20:19 UTC
+// Built 2026-10-01 21:13 UTC
 #include <cstdint>
 
 namespace f1 {
@@ -20,6 +20,7 @@ struct Profile {
   const char *iso3;        // "" when the demonym is absent or unmapped: draw
                            // NO flag rather than a wrong one (decision 20)
   const char *dob;         // ISO date, for the age line
+  const char *line;        // legends only: one curated sentence (5.6.2)
   uint16_t number;         // 0 when absent (DATA-7). NEVER an identity key
   uint16_t wins, starts, podiums;
   int16_t poles;           // -1 = unknown, OMIT the line (DATA-8)
@@ -35,38 +36,38 @@ inline constexpr const char *GROUP_NAME[3] = {
 };
 
 inline constexpr Profile P[32] = {
-    {"hamilton", "Lewis", "Hamilton", "HAM", "GBR", "1985-01-07", 44, 106, 395, 0, 118, 2007, 2026, 7, 0},
-    {"michael_schumacher", "Michael", "Schumacher", "MSC", "DEU", "1969-01-03", 0, 91, 308, 0, 68, 1991, 2012, 7, 0},
-    {"fangio", "Juan", "Fangio", "", "ARG", "1911-06-24", 0, 24, 51, 0, 29, 1950, 1958, 5, 0},
-    {"max_verstappen", "Max", "Verstappen", "VER", "NLD", "1997-09-30", 3, 71, 248, 0, 65, 2015, 2026, 4, 0},
-    {"vettel", "Sebastian", "Vettel", "VET", "DEU", "1987-07-03", 5, 53, 300, 0, 57, 2007, 2022, 4, 0},
-    {"prost", "Alain", "Prost", "", "FRA", "1955-02-24", 0, 51, 202, 0, 33, 1980, 1993, 4, 0},
-    {"senna", "Ayrton", "Senna", "", "BRA", "1960-03-21", 0, 41, 162, 0, 65, 1984, 1994, 3, 0},
-    {"stewart", "Jackie", "Stewart", "", "GBR", "1939-06-11", 0, 27, 100, 0, 17, 1965, 1973, 3, 0},
-    {"lauda", "Niki", "Lauda", "", "AUT", "1949-02-22", 0, 25, 174, 0, 24, 1971, 1985, 3, 0},
-    {"piquet", "Nelson", "Piquet", "", "BRA", "1952-08-17", 0, 23, 207, 0, 24, 1978, 1991, 3, 0},
-    {"alonso", "Fernando", "Alonso", "ALO", "ESP", "1981-07-29", 14, 32, 443, 0, 23, 2001, 2026, 2, 0},
-    {"clark", "Jim", "Clark", "", "GBR", "1936-03-04", 0, 25, 72, 0, 33, 1960, 1968, 2, 0},
-    {"hakkinen", "Mika", "Häkkinen", "", "FIN", "1968-09-28", 0, 20, 165, 0, 26, 1991, 2001, 2, 0},
-    {"hill", "Graham", "Hill", "", "GBR", "1929-02-15", 0, 14, 179, 0, 13, 1958, 1975, 2, 0},
-    {"ascari", "Alberto", "Ascari", "", "ITA", "1918-07-13", 0, 13, 32, 0, 14, 1950, 1955, 2, 0},
-    {"mansell", "Nigel", "Mansell", "", "GBR", "1953-08-08", 0, 31, 192, 0, 32, 1980, 1995, 1, 1},
-    {"rosberg", "Nico", "Rosberg", "ROS", "DEU", "1985-06-27", 6, 23, 206, 0, 30, 2006, 2016, 1, 1},
-    {"damon_hill", "Damon", "Hill", "", "GBR", "1960-09-17", 0, 22, 122, 0, 20, 1992, 1999, 1, 1},
-    {"raikkonen", "Kimi", "Räikkönen", "RAI", "FIN", "1979-10-17", 7, 21, 352, 0, 19, 2001, 2021, 1, 1},
-    {"button", "Jenson", "Button", "BUT", "GBR", "1980-01-19", 22, 15, 309, 0, 8, 2000, 2017, 1, 1},
-    {"villeneuve", "Jacques", "Villeneuve", "VIL", "CAN", "1971-04-09", 0, 11, 165, 0, 7, 1996, 2006, 1, 1},
-    {"hunt", "James", "Hunt", "", "GBR", "1947-08-29", 0, 10, 93, 0, 14, 1973, 1979, 1, 1},
-    {"rindt", "Jochen", "Rindt", "", "AUT", "1942-04-18", 0, 6, 62, 0, 10, 1964, 1970, 1, 1},
-    {"surtees", "John", "Surtees", "", "GBR", "1934-02-11", 0, 6, 112, 0, 8, 1960, 1972, 1, 1},
-    {"hawthorn", "Mike", "Hawthorn", "", "GBR", "1929-04-10", 0, 3, 46, 0, 4, 1952, 1958, 1, 1},
-    {"moss", "Stirling", "Moss", "", "GBR", "1929-09-17", 0, 16, 67, 0, 16, 1951, 1961, 0, 2},
-    {"peterson", "Ronnie", "Peterson", "", "SWE", "1944-02-14", 0, 10, 123, 0, 14, 1970, 1978, 0, 2},
-    {"ickx", "Jacky", "Ickx", "", "BEL", "1945-01-01", 0, 8, 121, 0, 13, 1967, 1979, 0, 2},
-    {"gilles_villeneuve", "Gilles", "Villeneuve", "", "CAN", "1950-01-18", 0, 6, 68, 0, 2, 1977, 1982, 0, 2},
-    {"amon", "Chris", "Amon", "", "NZL", "1943-07-20", 0, 0, 106, 0, 5, 1963, 1976, 0, 2},
-    {"brabham", "David", "Brabham", "", "AUS", "1965-09-05", 0, 0, 30, 0, 13, 1990, 1994, 0, 0},
-    {"fittipaldi", "Christian", "Fittipaldi", "", "BRA", "1971-01-18", 0, 0, 43, 0, 6, 1992, 1994, 0, 0},
+    {"hamilton", "Lewis", "Hamilton", "HAM", "GBR", "1985-01-07", "Holds the records for wins and pole positions, across two different engine eras.", 44, 106, 395, 0, 118, 2007, 2026, 7, 0},
+    {"michael_schumacher", "Michael", "Schumacher", "MSC", "DEU", "1969-01-03", "Won five straight titles with Ferrari after joining a team that had not won one since 1979.", 0, 91, 308, 0, 68, 1991, 2012, 7, 0},
+    {"fangio", "Juan", "Fangio", "", "ARG", "1911-06-24", "Won five titles for four different teams in seven seasons, a record no one has matched.", 0, 24, 51, 0, 29, 1950, 1958, 5, 0},
+    {"max_verstappen", "Max", "Verstappen", "VER", "NLD", "1997-09-30", "Won on his Red Bull debut at 18, the youngest race winner in the sport's history.", 3, 71, 248, 0, 65, 2015, 2026, 4, 0},
+    {"vettel", "Sebastian", "Vettel", "VET", "DEU", "1987-07-03", "Four consecutive titles by the age of 26, the youngest champion at the time.", 5, 53, 300, 0, 57, 2007, 2022, 4, 0},
+    {"prost", "Alain", "Prost", "", "FRA", "1955-02-24", "Won four titles on tyre and fuel management rather than outright pace.", 0, 51, 202, 0, 33, 1980, 1993, 4, 0},
+    {"senna", "Ayrton", "Senna", "", "BRA", "1960-03-21", "Took pole by 1.4 seconds at Monaco in 1988, then crashed out of a race he led by a minute.", 0, 41, 162, 0, 65, 1984, 1994, 3, 0},
+    {"stewart", "Jackie", "Stewart", "", "GBR", "1939-06-11", "Campaigned for circuit safety through an era that killed many of his contemporaries.", 0, 27, 100, 0, 17, 1965, 1973, 3, 0},
+    {"lauda", "Niki", "Lauda", "", "AUT", "1949-02-22", "Returned to race six weeks after the burns that nearly killed him at the Nurburgring.", 0, 25, 174, 0, 24, 1971, 1985, 3, 0},
+    {"piquet", "Nelson", "Piquet", "", "BRA", "1952-08-17", "Three titles in three different chassis, during the turbo era's horsepower arms race.", 0, 23, 207, 0, 24, 1978, 1991, 3, 0},
+    {"alonso", "Fernando", "Alonso", "ALO", "ESP", "1981-07-29", "Ended Schumacher's run of five titles, and was still scoring podiums two decades later.", 14, 32, 443, 0, 23, 2001, 2026, 2, 0},
+    {"clark", "Jim", "Clark", "", "GBR", "1936-03-04", "Led every lap of the 1963 Belgian Grand Prix, and won it by almost five minutes.", 0, 25, 72, 0, 33, 1960, 1968, 2, 0},
+    {"hakkinen", "Mika", "Häkkinen", "", "FIN", "1968-09-28", "Came back from a fractured skull in 1995 to win back-to-back titles in 1998 and 1999.", 0, 20, 165, 0, 26, 1991, 2001, 2, 0},
+    {"hill", "Graham", "Hill", "", "GBR", "1929-02-15", "Won two titles and the Indianapolis 500 and Le Mans - motorsport's Triple Crown, alone.", 0, 14, 179, 0, 13, 1958, 1975, 2, 0},
+    {"ascari", "Alberto", "Ascari", "", "ITA", "1918-07-13", "Won nine consecutive races across 1952-53, still the longest streak in the sport.", 0, 13, 32, 0, 14, 1950, 1955, 2, 0},
+    {"mansell", "Nigel", "Mansell", "", "GBR", "1953-08-08", "Won the F1 title in 1992 and the IndyCar title in 1993, in consecutive seasons.", 0, 31, 192, 0, 32, 1980, 1995, 1, 1},
+    {"rosberg", "Nico", "Rosberg", "ROS", "DEU", "1985-06-27", "Beat Hamilton to the 2016 title, then retired five days later.", 6, 23, 206, 0, 30, 2006, 2016, 1, 1},
+    {"damon_hill", "Damon", "Hill", "", "GBR", "1960-09-17", "Took the 1996 title twenty-four years after his father Graham won his second.", 0, 22, 122, 0, 20, 1992, 1999, 1, 1},
+    {"raikkonen", "Kimi", "Räikkönen", "RAI", "FIN", "1979-10-17", "Won the 2007 title by one point in his first season with Ferrari, after trailing by 17.", 7, 21, 352, 0, 19, 2001, 2021, 1, 1},
+    {"button", "Jenson", "Button", "BUT", "GBR", "1980-01-19", "Won the 2009 title with Brawn, built from the team Honda had just closed down.", 22, 15, 309, 0, 8, 2000, 2017, 1, 1},
+    {"villeneuve", "Jacques", "Villeneuve", "VIL", "CAN", "1971-04-09", "Champion in his second season, having come from IndyCar and the Indianapolis 500.", 0, 11, 165, 0, 7, 1996, 2006, 1, 1},
+    {"hunt", "James", "Hunt", "", "GBR", "1947-08-29", "Took the 1976 title by a single point in the last race, in the rain, at Fuji.", 0, 10, 93, 0, 14, 1973, 1979, 1, 1},
+    {"rindt", "Jochen", "Rindt", "", "AUT", "1942-04-18", "The only posthumous world champion, his points total unbeaten after his death at Monza.", 0, 6, 62, 0, 10, 1964, 1970, 1, 1},
+    {"surtees", "John", "Surtees", "", "GBR", "1934-02-11", "The only person to win world titles on both two wheels and four.", 0, 6, 112, 0, 8, 1960, 1972, 1, 1},
+    {"hawthorn", "Mike", "Hawthorn", "", "GBR", "1929-04-10", "Britain's first world champion, who retired immediately afterwards and died months later.", 0, 3, 46, 0, 4, 1952, 1958, 1, 1},
+    {"moss", "Stirling", "Moss", "", "GBR", "1929-09-17", "Finished runner-up four years running and third three times, without ever winning the title.", 0, 16, 67, 0, 16, 1951, 1961, 0, 2},
+    {"peterson", "Ronnie", "Peterson", "", "SWE", "1944-02-14", "Twice runner-up, and widely held by his rivals to have been the fastest of them.", 0, 10, 123, 0, 14, 1970, 1978, 0, 2},
+    {"ickx", "Jacky", "Ickx", "", "BEL", "1945-01-01", "Six Le Mans wins, and runner-up in the F1 championship twice without taking the title.", 0, 8, 121, 0, 13, 1967, 1979, 0, 2},
+    {"gilles_villeneuve", "Gilles", "Villeneuve", "", "CAN", "1950-01-18", "Fought Arnoux wheel to wheel for two laps at Dijon in 1979, still the reference.", 0, 6, 68, 0, 2, 1977, 1982, 0, 2},
+    {"amon", "Chris", "Amon", "", "NZL", "1943-07-20", "Led races in every one of his eleven seasons and won none of them.", 0, 0, 106, 0, 5, 1963, 1976, 0, 2},
+    {"brabham", "David", "Brabham", "", "AUS", "1965-09-05", "The only driver to win a title in a car bearing his own name.", 0, 0, 30, 0, 13, 1990, 1994, 0, 0},
+    {"fittipaldi", "Christian", "Fittipaldi", "", "BRA", "1971-01-18", "Champion at 25, then left a winning team to race a car built by his brother.", 0, 0, 43, 0, 6, 1992, 1994, 0, 0},
 };
 inline constexpr int N = 32;
 inline constexpr uint16_t SOURCE_SEASON = 2026;

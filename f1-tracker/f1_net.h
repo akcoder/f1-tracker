@@ -11,6 +11,7 @@
 
 #include "f1_json.h"
 #include "f1_state.h"
+#include "f1_store.h"
 
 #if defined(USE_ESP32) && !defined(F1_HOST_TEST)
 #include "esp_crt_bundle.h"
@@ -19,6 +20,8 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
 #include "freertos/task.h"
+#include "esp_timer.h"
+#include <ctime>
 #endif
 
 namespace f1 {
@@ -216,6 +219,141 @@ inline Plan plan_for(const state::Calendar &cal, const state::Status &st,
   }
   return p;
 }
+
+// ---- the fetch task ------------------------------------------------------
+#if defined(USE_ESP32) && !defined(F1_HOST_TEST)
+
+// Double-buffered: the task parses into `back` and swaps under the lock, so the
+// UI thread never reads a half-written store (section 9 - a fetch must never
+// block rendering, and a render must never see a torn parse).
+inline store::Store g_front, g_back;
+inline volatile bool g_wifi_up = false;
+inline volatile uint32_t g_published = 0;
+
+inline void lock() { if (g_lock) xSemaphoreTake(g_lock, portMAX_DELAY); }
+inline void unlock() { if (g_lock) xSemaphoreGive(g_lock); }
+
+inline void publish() {
+  lock();
+  std::memcpy(&g_front, &g_back, sizeof(store::Store));
+  // The parsed Round structs point at static buffers inside parse_calendar, so
+  // the copy is safe: those buffers outlive both stores and are only rewritten
+  // by the next successful parse, which also republishes.
+  g_published = g_back.generation;
+  unlock();
+}
+
+// Reads the published store under the lock. Callers copy what they need and
+// get out - the lock is held for a memcpy, never for drawing.
+inline uint32_t snapshot(store::Store &out) {
+  lock();
+  std::memcpy(&out, &g_front, sizeof(store::Store));
+  const uint32_t g = g_published;
+  unlock();
+  return g;
+}
+
+inline bool get_and_parse(Session &sess, const char *url,
+                          bool (*fn)(const char *, size_t, store::Store &),
+                          uint32_t now_ms, uint32_t *stamp) {
+  const size_t len = fetch(sess, url, now_ms);
+  if (len == 0) return false;
+  if (!fn(g_body, len, g_back)) {
+    // 3.4: an unparseable body is a FAILED poll. Keep the existing state.
+    g_stats.last_fault = PARSE_ERROR;
+    return false;
+  }
+  // decision 50: the age stamp goes on a successful PARSE, never on an HTTP
+  // 200 - a 200 carrying garbage is not fresh data.
+  g_stats.last_fault = OK;
+  if (stamp) *stamp = now_ms;
+  return true;
+}
+
+inline void task_body(void *) {
+  char url[160];
+  uint32_t last_cal_ms = 0;
+  uint32_t backoff_ms = 0;
+  for (;;) {
+    const uint32_t now_ms = (uint32_t) (esp_timer_get_time() / 1000);
+    if (g_paused || !g_wifi_up) { vTaskDelay(pdMS_TO_TICKS(1000)); continue; }
+    if (backoff_ms && now_ms < backoff_ms) { vTaskDelay(pdMS_TO_TICKS(500)); continue; }
+
+    // The state machine decides what is worth asking for (3.6), and refuses to
+    // plan any OpenF1 request inside a live window (NET-14).
+    state::Calendar cal;
+    if (g_front.have_calendar) {
+      cal.rounds = g_front.rounds; cal.n = g_front.n_rounds;
+      cal.season = g_front.season; cal.fetched = true;
+    }
+    const uint32_t utc = (uint32_t) ::time(nullptr);   // ESPHome has its own time:: namespace
+    const state::Status st = state::evaluate(cal, utc, utc > 1700000000u);
+    const Plan p = plan_for(cal, st, utc, last_cal_ms, now_ms);
+    bool did = false;
+
+    if (p.want_calendar) {
+      // RACE-13a: the season is resolved from /current/ and never pinned.
+      std::snprintf(url, sizeof(url), "%s/current/races/?format=json&limit=40", JOLPICA);
+      if (get_and_parse(g_jolpica, url, store::parse_calendar, now_ms,
+                        &g_stats.jolpica_ok_ms)) {
+        publish();
+        last_cal_ms = now_ms;
+      }
+      g_stats.jolpica_fetches++;
+      did = true;
+    }
+
+    if (p.want_qualifying && !did) {
+      std::snprintf(url, sizeof(url), "%s/current/last/qualifying/?format=json", JOLPICA);
+      if (get_and_parse(g_jolpica, url, store::parse_qualifying, now_ms,
+                        &g_stats.jolpica_ok_ms))
+        publish();
+      g_stats.jolpica_fetches++;
+      did = true;
+    }
+
+    if (p.want_results && !did) {
+      std::snprintf(url, sizeof(url), "%s/current/last/results/?format=json", JOLPICA);
+      if (get_and_parse(g_jolpica, url, store::parse_results, now_ms,
+                        &g_stats.jolpica_ok_ms))
+        publish();
+      g_stats.jolpica_fetches++;
+      did = true;
+    }
+
+    if (p.want_standings && !did) {
+      std::snprintf(url, sizeof(url), "%s/current/driverStandings/?format=json", JOLPICA);
+      if (get_and_parse(g_jolpica, url, store::parse_standings, now_ms,
+                        &g_stats.jolpica_ok_ms))
+        publish();
+      g_stats.jolpica_fetches++;
+      did = true;
+    }
+
+    if (p.openf1_blocked) g_stats.skipped_window++;
+
+    // 3.7.4: back off HARD on a rate limit or a bad request shape. Only a
+    // network failure gets a brisk retry.
+    if (g_stats.last_fault == RATE_LIMITED) backoff_ms = now_ms + 10 * 60 * 1000;
+    else if (g_stats.last_fault == HTTP_ERROR) backoff_ms = now_ms + 5 * 60 * 1000;
+    else backoff_ms = 0;
+
+    vTaskDelay(pdMS_TO_TICKS(did ? 2000 : 5000));
+  }
+}
+
+inline void start() {
+  if (g_lock == nullptr) g_lock = xSemaphoreCreateMutex();
+  // Pinned to core 1 so it cannot contend with the LVGL/display work on core 0.
+  xTaskCreatePinnedToCore(task_body, "f1_net", 8192, nullptr, 3, nullptr, 1);
+}
+
+inline void wifi_up(bool up) { g_wifi_up = up; }
+
+#else
+inline void start() {}
+inline void wifi_up(bool) {}
+#endif
 
 }  // namespace net
 }  // namespace f1

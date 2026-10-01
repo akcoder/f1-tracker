@@ -44,8 +44,9 @@ python3 -m venv .venv && .venv/bin/pip install esphome
 cp secrets.yaml.example secrets.yaml      # then fill it in
 ./deploy.sh                               # validate, compile, warning gate
 ```
-**M0–M5 are built.** ESPHome 2026.9.1, image **2.71 MB of a 7.75 MB app slot
-(33.4 %)**, RAM **36.3 %**, **10,431 host checks passing**. Nothing is flashed
+**M0–M6 are built.** ESPHome 2026.9.1, image **2.74 MB of a 7.75 MB app slot
+(33.7 %)**, RAM **42.3 %**, **10,545 host checks passing**. The data task runs
+on core 1 and double-buffers its store, so a fetch never blocks rendering. Nothing is flashed
 yet — see REQUIREMENTS.md §14.1 for what needs a board.
 
 Everything the device shows is compiled in, so the carousel runs with no

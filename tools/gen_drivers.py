@@ -41,6 +41,46 @@ LEGENDS = [
 ]
 GROUPS = ["Multiple champion", "World champion", "Never champion"]
 
+# 5.6.2: one curated line per legend on why they matter, in the shape of
+# sky_lore.h's constellation cards. Facts only - records and circumstances, not
+# adjectives - because the numbers are already on the card and a superlative
+# adds nothing a reader cannot see.
+LEGEND_LINE = {
+    "fangio": "Won five titles for four different teams in seven seasons, a record no one has matched.",
+    "ascari": "Won nine consecutive races across 1952-53, still the longest streak in the sport.",
+    "brabham": "The only driver to win a title in a car bearing his own name.",
+    "clark": "Led every lap of the 1963 Belgian Grand Prix, and won it by almost five minutes.",
+    "stewart": "Campaigned for circuit safety through an era that killed many of his contemporaries.",
+    "lauda": "Returned to race six weeks after the burns that nearly killed him at the Nurburgring.",
+    "prost": "Won four titles on tyre and fuel management rather than outright pace.",
+    "senna": "Took pole by 1.4 seconds at Monaco in 1988, then crashed out of a race he led by a minute.",
+    "michael_schumacher": "Won five straight titles with Ferrari after joining a team that had not won one since 1979.",
+    "vettel": "Four consecutive titles by the age of 26, the youngest champion at the time.",
+    "fittipaldi": "Champion at 25, then left a winning team to race a car built by his brother.",
+    "piquet": "Three titles in three different chassis, during the turbo era's horsepower arms race.",
+    "hakkinen": "Came back from a fractured skull in 1995 to win back-to-back titles in 1998 and 1999.",
+    "hill": "Won two titles and the Indianapolis 500 and Le Mans - motorsport's Triple Crown, alone.",
+    "alonso": "Ended Schumacher's run of five titles, and was still scoring podiums two decades later.",
+    "hamilton": "Holds the records for wins and pole positions, across two different engine eras.",
+    "max_verstappen": "Won on his Red Bull debut at 18, the youngest race winner in the sport's history.",
+    "hunt": "Took the 1976 title by a single point in the last race, in the rain, at Fuji.",
+    "mansell": "Won the F1 title in 1992 and the IndyCar title in 1993, in consecutive seasons.",
+    "rindt": "The only posthumous world champion, his points total unbeaten after his death at Monza.",
+    "villeneuve": "Champion in his second season, having come from IndyCar and the Indianapolis 500.",
+    "damon_hill": "Took the 1996 title twenty-four years after his father Graham won his second.",
+    "hawthorn": "Britain's first world champion, who retired immediately afterwards and died months later.",
+    "surtees": "The only person to win world titles on both two wheels and four.",
+    "rosberg": "Beat Hamilton to the 2016 title, then retired five days later.",
+    "raikkonen": "Won the 2007 title by one point in his first season with Ferrari, after trailing by 17.",
+    "button": "Won the 2009 title with Brawn, built from the team Honda had just closed down.",
+    "moss": "Finished runner-up four years running and third three times, without ever winning the title.",
+    "gilles_villeneuve": "Fought Arnoux wheel to wheel for two laps at Dijon in 1979, still the reference.",
+    "amon": "Led races in every one of his eleven seasons and won none of them.",
+    "ickx": "Six Le Mans wins, and runner-up in the F1 championship twice without taking the title.",
+    "peterson": "Twice runner-up, and widely held by his rivals to have been the fastest of them.",
+}
+
+
 # Ergast-lineage driverIds are not "firstname_surname" by rule: the bare surname
 # belongs to whichever driver the dataset assigned it to, and it is NOT the
 # earlier one. Graham Hill is `hill` and Damon Hill is `damon_hill`; Jacques
@@ -148,6 +188,7 @@ def emit(path, ns, rows, season, extra_note=""):
     w("  const char *iso3;        // \"\" when the demonym is absent or unmapped: draw")
     w("                           // NO flag rather than a wrong one (decision 20)")
     w("  const char *dob;         // ISO date, for the age line")
+    w("  const char *line;        // legends only: one curated sentence (5.6.2)")
     w("  uint16_t number;         // 0 when absent (DATA-7). NEVER an identity key")
     w("  uint16_t wins, starts, podiums;")
     w("  int16_t poles;           // -1 = unknown, OMIT the line (DATA-8)")
@@ -164,7 +205,8 @@ def emit(path, ns, rows, season, extra_note=""):
     w(f"inline constexpr Profile P[{len(rows)}] = {{")
     for r in rows:
         w(f'    {{"{esc(r["id"])}", "{esc(r["given"])}", "{esc(r["family"])}", '
-          f'"{esc(r["code"])}", "{esc(r["iso3"])}", "{esc(r["dob"])}", {r["number"]}, '
+          f'"{esc(r["code"])}", "{esc(r["iso3"])}", "{esc(r["dob"])}", '
+          f'"{esc(r.get("line", ""))}", {r["number"]}, '
           f'{r["wins"]}, {r["starts"]}, {r["podiums"]}, {r["poles"]}, '
           f'{r["first"]}, {r["last"]}, {r["titles"]}, {r["group"]}}},')
     w("};")
@@ -213,7 +255,7 @@ def main():
                     number=int(d["permanentNumber"]) if d.get("permanentNumber") else 0,
                     wins=wins, starts=starts, podiums=podiums, poles=poles,
                     first=first, last=last, titles=len(titles.get(did, [])),
-                    group=group, pole_src=psrc)
+                    group=group, pole_src=psrc, line=LEGEND_LINE.get(did, ""))
 
     # ---- current drivers: only those carrying a code are actually racing
     # (DATA-10 - the season list includes reserves with no number or acronym)

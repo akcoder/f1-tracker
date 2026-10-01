@@ -48,6 +48,7 @@ esphome:
     - f1-tracker/f1_state.h
     - f1-tracker/f1_watch.h
     - f1-tracker/f1_json.h
+    - f1-tracker/f1_store.h
     - f1-tracker/f1_order.h
     - f1-tracker/f1_net.h
     - f1-tracker/f1_app.h
@@ -90,9 +91,11 @@ esphome:
             aw.race_sub    = id(race_sub);
             aw.race_clock  = id(race_clock);
             aw.order_title = id(order_title);
+            aw.standings   = id(standings_body);
             aw.banner      = id(watch_banner);
             aw.banner_text = id(watch_text);
             f1::app::setup(aw);
+            f1::net::start();                 // the data task, pinned to core 1
 
 esp32:
   board: esp32-s3-devkitc-1
@@ -149,6 +152,36 @@ api:
 ota:
   - platform: esphome
     encryption:               # BUILD-1: reuses the API encryption key
+    on_begin:
+      - lambda: f1::net::ota_begin();     # 2.4.6: pause the data task
+      - lvgl.page.show: race_page
+      - lambda: |-
+          lv_label_set_text(id(ota_title), "UPGRADING");
+          lv_label_set_text(id(ota_pct), "starting");
+          lv_obj_remove_flag(id(ota_panel), LV_OBJ_FLAG_HIDDEN);
+          lv_refr_now(NULL);              // the OTA write blocks the loop
+    on_progress:
+      - lambda: |-
+          static int last = -10;
+          int p = (int) x;
+          if (p < last + 5 && p < 100) return;
+          last = p;
+          char b[16];
+          snprintf(b, sizeof(b), "%d%%", p);
+          lv_label_set_text(id(ota_pct), b);
+          lv_refr_now(NULL);
+    on_end:
+      - lambda: |-
+          lv_label_set_text(id(ota_pct), "rebooting");
+          lv_refr_now(NULL);
+    on_error:
+      - lambda: |-
+          lv_label_set_text(id(ota_title), "UPGRADE FAILED");
+          lv_label_set_text(id(ota_pct), "resuming");
+          lv_refr_now(NULL);
+          f1::net::ota_error();            // resume if the upgrade failed
+      - delay: 5s
+      - lambda: lv_obj_add_flag(id(ota_panel), LV_OBJ_FLAG_HIDDEN);
   - platform: web_server      # 7.1: firmware upload from the device's own page.
                               # Declared EXPLICITLY so its plaintext /update
                               # endpoint is a deliberate choice, not an implicit
@@ -158,6 +191,10 @@ wifi:
   id: wifi_comp
   ssid: !secret wifi_ssid
   password: !secret wifi_password
+  on_connect:
+    - lambda: f1::net::wifi_up(true);
+  on_disconnect:              # NET-8: no network calls while Wi-Fi is down
+    - lambda: f1::net::wifi_up(false);
   ap:                         # NET-2: open fallback AP, renamed with the MAC suffix at boot
     ssid: "F1 Tracker"
   # decision 42 / plane-tracker: ESPHome defaults for ap_timeout and
@@ -874,17 +911,21 @@ lvgl:
             text: "CHAMPIONSHIP"
             text_font: mono16
             text_color: 0xFF8A1F
-        - obj:
-            id: standings_rows
-            x: 6
+        - label:
+            id: standings_hdr
+            x: 12
             y: 32
-            width: 468
-            height: 440
-            bg_opa: TRANSP
-            border_width: 0
-            pad_all: 0
-            scrollable: false
-            clickable: false
+            text: "POS DRIVER     TEAM            PTS"
+            text_font: mono12
+            text_color: 0x7E8BB3
+        - label:
+            id: standings_body
+            x: 12
+            y: 52
+            width: 456
+            text: "waiting for data"
+            text_font: mono14
+            text_color: 0xC9D3F2
 
     - id: settings_page         # UI-16 (section 7)
       skip: true

@@ -213,6 +213,14 @@ inline void compose_profile(const P &p, bool legend_badge, uint16_t season) {
   g.staged_photo = portraits::find(p.driver_id);
 }
 
+// 5.6.2: the curated line, appended only where one exists. Drivers have none;
+// legends do.
+inline void append_line(const char *line) {
+  if (line == nullptr || !*line) return;
+  const size_t k = strlen(g.staged_body);
+  snprintf(g.staged_body + k, sizeof(g.staged_body) - k, "\n\n%s", line);
+}
+
 // Resolve a card completely into the staging buffer. Returns false when the
 // card cannot be shown at all, in which case the caller skips it rather than
 // displaying a blank.
@@ -281,7 +289,11 @@ inline bool prepare(const carousel::Card &c) {
     case carousel::DRIVER: {
       if (c.index < 0 || c.index >= drivers::N) return false;
       const auto &p = drivers::P[c.index];
-      compose_profile(p, legend_row(p.driver_id) != nullptr, drivers::SOURCE_SEASON);
+      const auto *lg = legend_row(p.driver_id);
+      compose_profile(p, lg != nullptr, drivers::SOURCE_SEASON);
+      // A driver who is also a legend carries the legend line on their driver
+      // card - one card, both facts (decision 86).
+      if (lg) append_line(lg->line);
       return true;
     }
     case carousel::LEGEND: {
@@ -290,6 +302,7 @@ inline bool prepare(const carousel::Card &c) {
       // RACE-13d: if they are still racing, their DRIVER card covers them.
       if (currently_racing(p.driver_id)) return false;
       compose_profile(p, true, legends::SOURCE_SEASON);
+      append_line(p.line);
       return true;
     }
     default:

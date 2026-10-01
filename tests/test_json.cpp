@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "../f1-tracker/f1_json.h"
+#include "../f1-tracker/f1_store.h"
 
 static int checks = 0, failures = 0;
 static void okf(bool cond, const char *fmt, ...) {
@@ -203,12 +204,85 @@ static void test_openf1() {
 }
 
 #include <algorithm>
+
+static void test_store() {
+  std::printf("store parsers (section 3.4 rules, real fixtures)\n");
+  using namespace f1::store;
+
+  // civil-from-days against known UTC instants
+  okf(to_epoch("1970-01-01", "00:00:00") == 0, "epoch");
+  okf(to_epoch("2026-03-08", "04:00:00") == 1772942400u, "2026-03-08T04:00Z");
+  // 3.4: a date with NO time is UNKNOWN, never midnight.
+  okf(to_epoch("2026-03-08", "") == 0, "no time means unknown, not midnight");
+  okf(to_epoch("", "04:00:00") == 0, "no date means unknown");
+
+  {
+    const std::string j = slurp("jolpica-2026-races.json");
+    Store st;
+    okf(parse_calendar(j.c_str(), j.size(), st), "calendar parsed");
+    okf(st.n_rounds == 23, "expected 23 rounds, got %d", st.n_rounds);
+    okf(st.season == 2026, "season %u", st.season);
+    uint32_t prev = 0;
+    int sprints = 0;
+    for (int i = 0; i < st.n_rounds; i++) {
+      const auto &r = st.rounds[i];
+      okf(r.round == i + 1, "round order at %d", i);
+      okf(r.circuit_id && *r.circuit_id, "round %d has a circuitId", i);
+      okf(r.country && *r.country, "round %d has a country", i);
+      const uint32_t race = r.start[f1::calendar::RACE];
+      if (race && prev) okf(race > prev, "round %d race time goes backwards", i);
+      if (race) prev = race;
+      if (r.start[f1::calendar::SPRINT]) sprints++;
+    }
+    okf(sprints == 6, "expected 6 sprint weekends, got %d", sprints);
+    // A parsed calendar must drive the state machine exactly like the compiled one.
+    f1::state::Calendar cal{st.rounds, st.n_rounds, st.season, true};
+    f1::state::Status s2 = f1::state::evaluate(cal, st.rounds[0].start[f1::calendar::RACE] + 600, true);
+    okf(s2.weekend == f1::state::RACE_LIVE, "fetched calendar drives the state machine");
+  }
+
+  {
+    const std::string j = slurp("jolpica-2025-last-qualifying.json");
+    Store st;
+    okf(parse_qualifying(j.c_str(), j.size(), st), "qualifying parsed");
+    okf(st.n_entries == 20, "expected 20 qualifiers, got %d", st.n_entries);
+    okf(st.entries_mode == f1::state::GRID_PROVISIONAL,
+        "qualifying must be PROVISIONAL - penalties are not applied to it");
+    okf(st.entries[0].pos == 1, "first row is P1");
+    okf(st.entries[0].name[0] && st.entries[0].team[0], "names and teams populated");
+  }
+
+  {
+    const std::string j = slurp("jolpica-driver-standings.json");
+    Store st;
+    okf(parse_standings(j.c_str(), j.size(), st), "standings parsed");
+    okf(st.n_standings > 0, "standings rows");
+    okf(st.standings[0].pos == 1, "leader is P1");
+    okf(st.standings[0].points > 0, "leader has points");
+    okf(st.standings[0].driver_id[0], "driverId populated - the only stable key");
+  }
+
+  // 3.4: a failed parse must leave the store alone rather than clearing it.
+  {
+    Store st;
+    const std::string j = slurp("jolpica-2026-races.json");
+    parse_calendar(j.c_str(), j.size(), st);
+    const int before = st.n_rounds;
+    const uint32_t gen = st.generation;
+    okf(!parse_calendar("", 0, st), "empty body is a failed parse");
+    okf(!parse_calendar("{\"MRData\":{}}", 12, st), "shapeless body is a failed parse");
+    okf(st.n_rounds == before, "a failed parse must not clear the calendar");
+    okf(st.generation == gen, "a failed parse must not bump the generation");
+  }
+}
+
 int main() {
   std::printf("\nF1 Tracker - JSON scanner tests (against real fixtures)\n\n");
   test_primitives();
   test_jolpica_races();
   test_jolpica_drivers();
   test_openf1();
+  test_store();
   std::printf("\n%d checks, %d failures\n\n", checks, failures);
   return failures ? 1 : 0;
 }
