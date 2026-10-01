@@ -10,6 +10,8 @@ ESP32-4848S040 — the same board, font stack and UI cues as `sky-tracker`.
   circuit's map with facts, a profile of every current driver, and a profile of
   an F1 legend. Each profile carries a portrait, a nationality flag and the
   full career record.
+- **On a driver's birthday** their card is badged in gold and shown every 4th
+  card in the rotation.
 - **One driver is watched.** It ships watching **Max Verstappen** and raises an
   alert when he is racing, when his grid slot is known, when his result lands,
   and when he passes a career milestone — a full-width banner for events, a
@@ -42,7 +44,7 @@ first; it is the project.
 ```
 python3 -m venv .venv && .venv/bin/pip install esphome
 cp secrets.yaml.example secrets.yaml      # then fill it in
-./deploy.sh                               # validate, compile, warning gate
+./deploy.sh                               # validate, glyph check, compile, warning gate
 ```
 **M0–M7 are built**, bar the items that need a board. ESPHome 2026.9.1, image **2.74 MB of a
 7.75 MB app slot (33.7 %)**, RAM **42.5 %**, **10,587 host checks passing**. The data task runs

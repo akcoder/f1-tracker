@@ -3,8 +3,8 @@
 **Target hardware:** Guition ESP32-4848S040 (ESP32-S3, 4.0" 480×480 IPS)
 **Framework:** ESPHome (ESP-IDF)
 **Status:** Draft rev 2 — living document, updated as decisions are made
-**Last updated:** 2026-10-01 (rev 14: **M0–M7 built**, and every page rendered
-from the real generated data — §14.1 is all that remains)
+**Last updated:** 2026-10-01 (rev 15: **M0–M7 built**, glyph coverage gated,
+birthdays added — §14.1 is all that remains)
 
 ---
 
@@ -1708,12 +1708,11 @@ This is why the device stores a position at all.
       Unicode NFC is far too heavy for this device; a small fold table covering
       the Latin-1 base+mark pairs is enough, since that is the whole range our
       content occupies. Assert it in the host tests with an NFD fixture.
-- [ ] Adopt `plane-tracker`'s **`check_glyphs.py`** (its decision 52): it
-      resolves each label's *effective* font and checks its text against that
-      font, including strings set from lambdas via `lv_label_set_text`.
-      Checking everything against one shared set is what let the `UPGRADING`
-      bug through. Extend it to cover the **generated** circuit and driver
-      name tables, which is where our risk actually is.
+- [x] **`tools/check_glyphs.py` is built and gates `deploy.sh`** (decision 140).
+      It resolves each label's *effective* font — the gear is measured against
+      `montserrat_28`, not against Roboto Mono — and covers the **generated**
+      tables as well as the YAML and the C++ headers. 1,901 strings, 99 distinct
+      characters, 0 missing.
 - [ ] For glyph iconography, load **Material Design Icons from a `type: web`
       URL** with an explicit codepoint list per size, as `sky-tracker` does.
       Flags remain bitmaps (§6.6).
@@ -2420,6 +2419,12 @@ exists.
 | 136 | **Row taps are wired by a function pointer supplied by the app**, not by `f1_order.h` reaching upward. The order page stays free of everything above it, which is what keeps it host-compilable alongside the store | 2026-10-01 | active |
 | 137 | **`tools/render_pages.py` renders every page from the GENERATED headers**, not from mock text — the same bytes the firmware carries, with the same geometry and the same Roboto Mono metrics. It is a check on the design, not a drawing of it | 2026-10-01 | active |
 | 138 | **The renders caught two real gaps on the race page**: the circuit country flag and the top-5 strip (decision 49) were both specified and neither was built. The flag also collided with the clock in the top-right corner. All three fixed. This is the second time rendering the real layout has found something a reading of the document did not | 2026-10-01 | active |
+| 139 | **The OTA panel names the phase it is in**: `UPLOADING` while the bytes arrive, `UPGRADING` once they are being applied, `UPLOAD FAILED` on error. Every phase previously said `UPGRADING`, which is wrong for the part that takes longest and is the part a watcher is waiting on | 2026-10-01 | **asked for by owner** |
+| 140 | **`tools/check_glyphs.py` is built and is a `deploy.sh` gate** (decision 52). 1,901 strings from the YAML, the C++ headers and the **generated tables** — the last being where the risk lives, because nobody reads those files. A font's effective set is what it requests **intersected with what the typeface provides** | 2026-10-01 | implements 52 |
+| 141 | **The checker's first version made the very mistake decision 52 warns about**, in the opposite direction: it measured every string against one shared set and flagged the gear symbol, which `montserrat_28` draws perfectly well. It now resolves each label's **effective** font | 2026-10-01 | active |
+| 142 | **On a driver's birthday their card is badged in gold and injected every 4th card.** The priority slot does not consume a cursor, so nothing is starved and the rotation resumes where it was; a birthday never overrides a content filter that excludes drivers | 2026-10-01 | **asked for by owner** |
+| 143 | **Birthdays are scoped to CURRENT DRIVERS.** Legends carry a date of birth but **no date of death**, so the device cannot tell a living driver's birthday from the anniversary of someone long dead — `BIRTHDAY` over Ayrton Senna would be the worst thing it could display. `LEGENDS_INCLUDED` is named so the reasoning is in the code, not only here | 2026-10-01 | active |
+| 144 | **A 29 February birthday falls back to the 28th** in a non-leap year, rather than being skipped three years in four | 2026-10-01 | active |
 | 90 | **A Sprint is a first-class race day** (RACE-14) — its own grid, result and race page, labelled `SPRINT`. A sprint weekend has two race days. Sprint wins must **not** count toward career win milestones; Jolpica keeps them in a separate endpoint | 2026-10-01 | **decided by owner**, closes open question 6 |
 | 91 | **Portraits are 240×320**, not 150×200. The brief asked to show the picture; at 480 px wide, 150×200 reads as a thumbnail. Budget restated against the **app slot** (~6.5–7.8 MB), not total flash: portraits are 25–30 % of one slot | 2026-10-01 | **delegated**, answers open question 13 |
 | 92 | **Alerts are loud** (§6.14.3): full-width banner for events, brief full-screen takeover for milestones. Safe here specifically because **nothing underneath is changing** — no live timing (58) — which is not a general licence. Nothing ever requires dismissing; a tap only dismisses early. An `Alert style: loud/quiet` setting ships with loud as the default | 2026-10-01 | **decided by owner**, closes open question 12 |
@@ -2587,6 +2592,7 @@ project's real risk.
    - [x] Demonym→ISO3 in the generator; a driver with no resolvable
          nationality draws **no flag** (decision 20)
    - [x] `glyphsets: [GF_Latin_Core]`, verified against 715 real strings
+   - [x] `check_glyphs.py` as a build gate, over 1,901 strings
    - [x] `tools/gen_drivers.py` → **23 drivers, 32 legends**. The pole guard
          worked: **24 curated, 8 from the API, 0 wrong**
    - [x] `tools/gen_portraits.py` → **48 portraits, 0.98 MB**, each with a
