@@ -3,8 +3,8 @@
 **Target hardware:** Guition ESP32-4848S040 (ESP32-S3, 4.0" 480×480 IPS)
 **Framework:** ESPHome (ESP-IDF)
 **Status:** Draft rev 2 — living document, updated as decisions are made
-**Last updated:** 2026-10-01 (rev 4: watched-driver alerts §6.14, driver and
-legend profiles §5.6, mixed carousel §6.4, licensing accepted §3.8)
+**Last updated:** 2026-10-01 (rev 5: red night mode **declined**, legends list
+**settled**, **no hardware yet** — M0 reordered around a host-only track)
 
 ---
 
@@ -76,7 +76,12 @@ Identical to `sky-tracker`, which drives this exact board in production, and to
 ### 2.2 Host toolchain
 - [ ] ESPHome in a **dedicated venv**, as `plane-tracker` did — not the
       `radioconda` environment, to avoid dependency conflicts.
-- [ ] Serial port for the first flash: confirm before use; `plane-tracker` uses
+- [ ] **BUILD-2: there is no board to flash yet** (decision 84). Everything up
+      to and including `esphome config` and `esphome compile` runs on this
+      host; nothing is installed. The milestones are ordered around that
+      (§14), and the hardware-gated items are collected in §14.1 so they are
+      not mistaken for forgotten work.
+- [ ] Serial port, when a board arrives: `plane-tracker` uses
       `/dev/cu.usbserial-21340` on this host, and only one board can hold it at
       a time.
 
@@ -989,26 +994,53 @@ response.** This is the whole technique:
       combined** (§9). The generator reports the total and **fails above
       2 MB**, so the budget cannot drift unnoticed.
 
-### 5.6.4 Who counts as a legend
-Taste, not data — so this is **a proposed list for the owner to edit**, not a
-decision. Criteria recorded so additions are consistent: **every multiple World
+### 5.6.4 Who counts as a legend — settled
+**Decision 75 is settled: the list below ships.** Delegated to me by the owner,
+so the selection criteria matter more than my taste: **every multiple World
 Champion**, plus **single champions of lasting significance**, plus **great
-drivers who never won a title**.
+drivers who never won a title**. Thirty-one rows.
 
-| Group | Drivers |
+| Group | `driverId`s |
 |---|---|
-| Multiple champions | Fangio, Ascari, Brabham, Clark, Stewart, Lauda, Prost, Senna, M. Schumacher, Alonso, Hamilton, Vettel, Verstappen, Fittipaldi, Piquet, Hakkinen, Graham Hill, Jack Brabham |
-| Single champions of note | Hunt, Mansell, Rindt, Villeneuve (Jacques), Damon Hill, Hawthorn, Surtees, Rosberg (Nico) |
-| Never champion | Moss, Gilles Villeneuve, Amon, Ickx, Peterson, Barrichello |
+| Multiple champions (16) | `fangio` · `ascari` · `brabham` · `clark` · `stewart` · `lauda` · `prost` · `senna` · `michael_schumacher` · `vettel` · `fittipaldi` · `piquet` · `hakkinen` · `graham_hill` · `alonso`\* · `hamilton`\* |
+| Single champions of note (10) | `hunt` · `mansell` · `rindt` · `jacques_villeneuve` · `damon_hill` · `hawthorn` · `surtees` · `rosberg` (Nico) · `raikkonen` · `button` |
+| Never champion (5) | `moss` · `gilles_villeneuve` · `amon` · `ickx` · `peterson` |
 
-- [ ] Verstappen appears in both the **current drivers** and the **legends**
-      set. Show him once — the current-driver card wins, and his legend-tier
-      record appears on it.
-- [ ] Alonso and Hamilton are the same case if either is still racing in 2026.
-      **Resolve by `driverId` against the current entry list at build time**,
-      not by hand, so the overlap cannot drift.
-- [ ] Keep the list in **one editable table** with the group recorded per row,
-      so the carousel can weight or filter by group later.
+\* also a current driver — see the overlap rule below.
+
+Two corrections to the draft list, recorded because both were real errors:
+- **Jack Brabham appeared twice**, as `Brabham` and `Jack Brabham`. One row.
+- **Räikkönen and Button were missing** from the single champions. Both are
+  modern champions with long careers and large start counts, and leaving them
+  out while including Hawthorn would have been indefensible.
+- `barrichello` is dropped from "never champion": a fine career and the
+  start-count record for years, but §5.6.4's bar is *great drivers who never
+  won a title*, and he is a tier below the other five.
+
+#### Overlap with current drivers — measured
+Checked against the 2026 entry list: **three proposed legends are still
+racing** — `alonso`, `hamilton` and `max_verstappen`.
+
+- [ ] **Show each driver once.** A driver in both sets gets their
+      **current-driver card**, not a second legend card, and that card carries
+      a **`LEGEND` badge** beside the `DRIVER` type badge (§6.4, UI-20b) plus
+      the full career record. One card, both facts.
+- [ ] **Resolve the overlap at build time by `driverId`** against the current
+      entry list, never by hand. Verstappen is already in the current set and
+      is deliberately **absent from the legends table above** for that reason;
+      Alonso and Hamilton are listed because they belong there on record and
+      the overlap rule handles them automatically if they stop racing.
+- [ ] **This cannot be left to drift.** When a current driver retires, the
+      overlap rule must move them into the legend rotation on the next build
+      with no edit — which is exactly why it is a generated rule and not a
+      curated flag.
+- [ ] Keep the table **editable, with the group recorded per row**, so the
+      carousel can weight or filter by group later.
+- [ ] **DATA-7 applies to most of this list** — no `code`, no
+      `permanentNumber` for the pre-1980s drivers. **DATA-8 applies to all but
+      five**: everyone except Hamilton, Vettel, Räikkönen, Button and
+      Jacques Villeneuve began before 1994, so their pole counts are curated or
+      omitted.
 
 ---
 
@@ -1376,10 +1408,9 @@ This is why the device stores a position at all.
       remains available if it is ever wanted.
 - [ ] Validation: lat ±90, lon ±180. Clamp with visible feedback, and
       **range-check the restored values at boot** (§3.6).
-- [ ] **Consider porting Night Mode** (`sky-tracker`'s UI-45): a red-only
-      palette after civil dusk, applied to the pixels LVGL hands the display
-      just before each flush, so no widget needs a second colour scheme. See
-      §6.13.
+- [ ] **Night Mode is declined** (§6.13, decision 83). Auto-dim is the whole
+      of this project's dusk behaviour: the panel gets dimmer, and it stays in
+      colour.
 
 ### 6.9 Typography (UI-40)
 - [ ] **Render all text with 4 bpp fonts.** **ESPHome's font default is
@@ -1422,10 +1453,12 @@ This is why the device stores a position at all.
 - [ ] **Do not colour the text** with it. Several team colours have poor
       contrast on black (dark blues especially) and the driver name must stay
       readable. A bar is decoration; the text is information.
-- [ ] Under Night Mode (§6.13) team colours **must collapse to intensity, not
-      hue**. `plane-tracker` decision 56 found that multiplying red over a blue
-      made black and the contact vanished. Two teammates differ by the number
-      and the name, not the bar, so losing hue costs nothing.
+- [ ] **Team colours survive intact**, because Night Mode is declined (§6.13).
+      This is part of why it was declined: `plane-tracker` decision 56 found
+      that multiplying red over a blue gives black, so a red palette would make
+      half the grid's colour bars vanish. On a device whose job includes
+      telling teams apart, that is a real loss rather than an acceptable
+      trade.
 
 ### 6.11 Detail cards (UI-24)
 - [ ] Tapping a driver row opens a card: full name, number, acronym, team,
@@ -1463,23 +1496,33 @@ This is why the device stores a position at all.
       Show it on the debug page and in the status line when it exceeds the
       expected poll interval by a wide margin.
 
-### 6.13 Night mode (UI-45)
-- [ ] **Port `sky-tracker`'s Night Mode**, and consider making it the default
-      as `plane-tracker` did (its decision 56): after civil dusk (Sun below
-      −6°) everything is drawn in red only, at the pixel level in the display
-      flush callback, so no widget needs a second colour scheme.
-- [ ] `plane-tracker` found this must be a **red-only palette, not a
-      translucent red overlay** — and that classes must separate by
-      **intensity**, not hue (§6.10).
-- [ ] It also found that `set_dark()` must apply the palette
-      **unconditionally** (its decision 61): an early-out on an unchanged
-      palette meant that at boot, where dark is already the default, widgets
-      were never repainted and kept the daylight colours written literally into
-      the YAML.
-- [ ] **Whether it defaults on is an open question here** (§13) — this is a
-      living-room object showing a sport, not a night-vision instrument, and a
-      red screen for 19 h a day in December is a strong aesthetic choice to
-      make by default.
+### 6.13 Night mode — declined (UI-45)
+**Decision 83: the red night-vision palette is not ported.** Both siblings have
+it; this project does not get it.
+
+The reasoning, recorded because it is the kind of thing that gets re-proposed:
+`sky-tracker` and `plane-tracker` are **instruments watched in the dark**, where
+preserving night vision is the point. This is a **living-room object showing a
+sport**, and at 61.58 N a dusk-triggered red palette would hold the screen red
+for up to **19 hours a day in December** (§6.8) — the device would be red far
+more often than not, which is an aesthetic decision disguised as a feature.
+
+- [ ] **Remove it from the settings page and the entity list.** Not shipped
+      disabled — absent. A switch for a feature nobody will turn on is
+      clutter, and §7's page is already long.
+- [ ] **Auto-dim stays** (§6.8) and is the right answer to the same problem:
+      the display gets dimmer after sunset, it just stays in colour. Team
+      colours (§6.10) and both sets of flags (§6.6) are load-bearing on this
+      device in a way they are not on a radar scope, and a red palette
+      destroys all three.
+- [ ] One consequence worth keeping: `plane-tracker` decision 61 found that a
+      palette setter must apply **unconditionally**, because an early-out on an
+      unchanged palette left widgets showing the colours written literally into
+      the YAML. **That applies to any theming this project does**, dimming
+      included — so the lesson is inherited even though the feature is not.
+- [ ] Also inherited: team colours must **not** be the only signal (§6.10).
+      That requirement stands on contrast grounds alone, with no palette
+      switching involved.
 
 ---
 
@@ -1502,6 +1545,16 @@ permanent `33`.
 - [ ] Default `max_verstappen`, settable from a `select` populated from the
       **current entry list** (§7), so it cannot be set to a driver who is not
       racing.
+- [ ] **DATA-10: the season driver list is not the race entry list.** Measured:
+      Jolpica's 2026 `drivers` endpoint returns **32 rows**, of which only
+      **23 carry a `code` and a `permanentNumber`** — the other 9 are reserve
+      and rookie entries with no number, no acronym and no nationality
+      (DATA-7). A `select` built from the season pool would offer nine drivers
+      who are not racing this weekend.
+      **Build the entry list from the round's own data** — qualifying
+      classification, or OpenF1's per-session `drivers` once the window has
+      closed — and fall back to "season rows that carry a `code`" before the
+      first session of a year.
 
 #### 6.14.2 What "driving" means on a free tier
 The device cannot see cars on track (§3.6.1). It **can** know, to the second,
@@ -1571,7 +1624,6 @@ and `on_long_press` opens the debug page. Ported from `sky-tracker` exactly.
 | Latitude / Longitude | entry | decimal degrees only (§6.8) |
 | Auto-dim display | checkbox | on/off — sunset-based dimming (§6.8) |
 | Brightness | slider | 1–100 % (the **daytime** level while auto is on) |
-| Night mode | checkbox | red palette after civil dusk (§6.13) |
 | Clock format | dropdown | 24 h local / 12 h local / UTC-Zulu |
 | Carousel interval | slider | 15–120 s, step 15, default **45** |
 | Carousel order | dropdown | calendar / random / current season only |
@@ -1623,7 +1675,6 @@ touchscreen, the device's own **web UI**, and **Home Assistant**.
 | Latitude, Longitude | two `number` (box mode, step 0.001) |
 | Auto-dim display | `switch` |
 | Brightness | `number` (1–100 %, slider) |
-| Night mode | `switch` |
 | Clock format | `select` (24 h / 12 h / Zulu) |
 | Carousel interval | `number` (15–120, step 15, slider) |
 | Carousel order | `select` |
@@ -1986,6 +2037,11 @@ exists.
 | 80 | **Each alert event latches once** against a `(round, session, event)` key in a `restore_value` global, so a mid-weekend reboot does not replay the set. The most likely bug in the feature | 2026-10-01 | active |
 | 81 | **The ambient marker is the feature most of the time** — his flag in the header and his row highlighted — and is the part worth polishing. The strip is for the few moments that deserve one | 2026-10-01 | active |
 | 82 | A **cancelled session suppresses the "on track" alert** (`is_cancelled`), and a **withdrawal is never reported as a DNF** | 2026-10-01 | active |
+| 83 | **Red night mode is declined** — not ported, not shipped disabled, absent. Both siblings are instruments watched in the dark; this is a living-room object showing a sport, and at 61.58 N a dusk trigger would hold the screen red up to 19 h a day in December. Auto-dim (§6.8) answers the same problem without destroying team colours and flags | 2026-10-01 | **decided by owner**, closes open question 2 |
+| 84 | **No hardware yet.** Work stops at `esphome compile`; §14.1 collects every hardware-gated item. The generators, data layer, state machine and test suite are all host work and carry most of the project's risk, so this costs little | 2026-10-01 | **decided by owner** |
+| 85 | **The legends list is settled at 31 rows** (§5.6.4), delegated by the owner. Two errors in the draft fixed: Jack Brabham was duplicated, and Räikkönen and Button were missing. Barrichello dropped on the stated bar | 2026-10-01 | settles 75 |
+| 86 | **A driver in both sets gets one card** — their current-driver card with a `LEGEND` badge. The overlap is resolved at build time by `driverId` against the entry list, so a retirement moves a driver into the legend rotation with no edit. Measured overlap: Alonso, Hamilton, Verstappen | 2026-10-01 | active |
+| 87 | **DATA-10: the season driver list is not the race entry list.** Measured: 32 rows for 2026, only 23 with a `code` and number; the rest are reserves. Build the watched-driver `select` from the round's own data, not the season pool | 2026-10-01 | active |
 
 ---
 
@@ -1996,15 +2052,17 @@ exists.
    record is §3.7. It surfaced one material constraint, now decision 51:
    OpenF1's live window is a paid tier, which moved the whole live-timing
    design into RACE-12 (§6.3).
-2. **Does Night Mode default on?** (§6.13) `plane-tracker` made red-at-1 % the
-   default for a night-vision instrument. This is a living-room object showing
-   a sport, and 19 h of red a day in December is a strong choice to make by
-   default. Recommend **off by default, on by setting.**
-3. **Do 22 rows fit at `mono12`?** (§6.3) ~19 px per row is tight. Needs a
-   hardware measurement, not a calculation. Fallback is dropping the TEAM
-   column, not shrinking the font.
-4. **Driver headshot licence and hotlinking terms** (§6.11). The card must work
-   without photos, so this gates an enrichment rather than the feature.
+2. ~~**Does Night Mode default on?**~~ **CLOSED 2026-10-01 — declined
+   entirely** (decision 83). Not a default question in the end: the feature is
+   absent, and auto-dim (§6.8) covers the need.
+3. **Do 22 rows fit at `mono12`?** (§6.3) ~19 px per row is tight. **Blocked on
+   hardware** (§14.1) — it is a layout judgement, not a calculation. Fallback
+   is dropping the TEAM column, not shrinking the font.
+4. ~~**Driver headshot licence and hotlinking terms.**~~ **CLOSED 2026-10-01**
+   — all licensing terms accepted (decision 67), and the design moved to
+   Wikimedia Commons with the photographer credited and a build that fails on
+   an unattributable image (§5.6.3, decisions 72–73). OpenF1's `headshot_url`
+   is not used.
 5. **Is the 2026 calendar Jolpica serves correct?** It returns 23 rounds
    against 24 circuits, with at least one oddly-named round (§3.4). Worth
    cross-checking against OpenF1's `sessions?year=2026` before building the
@@ -2013,9 +2071,9 @@ exists.
    own grid and result. Recommend treating it as a first-class `RACE_LIVE`
    session, which the state machine already allows, and saying `SPRINT` in the
    header.
-7. **Serial port for the first flash** — `plane-tracker` holds
-   `/dev/cu.usbserial-21340` on this host and only one board can use it at a
-   time.
+7. ~~**Serial port for the first flash.**~~ **MOOT 2026-10-01** — no hardware
+   yet (decision 84). Recorded in §2.2 for when a board arrives; the port
+   contention with `plane-tracker` still applies then.
 8. **What does an unauthenticated OpenF1 request return inside the live
    window?** Still unmeasured, but **no longer on the critical path** — NET-14
    (decision 59) means the device never makes that request. It remains a
@@ -2027,10 +2085,9 @@ exists.
    response is NET-14 (§3.6.1), the cost is stated in §3.6.2, and the affected
    features are preserved in §8.3 in case it is ever reconsidered. **The
    original brief is unaffected.**
-10. **Which legends?** §5.6.4 proposes ~32 across three groups (multiple
-   champions, notable single champions, great non-champions) with the criteria
-   recorded. **Edit the list freely** — it is the one part of this project that
-   is purely taste. I will build whatever the table says.
+10. ~~**Which legends?**~~ **CLOSED 2026-10-01 — delegated and settled** at 31
+   rows (§5.6.4, decision 85). Still the easiest thing in the project to
+   change: it is one table, and nothing depends on its contents.
 11. **Is the `POST_SESSION` window-close moment exactly right?** The +30 min
    boundary is OpenF1's published definition, but whether their data is
    actually readable at +30:00 or a little later is unmeasured. Decision 60
@@ -2043,9 +2100,23 @@ exists.
    colour change across the whole page) or quieter (milestones only), say
    which; the `Milestone alerts only` switch already covers the quiet case.
 13. **Portrait size and crop.** ~150×200 px is my default, which fits a
-   two-column card beside the career record. A larger portrait (240×320) looks
-   better and roughly doubles the flash. Both are fine; it is an aesthetic
-   call, and it is easier to decide against a real card on hardware at M2.
+   two-column card beside the career record; 240×320 looks better and roughly
+   doubles the flash. **Blocked on hardware** (§14.1) — judge it against a real
+   card. The generator takes the size as a parameter, so this is a rerun, not
+   a rewrite.
+
+### 13.1 What is actually outstanding, by who can answer it
+| # | Question | Owner | Blocked on |
+|---|---|---|---|
+| 5 | Is Jolpica's provisional 2026 calendar right? | me | nothing — cross-check against OpenF1 |
+| 6 | Is a Sprint a first-class race day? | owner (recommend **yes**, labelled `SPRINT`) | nothing |
+| 8 | Gated OpenF1 response shape | me, defensively | a live session happening |
+| 11 | True lag at the +30 min boundary | me | the first race the device sees |
+| 12 | Alert loudness | owner (defaulted **quiet**) | nothing |
+| 3 | 22 rows at `mono12` | me | **hardware** (§14.1) |
+| 13 | Portrait size | owner | **hardware** (§14.1) |
+
+**Nothing on this list blocks M0, M1, M2 or M3.**
 
 ### Settled before this draft was written
 | Question | Answer |
@@ -2076,17 +2147,26 @@ exists.
 
 ## 14. Milestones
 
-1. **M0 — Bring-up**
+**No hardware yet** (decision 84). The order below puts everything that can be
+finished on this host first, and §14.1 collects what genuinely needs a board.
+This is a good position to be in: the generators, the data layer, the state
+machine and the whole test suite are host work, and they are most of the
+project's real risk.
+
+1. **M0 — Host setup and a config that compiles**
    - [ ] ESPHome in a dedicated `.venv`, kept out of `radioconda`
    - [ ] `f1-tracker.yaml`: hardware block, `sdkconfig_options`, `build_flags`,
          LVGL buffer strategy, boot ordering, 30 kHz backlight, UART0 logger
    - [ ] `secrets.yaml` (git-ignored) with a generated API key;
-         `secrets.yaml.example` committed
+         `secrets.yaml.example` committed — **no data-source tokens**, both
+         free tiers are unauthenticated (decision 65)
    - [ ] Entities live on the web UI and HA from the start (§7.1)
    - [ ] **Port `panel_soft_reset()` properly** (§2.1) rather than inheriting
-         `plane-tracker`'s open question
-   - [ ] Config validates, compiles, flashes over USB
-   - [ ] Confirm panel, touch, backlight, PSRAM and the board revision
+         `plane-tracker`'s open question — writing it is host work even though
+         proving it is not
+   - [ ] `esphome config` validates and `esphome compile` succeeds
+   - [ ] **Stop there.** Flashing, and everything that depends on seeing the
+         panel, is §14.1
 2. **M1 — Circuit data and the carousel**
    - [ ] `tools/gen_circuits.py` → `f1_circuits.h` (all 40, pre-projected,
          pre-fitted, with the `circuitId` cross-reference)
@@ -2149,6 +2229,31 @@ exists.
          strips, flags that occurred, weather. All free once the window closes,
          and the feature that recovers most of what live timing would have been
 8. **M7 — Polish**
-   - [ ] Error states, Night Mode decision, OTA panel, crash record
+   - [ ] Error states, OTA panel, crash record
    - [ ] `deploy.sh` with warnings-are-errors
    - [ ] Enclosure
+
+### 14.1 Parked until there is a board
+Not forgotten — **blocked**. Collected here so the backlog stays honest.
+
+| Item | Why it needs hardware | Section |
+|---|---|---|
+| First flash over USB | — | M0 |
+| Confirm panel, touch, backlight, PSRAM | — | §2.1 |
+| Confirm the board revision against the silkscreen | the model defaults are only trusted once | §2.1 |
+| **Prove `panel_soft_reset()` at priority 1100** | the symptom is a panel that fails to initialise | §2.1, HW-7 |
+| `min_power` — the lowest still-visible duty | panel-specific; 0.10 is `sky-tracker`'s value | §2.4.7 |
+| **Does 30 kHz actually stop the backlight whine?** | audible, not measurable in software | §2.4.7, decision 4 |
+| **Do 22 order rows fit at `mono12`?** | ~19 px per row; a layout judgement | §6.3, open question 3 |
+| **Portrait size — 150×200 or 240×320?** | an aesthetic call against a real card | §5.6.3, open question 13 |
+| Where the LVGL buffer landed (internal RAM or PSRAM) | logged at boot | §2.4.3 |
+| Free internal RAM / PSRAM with everything enabled | the real budget (§9) | §9 |
+| Boot time, and whether icon/portrait work needs core 1 | `plane-tracker` decision 64 | §9 |
+| `MAP-5a` — the `lv_line` redraw cost at ~300×300 | PSRAM bandwidth | §6.5 |
+
+- [ ] **Everything in this table is a measurement, not a design decision.**
+      Nothing in §1–§13 is blocked by it; the design is settled and the
+      generators, the data layer and the tests can all be finished first.
+- [ ] Keep writing the LVGL YAML regardless. `esphome config` catches most
+      structural mistakes, and `check_glyphs.py` (§6.9) catches the font bugs
+      that would otherwise need a screen.
