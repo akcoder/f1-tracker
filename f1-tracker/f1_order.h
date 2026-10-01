@@ -10,6 +10,7 @@
 // with real Roboto Mono metrics and the real entry list, and 6.3.1 records the
 // result - 18 px rows fit with 22 px to spare, which the state line spends.
 #include <cstdint>
+#include <cstddef>
 #include <cstdio>
 #include <cstring>
 
@@ -46,7 +47,12 @@ struct Row {
   lv_image_dsc_t dsc{};        // points into f1_flags.h; never copied
 };
 
+// decision 53: the whole row is the tap target. The handler is supplied by the
+// app rather than wired here, so this file stays free of everything above it.
+using RowTap = void (*)(int index);
+
 struct View {
+  RowTap on_tap = nullptr;
   lv_obj_t *parent = nullptr;
   lv_obj_t *header = nullptr;
   const lv_font_t *font = nullptr;
@@ -72,6 +78,12 @@ inline void build_row(View &v, int i) {
   // decision 53: the whole row is the tap target, not just the symbol. To a
   // finger the label is part of the driver, and it is the larger of the two.
   lv_obj_add_flag(r.bg, LV_OBJ_FLAG_CLICKABLE);
+  lv_obj_set_user_data(r.bg, (void *) (intptr_t) i);
+  lv_obj_add_event_cb(r.bg, [](lv_event_t *e) {
+    if (g.on_tap == nullptr) return;
+    lv_obj_t *t = (lv_obj_t *) lv_event_get_current_target(e);
+    g.on_tap((int) (intptr_t) lv_obj_get_user_data(t));
+  }, LV_EVENT_SHORT_CLICKED, nullptr);
 
   r.bar = lv_obj_create(r.bg);
   lv_obj_set_pos(r.bar, X_BAR, 2);
@@ -99,7 +111,9 @@ inline void build_row(View &v, int i) {
   lv_obj_set_style_text_color(r.gap, lv_color_hex(COL_MUTED), 0);
 }
 
-inline void setup(lv_obj_t *parent, lv_obj_t *header, const lv_font_t *font) {
+inline void setup(lv_obj_t *parent, lv_obj_t *header, const lv_font_t *font,
+                  RowTap on_tap = nullptr) {
+  g.on_tap = on_tap;
   g.parent = parent;
   g.header = header;
   g.font = font;

@@ -262,6 +262,42 @@ static void test_store() {
     okf(st.standings[0].driver_id[0], "driverId populated - the only stable key");
   }
 
+  {
+    const std::string j = slurp("jolpica-last-results.json");
+    Store st;
+    okf(parse_results(j.c_str(), j.size(), st), "results parsed");
+    okf(st.entries_mode == f1::state::FINAL, "results land as FINAL");
+    okf(st.n_entries > 0, "result rows");
+    okf(st.entries[0].pos == 1, "winner is P1");
+    // 6.3: a retirement keeps its row, greyed, rather than vanishing.
+    int retired = 0;
+    for (int i = 0; i < st.n_entries; i++) if (st.entries[i].out) retired++;
+    std::printf("    (%d of %d classified as retired)\n", retired, st.n_entries);
+    for (int i = 0; i < st.n_entries; i++)
+      okf(st.entries[i].pos > 0, "row %d has a position", i);
+  }
+
+  {
+    // 8.1: the summary needs NO OpenF1 - Jolpica carries both halves, so there
+    // is no live window to wait out.
+    const std::string j = slurp("jolpica-last-fastest.json");
+    Store st;
+    okf(parse_fastest(j.c_str(), j.size(), st), "fastest lap parsed");
+    okf(st.summary.have_fastest, "have_fastest set");
+    okf(st.summary.fl_time[0], "fastest lap has a time");
+    okf(st.summary.fl_driver[0], "fastest lap has a driver");
+    okf(st.summary.fl_lap > 0, "fastest lap has a lap number");
+    okf(st.summary.event[0], "fastest lap carries the event name");
+
+    const std::string k = slurp("jolpica-last-pitstops.json");
+    Store st2;
+    okf(parse_pitstops(k.c_str(), k.size(), st2), "pit stops parsed");
+    okf(st2.summary.have_stops, "have_stops set");
+    okf(st2.summary.n_stops > 0, "pit stop count");
+    okf(st2.summary.best_stop[0], "quickest stop recorded");
+    okf(st2.summary.best_stop_driver[0], "quickest stop has a driver");
+  }
+
   // 3.4: a failed parse must leave the store alone rather than clearing it.
   {
     Store st;
@@ -271,6 +307,13 @@ static void test_store() {
     const uint32_t gen = st.generation;
     okf(!parse_calendar("", 0, st), "empty body is a failed parse");
     okf(!parse_calendar("{\"MRData\":{}}", 12, st), "shapeless body is a failed parse");
+    Store empty;
+    okf(!parse_fastest("", 0, empty), "empty fastest-lap body is a failed parse");
+    okf(!parse_pitstops("", 0, empty), "empty pitstops body is a failed parse");
+    okf(!parse_results("", 0, empty), "empty results body is a failed parse");
+    okf(!parse_standings("", 0, empty), "empty standings body is a failed parse");
+    okf(!empty.summary.have_fastest && !empty.summary.have_stops,
+        "a failed parse must not set the have_ flags");
     okf(st.n_rounds == before, "a failed parse must not clear the calendar");
     okf(st.generation == gen, "a failed parse must not bump the generation");
   }

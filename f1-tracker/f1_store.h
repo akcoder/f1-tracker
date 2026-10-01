@@ -44,6 +44,23 @@ struct Standing {
   char driver_id[28] = {0};
 };
 
+// 8.1: the post-session summary. Found at implementation time that Jolpica
+// carries BOTH the fastest lap and the pit stops, so this page needs no OpenF1
+// at all - which means no live window to wait out and nothing gated. Only tyre
+// compounds, flags and weather would need OpenF1, and those are optional.
+struct Summary {
+  char fl_driver[20] = {0};
+  char fl_time[12] = {0};
+  int fl_lap = 0;
+  char event[48] = {0};
+  uint16_t season = 0;
+  int n_stops = 0;
+  char best_stop_driver[20] = {0};
+  char best_stop[10] = {0};
+  bool have_fastest = false;
+  bool have_stops = false;
+};
+
 struct Store {
   // A fetched calendar supersedes the compiled floor (DATA-3). Rounds are kept
   // in the same shape the state machine already reads.
@@ -59,6 +76,7 @@ struct Store {
   Standing standings[MAX_STANDINGS];
   int n_standings = 0;
 
+  Summary summary;
   uint32_t generation = 0;      // bumped on every successful parse, so the UI
                                 // thread can tell "unchanged" from "stale"
 };
@@ -269,6 +287,70 @@ inline bool parse_standings(const char *s, size_t n, Store &out) {
   }
   if (kept == 0) return false;
   out.n_standings = kept;
+  out.generation++;
+  return true;
+}
+
+inline bool parse_fastest(const char *s, size_t n, Store &out) {
+  const size_t races = json::path(s, n, "MRData.RaceTable.Races");
+  if (races == json::NPOS || json::array_len(s, races, n) == 0) return false;
+  const size_t r0 = json::array_at(s, races, n, 0);
+  const size_t res = json::find_key(s, r0, n, "Results");
+  if (res == json::NPOS || json::array_len(s, res, n) == 0) return false;
+  const size_t q = json::array_at(s, res, n, 0);
+  const size_t fl = json::find_key(s, q, n, "FastestLap");
+  if (fl == json::NPOS) return false;
+
+  char season[8];
+  if (json::get_str(s, r0, n, "season", season, sizeof(season)))
+    out.summary.season = (uint16_t) atoi(season);
+  json::get_str(s, r0, n, "raceName", out.summary.event, sizeof(out.summary.event));
+  const size_t dr = json::find_key(s, q, n, "Driver");
+  char fam[24];
+  json::get_str(s, dr, n, "familyName", fam, sizeof(fam));
+  upper_copy(out.summary.fl_driver, sizeof(out.summary.fl_driver), fam);
+  long lap = 0;
+  json::get_int(s, fl, n, "lap", lap);
+  out.summary.fl_lap = (int) lap;
+  const size_t tm = json::find_key(s, fl, n, "Time");
+  if (tm != json::NPOS)
+    json::get_str(s, tm, n, "time", out.summary.fl_time, sizeof(out.summary.fl_time));
+  if (!out.summary.fl_time[0]) return false;
+  out.summary.have_fastest = true;
+  out.generation++;
+  return true;
+}
+
+inline bool parse_pitstops(const char *s, size_t n, Store &out) {
+  const size_t races = json::path(s, n, "MRData.RaceTable.Races");
+  if (races == json::NPOS || json::array_len(s, races, n) == 0) return false;
+  const size_t r0 = json::array_at(s, races, n, 0);
+  const size_t ps = json::find_key(s, r0, n, "PitStops");
+  if (ps == json::NPOS) return false;
+  const int np = json::array_len(s, ps, n);
+  if (np <= 0) return false;
+
+  double best = 1e9;
+  char best_id[28] = {0};
+  for (int i = 0; i < np; i++) {
+    const size_t q = json::array_at(s, ps, n, i);
+    double dur = 0;
+    if (!json::get_double(s, q, n, "duration", dur)) continue;
+    if (dur > 0 && dur < best) {
+      best = dur;
+      json::get_str(s, q, n, "driverId", best_id, sizeof(best_id));
+    }
+  }
+  out.summary.n_stops = np;
+  if (best < 1e9) {
+    std::snprintf(out.summary.best_stop, sizeof(out.summary.best_stop), "%.3fs", best);
+    // driverId -> surname, upper case, via the first dot-free segment
+    const char *p = best_id;
+    const char *us = std::strrchr(best_id, '_');
+    if (us) p = us + 1;
+    upper_copy(out.summary.best_stop_driver, sizeof(out.summary.best_stop_driver), p);
+  }
+  out.summary.have_stops = true;
   out.generation++;
   return true;
 }

@@ -50,6 +50,7 @@ esphome:
     - f1-tracker/f1_json.h
     - f1-tracker/f1_store.h
     - f1-tracker/f1_order.h
+    - f1-tracker/f1_detail.h
     - f1-tracker/f1_net.h
     - f1-tracker/f1_app.h
     - f1-tracker/f1_carousel.h
@@ -84,7 +85,8 @@ esphome:
             w.body    = id(card_body);
             w.font_small = id(mono12)->get_lv_font();
             f1::ui::setup(w, id(carousel_secs).state, id(carousel_content).active_index().value_or(0));
-            f1::order::setup(id(order_rows), id(order_hdr), id(mono12)->get_lv_font());
+            f1::order::setup(id(order_rows), id(order_hdr), id(mono12)->get_lv_font(),
+                             [](int i) { f1::app::open_driver(i); });
             f1::app::Widgets aw;
             aw.race_title  = id(race_title);
             aw.race_state  = id(race_state);
@@ -92,9 +94,12 @@ esphome:
             aw.race_clock  = id(race_clock);
             aw.order_title = id(order_title);
             aw.standings   = id(standings_body);
+            aw.summary     = id(summary_body);
             aw.banner      = id(watch_banner);
             aw.banner_text = id(watch_text);
             f1::app::setup(aw);
+            f1::detail::setup(id(detail_panel), id(detail_title), id(detail_body),
+                              id(detail_flag));
             f1::net::start();                 // the data task, pinned to core 1
 
 esp32:
@@ -624,6 +629,50 @@ lvgl:
                 text: ""
                 text_color: 0xC9D3F2   # the theme default is dark grey: invisible here
                 text_font: mono16
+      - obj:                     # 6.11: the detail card. Top layer, so it covers
+          id: detail_panel       # whichever page is showing without disturbing it.
+          align: CENTER
+          width: 440
+          height: 400
+          hidden: true
+          bg_color: 0x101B3D
+          bg_opa: COVER
+          border_color: 0x2D5BD0
+          border_width: 2
+          radius: 12
+          pad_all: 0
+          scrollable: false
+          widgets:
+            - label:
+                id: detail_title
+                x: 16
+                y: 12
+                width: 340
+                text: ""
+                text_font: mono18
+                text_color: 0xFF8A1F
+            - image:
+                id: detail_flag
+                x: 392
+                y: 16
+                src: pixel_img
+                hidden: true
+            - label:
+                id: detail_body
+                x: 16
+                y: 48
+                width: 408
+                text: ""
+                text_font: mono14
+                text_color: 0xC9D3F2
+            - label:
+                align: BOTTOM_MID
+                y: -8
+                text: "tap anywhere to close"
+                text_font: mono12
+                text_color: 0x5A6687
+          on_click:
+            - lambda: f1::detail::close();
       - obj:                     # 6.14.3: the watched-driver alert. A STRIP, never
           id: watch_banner       # a modal, and nothing ever requires dismissing.
           align: TOP_MID
@@ -699,7 +748,11 @@ lvgl:
       bg_opa: COVER
       scrollable: false
       on_click:
-        - lvgl.page.next: {animation: FADE_IN, time: 200ms}
+        - if:
+            condition: {lambda: 'return f1::app::tap_consumed();'}
+            then: []
+            else:
+              - lvgl.page.next: {animation: FADE_IN, time: 200ms}
       widgets:
         - label:
             id: race_title
@@ -777,7 +830,11 @@ lvgl:
       bg_opa: COVER
       scrollable: false
       on_click:
-        - lvgl.page.next: {animation: FADE_IN, time: 200ms}
+        - if:
+            condition: {lambda: 'return f1::app::tap_consumed();'}
+            then: []
+            else:
+              - lvgl.page.next: {animation: FADE_IN, time: 200ms}
       widgets:
         - label:
             id: order_title
@@ -810,7 +867,11 @@ lvgl:
       bg_opa: COVER
       scrollable: false
       on_click:
-        - lvgl.page.next: {animation: FADE_IN, time: 200ms}
+        - if:                   # 6.1: a card open means a tap only closes it
+            condition: {lambda: 'return f1::app::tap_consumed();'}
+            then: []
+            else:
+              - lvgl.page.next: {animation: FADE_IN, time: 200ms}
       on_long_press:            # UI-20: hold to pause on the current card
         - lambda: f1::ui::toggle_pause();
       widgets:
@@ -840,7 +901,9 @@ lvgl:
             radius: 8
             pad_all: 0
             scrollable: false
-            clickable: false
+            clickable: true       # 6.11: tapping the map opens the circuit card
+            on_click:
+              - lambda: f1::app::open_circuit();
             widgets:
               # MAP-5: the trace, its start/finish tick and the north arrow are
               # declared here so LVGL's line widget is compiled in at all; C++
@@ -903,7 +966,11 @@ lvgl:
       bg_opa: COVER
       scrollable: false
       on_click:
-        - lvgl.page.next: {animation: FADE_IN, time: 200ms}
+        - if:
+            condition: {lambda: 'return f1::app::tap_consumed();'}
+            then: []
+            else:
+              - lvgl.page.next: {animation: FADE_IN, time: 200ms}
       widgets:
         - label:
             x: 10
@@ -926,6 +993,39 @@ lvgl:
             text: "waiting for data"
             text_font: mono14
             text_color: 0xC9D3F2
+
+    - id: summary_page          # 8.1: what HAPPENED. Jolpica carries the fastest
+      bg_color: 0x000000        # lap and the pit stops, so no OpenF1 window applies.
+      bg_opa: COVER
+      scrollable: false
+      on_click:
+        - if:
+            condition: {lambda: 'return f1::app::tap_consumed();'}
+            then: []
+            else:
+              - lvgl.page.next: {animation: FADE_IN, time: 200ms}
+      widgets:
+        - label:
+            x: 10
+            y: 4
+            text: "RACE SUMMARY"
+            text_font: mono16
+            text_color: 0xFF8A1F
+        - label:
+            id: summary_body
+            x: 16
+            y: 40
+            width: 448
+            text: "waiting for a completed session"
+            text_font: mono14
+            text_color: 0xC9D3F2
+        - label:
+            align: BOTTOM_LEFT
+            x: 10
+            y: -6
+            text: "Data: jolpi.ca \u00b7 openf1.org"
+            text_font: mono12
+            text_color: 0x5A6687
 
     - id: settings_page         # UI-16 (section 7)
       skip: true

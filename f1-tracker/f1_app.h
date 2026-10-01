@@ -10,6 +10,7 @@
 #include <cstring>
 
 #include "f1_calendar.h"
+#include "f1_detail.h"
 #include "f1_net.h"
 #include "f1_order.h"
 #include "f1_state.h"
@@ -22,6 +23,7 @@ namespace app {
 
 struct Widgets {
   lv_obj_t *standings = nullptr;     // label on the championship page
+  lv_obj_t *summary = nullptr;       // label on the post-session summary
   lv_obj_t *race_title = nullptr;
   lv_obj_t *race_state = nullptr;    // UI-3: the page's most important element
   lv_obj_t *race_sub = nullptr;
@@ -159,6 +161,45 @@ inline void update_banner(uint32_t now_ms) {
 
 inline void dismiss_banner() { watch::dismiss(g.alert); update_banner(0); }
 
+// 6.1: with a card open, a tap ANYWHERE closes it rather than acting. Returns
+// true when the tap was consumed, so callers do nothing else.
+inline bool tap_consumed() {
+  if (!detail::is_open()) return false;
+  detail::close();
+  return true;
+}
+
+// 6.11 / decision 53: the whole row is the tap target. Opens the driver card
+// for the row at `idx` of whatever the order currently holds.
+inline void open_driver(int idx) {
+  if (idx < 0 || idx >= g.data.n_entries) return;
+  const auto &e = g.data.entries[idx];
+  const drivers::Profile *prof = nullptr;
+  for (int i = 0; i < drivers::N; i++)
+    if (e.code[0] && strcmp(drivers::P[i].code, e.code) == 0) { prof = &drivers::P[i]; break; }
+  const legends::Profile *leg = nullptr;
+  if (prof)
+    for (int i = 0; i < legends::N; i++)
+      if (strcmp(legends::P[i].driver_id, prof->driver_id) == 0) { leg = &legends::P[i]; break; }
+  char title[48], body[480];
+  detail::compose_driver(e, prof, leg, g.data.entries_mode, title, sizeof(title),
+                         body, sizeof(body));
+  detail::show(title, body, prof ? prof->iso3 : e.iso3);
+}
+
+// Tapping the map opens the circuit card (6.11).
+inline void open_circuit() {
+  const int ridx = g.st.current.valid() ? g.st.current.round_idx
+                                        : (g.st.next.valid() ? g.st.next.round_idx : 0);
+  if (ridx < 0 || ridx >= g.cal.n) return;
+  const calendar::Round &r = g.cal.rounds[ridx];
+  const auto *c = map::by_circuit_id(r.circuit_id);
+  if (c == nullptr) return;
+  char title[48], body[480];
+  detail::compose_circuit(*c, &r, title, sizeof(title), body, sizeof(body));
+  detail::show(title, body, r.iso3);
+}
+
 // ---- the tick -----------------------------------------------------------
 // Pull a new snapshot only when the data task says the generation moved. A
 // fetch must never block rendering, and the lock is held for a memcpy only.
@@ -200,6 +241,35 @@ inline void refresh_data() {
           }
     }
     order::render(g.data.entries, g.data.n_entries, g.data.entries_mode);
+  }
+
+  // 8.1: the post-session summary. Jolpica carries both halves, so this page
+  // appears as soon as the results are published rather than waiting out a
+  // live window.
+  if (g.w.summary) {
+    const auto &sm = g.data.summary;
+    if (sm.have_fastest || sm.have_stops) {
+      char b[420];
+      int k = 0;
+      if (sm.event[0])
+        k += std::snprintf(b + k, sizeof(b) - k, "%u %s\n\n", (unsigned) sm.season,
+                           sm.event);
+      if (sm.have_fastest)
+        k += std::snprintf(b + k, sizeof(b) - k, "%-16s %s\n%-16s %s, lap %d\n\n",
+                           "Fastest lap", sm.fl_time, "", sm.fl_driver, sm.fl_lap);
+      if (sm.have_stops) {
+        k += std::snprintf(b + k, sizeof(b) - k, "%-16s %d\n", "Pit stops", sm.n_stops);
+        if (sm.best_stop[0])
+          k += std::snprintf(b + k, sizeof(b) - k, "%-16s %s, %s\n", "Quickest",
+                             sm.best_stop_driver, sm.best_stop);
+      }
+      if (g.data.entries_mode == state::FINAL && g.data.n_entries >= 3) {
+        k += std::snprintf(b + k, sizeof(b) - k, "\n%-16s", "Podium");
+        for (int i = 0; i < 3 && i < g.data.n_entries; i++)
+          k += std::snprintf(b + k, sizeof(b) - k, " %s", g.data.entries[i].name);
+      }
+      lv_label_set_text(g.w.summary, b);
+    }
   }
 
   if (g.data.n_standings > 0 && g.w.standings) {

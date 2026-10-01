@@ -3,8 +3,8 @@
 **Target hardware:** Guition ESP32-4848S040 (ESP32-S3, 4.0" 480×480 IPS)
 **Framework:** ESPHome (ESP-IDF)
 **Status:** Draft rev 2 — living document, updated as decisions are made
-**Last updated:** 2026-10-01 (rev 12: **M0–M6 built** — the firmware compiles,
-10,545 host checks pass, the data task runs, and every asset is in flash)
+**Last updated:** 2026-10-01 (rev 13: **M0–M7 built.** Every milestone that
+does not need a board is done; §14.1 is all that remains)
 
 ---
 
@@ -2414,6 +2414,10 @@ exists.
 | 130 | **`-Wformat-truncation` caught a real truncation**: a 24-byte race status written into the 12-byte gap field. Now truncated **explicitly** with a precision specifier, so the cut is intentional rather than silent. The third time decision 63's gate has paid for itself | 2026-10-01 | implements 63 |
 | 131 | **`#` is not a comment inside a C++ lambda in YAML**, and `time` is ambiguous against ESPHome's `time::` namespace — `::time(nullptr)` is required | 2026-10-01 | active |
 | 132 | **Legend prose states facts, not adjectives** (5.6.2): records and circumstances, because the numbers are already on the card and a superlative adds nothing a reader cannot see. A driver who is also a legend carries the line on their driver card — one card, both facts | 2026-10-01 | implements 86 |
+| 133 | **The post-session summary needs no OpenF1 at all.** Found at implementation: Jolpica carries **both** the fastest lap (`/last/fastest/1/results/`, 1.2 kB) and the pit stops (`/last/pitstops/`), neither of which has a live window. So the page appears as soon as results publish rather than waiting out OpenF1's +30 min, and §8.1's strongest free-tier feature turns out to be cheaper than planned | 2026-10-01 | refines 64 |
+| 134 | **Only tyre compounds, flags and weather would still need OpenF1**, and all three are optional garnish on a summary that already carries the fastest lap, the pit stops and the podium | 2026-10-01 | active |
+| 135 | **The detail card closes on a tap anywhere, including the gear** (§6.1). Every page's `on_click` and the gear's `on_short_click` consult one `tap_consumed()` helper, so there is a single place that decides, rather than the rule being re-implemented per page | 2026-10-01 | implements 6.1 |
+| 136 | **Row taps are wired by a function pointer supplied by the app**, not by `f1_order.h` reaching upward. The order page stays free of everything above it, which is what keeps it host-compilable alongside the store | 2026-10-01 | active |
 | 90 | **A Sprint is a first-class race day** (RACE-14) — its own grid, result and race page, labelled `SPRINT`. A sprint weekend has two race days. Sprint wins must **not** count toward career win milestones; Jolpica keeps them in a separate endpoint | 2026-10-01 | **decided by owner**, closes open question 6 |
 | 91 | **Portraits are 240×320**, not 150×200. The brief asked to show the picture; at 480 px wide, 150×200 reads as a thumbnail. Budget restated against the **app slot** (~6.5–7.8 MB), not total flash: portraits are 25–30 % of one slot | 2026-10-01 | **delegated**, answers open question 13 |
 | 92 | **Alerts are loud** (§6.14.3): full-width banner for events, brief full-screen takeover for milestones. Safe here specifically because **nothing underneath is changing** — no live timing (58) — which is not a general licence. Nothing ever requires dismissing; a tap only dismisses early. An `Alert style: loud/quiet` setting ships with loud as the default | 2026-10-01 | **decided by owner**, closes open question 12 |
@@ -2627,12 +2631,18 @@ project's real risk.
    - [x] **Runtime legend/driver overlap** (RACE-13d) and the text-only card
          for a person with no portrait (RACE-13e)
    - [x] Portraits on the profile cards, with the mandatory credit
-   - [ ] Tap-a-row detail card — the row is already a tap target (decision 53)
-   - [ ] **`summary_page`** (§8.1) — fastest lap, pit stops, tyre strategy
-         strips, flags that occurred, weather. All free once the window closes,
-         and the feature that recovers most of what live timing would have been
-8. **M7 — Polish**
-   - [ ] Error states, crash record
+   - [x] Tap-a-row detail card for a driver, and tap-the-map for the circuit.
+         A tap anywhere closes it, including the gear (§6.1)
+   - [x] **`summary_page`** — fastest lap, pit-stop count, quickest stop and the
+         podium. **No OpenF1 needed** (decision 133)
+   - [ ] Tyre strategy strips, flags that occurred and weather — the only
+         parts of §8.1 that still need OpenF1 (decision 134)
+8. **M7 — Polish — mostly done 2026-10-01**
+   - [x] OTA progress panel on both platforms, with the data task paused for
+         the duration and resumed on failure (§2.4.6)
+   - [x] Distinct fault states: rate-limited vs no-data vs API error (decision 57)
+   - [ ] Crash record — `sky_diag.h` needs re-targeting off the `skydata`
+         partition this project declines (decision 46)
    - [x] ~~`deploy.sh` with warnings-are-errors~~ — **pulled forward to M0**
          (decision 108); it earned its place on the first build
    - [ ] Enclosure

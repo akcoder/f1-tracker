@@ -190,6 +190,7 @@ struct Plan {
   bool want_qualifying = false;
   bool want_results = false;
   bool want_standings = false;
+  bool want_summary = false;      // 8.1: fastest lap + pit stops, Jolpica only
   bool openf1_blocked = false;
 };
 
@@ -210,6 +211,9 @@ inline Plan plan_for(const state::Calendar &cal, const state::Status &st,
     case state::POST_SESSION:
       p.want_results = true;
       p.want_standings = cal_due;
+      // 8.1: the summary needs no OpenF1 - Jolpica carries both the fastest lap
+      // and the pit stops - so there is no window to wait out.
+      p.want_summary = cal_due;
       break;
     case state::OFF_SEASON:
       p.want_standings = cal_due;     // the completed season's final table
@@ -324,6 +328,22 @@ inline void task_body(void *) {
     if (p.want_standings && !did) {
       std::snprintf(url, sizeof(url), "%s/current/driverStandings/?format=json", JOLPICA);
       if (get_and_parse(g_jolpica, url, store::parse_standings, now_ms,
+                        &g_stats.jolpica_ok_ms))
+        publish();
+      g_stats.jolpica_fetches++;
+      did = true;
+    }
+
+    if (p.want_summary && !did) {
+      std::snprintf(url, sizeof(url), "%s/current/last/fastest/1/results/?format=json",
+                    JOLPICA);
+      if (get_and_parse(g_jolpica, url, store::parse_fastest, now_ms,
+                        &g_stats.jolpica_ok_ms))
+        publish();
+      g_stats.jolpica_fetches++;
+      std::snprintf(url, sizeof(url), "%s/current/last/pitstops/?format=json&limit=100",
+                    JOLPICA);
+      if (get_and_parse(g_jolpica, url, store::parse_pitstops, now_ms,
                         &g_stats.jolpica_ok_ms))
         publish();
       g_stats.jolpica_fetches++;
