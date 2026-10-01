@@ -73,8 +73,16 @@ python3 tools/gen_facts.py             # fastest lap, last winner, most wins
 python3 tools/gen_portraits.py         # Commons, fails on an unattributable image
 
 # render the real generated data at 480x480, so layout is measured not guessed
-python3 tools/preview_circuits.py
+python3 tools/render_pages.py --font /path/to/RobotoMono.ttf   # every page
+python3 tools/preview_circuits.py                              # all 40 traces
 python3 tools/mock_order_page.py --font /path/to/RobotoMono.ttf
+```
+
+Every page is rendered from the **generated headers** — the same bytes the
+firmware carries — so a layout problem shows up without a board. See
+`reference/mockups/all-pages.png`.
+
+```
 ```
 
 ## Data sources

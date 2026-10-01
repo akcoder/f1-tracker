@@ -3,8 +3,8 @@
 **Target hardware:** Guition ESP32-4848S040 (ESP32-S3, 4.0" 480×480 IPS)
 **Framework:** ESPHome (ESP-IDF)
 **Status:** Draft rev 2 — living document, updated as decisions are made
-**Last updated:** 2026-10-01 (rev 13: **M0–M7 built.** Every milestone that
-does not need a board is done; §14.1 is all that remains)
+**Last updated:** 2026-10-01 (rev 14: **M0–M7 built**, and every page rendered
+from the real generated data — §14.1 is all that remains)
 
 ---
 
@@ -2418,6 +2418,8 @@ exists.
 | 134 | **Only tyre compounds, flags and weather would still need OpenF1**, and all three are optional garnish on a summary that already carries the fastest lap, the pit stops and the podium | 2026-10-01 | active |
 | 135 | **The detail card closes on a tap anywhere, including the gear** (§6.1). Every page's `on_click` and the gear's `on_short_click` consult one `tap_consumed()` helper, so there is a single place that decides, rather than the rule being re-implemented per page | 2026-10-01 | implements 6.1 |
 | 136 | **Row taps are wired by a function pointer supplied by the app**, not by `f1_order.h` reaching upward. The order page stays free of everything above it, which is what keeps it host-compilable alongside the store | 2026-10-01 | active |
+| 137 | **`tools/render_pages.py` renders every page from the GENERATED headers**, not from mock text — the same bytes the firmware carries, with the same geometry and the same Roboto Mono metrics. It is a check on the design, not a drawing of it | 2026-10-01 | active |
+| 138 | **The renders caught two real gaps on the race page**: the circuit country flag and the top-5 strip (decision 49) were both specified and neither was built. The flag also collided with the clock in the top-right corner. All three fixed. This is the second time rendering the real layout has found something a reading of the document did not | 2026-10-01 | active |
 | 90 | **A Sprint is a first-class race day** (RACE-14) — its own grid, result and race page, labelled `SPRINT`. A sprint weekend has two race days. Sprint wins must **not** count toward career win milestones; Jolpica keeps them in a separate endpoint | 2026-10-01 | **decided by owner**, closes open question 6 |
 | 91 | **Portraits are 240×320**, not 150×200. The brief asked to show the picture; at 480 px wide, 150×200 reads as a thumbnail. Budget restated against the **app slot** (~6.5–7.8 MB), not total flash: portraits are 25–30 % of one slot | 2026-10-01 | **delegated**, answers open question 13 |
 | 92 | **Alerts are loud** (§6.14.3): full-width banner for events, brief full-screen takeover for milestones. Safe here specifically because **nothing underneath is changing** — no live timing (58) — which is not a general licence. Nothing ever requires dismissing; a tap only dismisses early. An `Alert style: loud/quiet` setting ships with loud as the default | 2026-10-01 | **decided by owner**, closes open question 12 |
@@ -2635,6 +2637,8 @@ project's real risk.
          A tap anywhere closes it, including the gear (§6.1)
    - [x] **`summary_page`** — fastest lap, pit-stop count, quickest stop and the
          podium. **No OpenF1 needed** (decision 133)
+   - [x] Race page's **circuit flag and top-5 strip** (decision 49), both found
+         missing by `render_pages.py` (decision 138)
    - [ ] Tyre strategy strips, flags that occurred and weather — the only
          parts of §8.1 that still need OpenF1 (decision 134)
 8. **M7 — Polish — mostly done 2026-10-01**

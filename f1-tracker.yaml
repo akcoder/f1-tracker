@@ -95,6 +95,9 @@ esphome:
             aw.order_title = id(order_title);
             aw.standings   = id(standings_body);
             aw.summary     = id(summary_body);
+            aw.race_flag   = id(race_flag);
+            aw.top5        = id(top5);
+            aw.race_facts  = id(race_facts);
             aw.banner      = id(watch_banner);
             aw.banner_text = id(watch_text);
             f1::app::setup(aw);
@@ -783,6 +786,13 @@ lvgl:
             text: "--:--"
             text_font: mono24
             text_color: 0xC9D3F2
+        - image:                # the CIRCUIT country flag (6.6). Below the clock,
+            id: race_flag       # which owns the top-right corner.
+            align: TOP_RIGHT
+            x: -12
+            y: 34
+            src: pixel_img
+            hidden: true
         - obj:                  # MAP-5a: the trace lives in its own container and
             id: map_box         # nothing moving may sit inside its bounds
             x: 90
@@ -796,6 +806,25 @@ lvgl:
             pad_all: 0
             scrollable: false
             clickable: false
+        - obj:                  # decision 49: the top-5 STRIP - a summary, not a
+            id: top5            # list. Five rows, nothing scrollable.
+            x: 6
+            y: 318
+            width: 270
+            height: 104
+            bg_opa: TRANSP
+            border_width: 0
+            pad_all: 0
+            scrollable: false
+            clickable: false
+        - label:                # the facts worth seeing beside it
+            id: race_facts
+            x: 288
+            y: 320
+            width: 186
+            text: ""
+            text_font: mono12
+            text_color: 0x7E8BB3
         - label:                # 3.7.3 / decision 54: attribution is mandatory
             id: attrib
             align: BOTTOM_LEFT

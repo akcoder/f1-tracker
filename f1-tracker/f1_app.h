@@ -24,6 +24,9 @@ namespace app {
 struct Widgets {
   lv_obj_t *standings = nullptr;     // label on the championship page
   lv_obj_t *summary = nullptr;       // label on the post-session summary
+  lv_obj_t *race_flag = nullptr;     // circuit country flag (6.6)
+  lv_obj_t *top5 = nullptr;          // decision 49: a summary strip, not a list
+  lv_obj_t *race_facts = nullptr;
   lv_obj_t *race_title = nullptr;
   lv_obj_t *race_state = nullptr;    // UI-3: the page's most important element
   lv_obj_t *race_sub = nullptr;
@@ -47,6 +50,12 @@ struct App {
   uint32_t data_gen = 0;        // generation we have rendered
   lv_obj_t *standings_rows = nullptr;
   lv_obj_t *standings_label = nullptr;
+  // The top-5 strip's widgets, built once in setup().
+  lv_obj_t *t5_bar[5] = {nullptr};
+  lv_obj_t *t5_flag[5] = {nullptr};
+  lv_obj_t *t5_text[5] = {nullptr};
+  lv_image_dsc_t t5_dsc[5]{};
+  lv_image_dsc_t flag_dsc{};
 };
 
 inline App g;
@@ -123,6 +132,44 @@ inline void format_state(char *out, size_t n, char *sub, size_t subn) {
   }
 }
 
+// decision 49: five rows, nothing scrollable. It must not try to be the order
+// page - that is what a tap-flip is for.
+inline void update_top5() {
+  if (g.w.top5 == nullptr) return;
+  for (int i = 0; i < 5; i++) {
+    if (g.t5_text[i] == nullptr) continue;
+    if (i >= g.data.n_entries) {
+      lv_obj_add_flag(g.t5_text[i], LV_OBJ_FLAG_HIDDEN);
+      lv_obj_add_flag(g.t5_bar[i], LV_OBJ_FLAG_HIDDEN);
+      lv_obj_add_flag(g.t5_flag[i], LV_OBJ_FLAG_HIDDEN);
+      continue;
+    }
+    const auto &e = g.data.entries[i];
+    char b[48];
+    std::snprintf(b, sizeof(b), "P%-3d %-4s %s", e.pos ? e.pos : i + 1, e.code, e.team);
+    lv_label_set_text(g.t5_text[i], b);
+    lv_obj_set_style_text_color(
+        g.t5_text[i], lv_color_hex(e.watched ? 0xFFFFFF : 0xC9D3F2), 0);
+    lv_obj_remove_flag(g.t5_text[i], LV_OBJ_FLAG_HIDDEN);
+    lv_obj_set_style_bg_color(g.t5_bar[i], lv_color_hex(e.colour), 0);
+    lv_obj_remove_flag(g.t5_bar[i], LV_OBJ_FLAG_HIDDEN);
+    const flags::Flag *f = e.iso3[0] ? flags::find(e.iso3) : nullptr;
+    if (f) {
+      g.t5_dsc[i].header.magic = LV_IMAGE_HEADER_MAGIC;
+      g.t5_dsc[i].header.cf = LV_COLOR_FORMAT_RGB565;
+      g.t5_dsc[i].header.w = flags::CARD_W;
+      g.t5_dsc[i].header.h = flags::CARD_H;
+      g.t5_dsc[i].header.stride = flags::CARD_W * 2;
+      g.t5_dsc[i].data_size = flags::CARD_W * flags::CARD_H * 2;
+      g.t5_dsc[i].data = (const uint8_t *) f->card;
+      lv_image_set_src(g.t5_flag[i], &g.t5_dsc[i]);
+      lv_obj_remove_flag(g.t5_flag[i], LV_OBJ_FLAG_HIDDEN);
+    } else {
+      lv_obj_add_flag(g.t5_flag[i], LV_OBJ_FLAG_HIDDEN);   // decision 20
+    }
+  }
+}
+
 inline void update_header() {
   if (g.w.race_state == nullptr) return;
   char line[64], sub[64];
@@ -142,6 +189,42 @@ inline void update_header() {
     lv_label_set_text(g.w.race_title, t);
   }
   if (g.w.order_title) lv_label_set_text(g.w.order_title, state::order_name(g.st.order));
+
+  // The circuit's country flag (6.6). Keyed on Circuit.Location.country via the
+  // calendar's iso3, NEVER on the race name (decision 18).
+  const int ridx2 = g.st.current.valid() ? g.st.current.round_idx
+                                         : (g.st.next.valid() ? g.st.next.round_idx : -1);
+  if (g.w.race_flag) {
+    const flags::Flag *f = (ridx2 >= 0 && ridx2 < g.cal.n)
+                               ? flags::find(g.cal.rounds[ridx2].iso3) : nullptr;
+    if (f) {
+      g.flag_dsc.header.magic = LV_IMAGE_HEADER_MAGIC;
+      g.flag_dsc.header.cf = LV_COLOR_FORMAT_RGB565;
+      g.flag_dsc.header.w = flags::CARD_W;
+      g.flag_dsc.header.h = flags::CARD_H;
+      g.flag_dsc.header.stride = flags::CARD_W * 2;
+      g.flag_dsc.data_size = flags::CARD_W * flags::CARD_H * 2;
+      g.flag_dsc.data = (const uint8_t *) f->card;
+      lv_image_set_src(g.w.race_flag, &g.flag_dsc);
+      lv_obj_remove_flag(g.w.race_flag, LV_OBJ_FLAG_HIDDEN);
+    } else {
+      lv_obj_add_flag(g.w.race_flag, LV_OBJ_FLAG_HIDDEN);
+    }
+  }
+
+  // The short facts; the full set lives on the circuit card (6.2).
+  if (g.w.race_facts && ridx2 >= 0 && ridx2 < g.cal.n) {
+    const auto *c = map::by_circuit_id(g.cal.rounds[ridx2].circuit_id);
+    const facts::Fact *f = facts::find(g.cal.rounds[ridx2].circuit_id);
+    char b[160];
+    int k = 0;
+    if (c) k += std::snprintf(b + k, sizeof(b) - k, "%.3f km\n", c->length_m / 1000.0f);
+    if (f && f->fl_time[0])
+      k += std::snprintf(b + k, sizeof(b) - k, "FL %s\n", f->fl_time);
+    if (f && f->last_year)
+      std::snprintf(b + k, sizeof(b) - k, "last %s", f->last_driver);
+    lv_label_set_text(g.w.race_facts, b);
+  }
 }
 
 // ---- the watched-driver banner (6.14.3) ---------------------------------
@@ -309,12 +392,33 @@ inline void tick(uint32_t now_ms) {
               grid_pos, finish_pos, status);
 
   update_header();
+  update_top5();
   update_banner(now_ms);
   ui::advance(now_ms);
 }
 
 inline void setup(const Widgets &w) {
   g.w = w;
+  // Build the top-5 strip once.
+  if (w.top5 != nullptr) {
+    for (int i = 0; i < 5; i++) {
+      const int y = i * 20;
+      g.t5_bar[i] = lv_obj_create(w.top5);
+      lv_obj_set_pos(g.t5_bar[i], 0, y + 3);
+      lv_obj_set_size(g.t5_bar[i], 4, 14);
+      lv_obj_set_style_border_width(g.t5_bar[i], 0, 0);
+      lv_obj_set_style_radius(g.t5_bar[i], 1, 0);
+      lv_obj_set_style_pad_all(g.t5_bar[i], 0, 0);
+      lv_obj_remove_flag(g.t5_bar[i], LV_OBJ_FLAG_SCROLLABLE);
+      g.t5_flag[i] = lv_image_create(w.top5);
+      lv_obj_set_pos(g.t5_flag[i], 48, y + 4);
+      lv_obj_add_flag(g.t5_flag[i], LV_OBJ_FLAG_HIDDEN);
+      g.t5_text[i] = lv_label_create(w.top5);
+      lv_obj_set_pos(g.t5_text[i], 12, y + 2);
+      lv_label_set_text(g.t5_text[i], "");
+      lv_obj_add_flag(g.t5_text[i], LV_OBJ_FLAG_HIDDEN);
+    }
+  }
   g.cal = state::Calendar();          // the compiled floor until a fetch lands
   std::snprintf(g.watch_cfg.driver_id, sizeof(g.watch_cfg.driver_id), "%s",
                 watch::DEFAULT_DRIVER_ID);
