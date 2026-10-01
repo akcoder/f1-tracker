@@ -2,8 +2,8 @@
 
 **Target hardware:** Guition ESP32-4848S040 (ESP32-S3, 4.0" 480×480 IPS)
 **Framework:** ESPHome (ESP-IDF)
-**Status:** Draft rev 1 — living document, updated as decisions are made
-**Last updated:** 2026-10-01
+**Status:** Draft rev 2 — living document, updated as decisions are made
+**Last updated:** 2026-10-01 (rev 2: terms of use read and approved, §3.7)
 
 ---
 
@@ -436,6 +436,17 @@ is the direct analogue of `plane-tracker`'s radius→interval table (its decisio
       session response is wasteful by the end of a race. **Narrow it with
       `date>=` from the newest row already held** — filters are measured to
       work (§3.0) — and merge, never replace (§3.5).
+- [ ] **Every OpenF1 row in this table is inside OpenF1's paid live window**
+      (§3.7.2) — 30 minutes before a session until 30 minutes after. Without a
+      sponsorship the OpenF1 column is effectively empty in `SESSION_SOON`,
+      `SESSION_LIVE` and `RACE_LIVE`, and the device runs the degraded path in
+      §6.3 (RACE-12). The intervals stand either way; what changes is whether
+      the requests return anything.
+- [ ] **The whole table is comfortably inside both services' published
+      limits** (§3.7.1, §3.7.2): Jolpica peaks at 6 req/hour against 500/hour,
+      and `RACE_LIVE` is 12 req/min against 30/min free or 60/min sponsored.
+      **Re-check this table against the limits whenever either changes** —
+      Jolpica has said theirs will decrease (DATA-4).
 - [ ] Changing state must **retime the timers immediately**, not wait out the
       old interval.
 - [ ] `plane-tracker` decision 60: a restored `number` is **range-checked at
@@ -443,27 +454,131 @@ is the direct analogue of `plane-tracker`'s radius→interval table (its decisio
       `min_value`/`max_value`. The carousel interval and any poll-affecting
       setting must be clamped both at boot and at the point of use.
 
-### 3.7 Terms of use and attribution
-- [ ] **Check both services' current terms before first deployment and record
-      the result here.** Neither returned a rate-limit header on 2026-10-01,
-      and no terms text was read as part of this draft. **This is an open
-      question, not a settled one** (§13).
-- [ ] Until it is settled, poll **conservatively** (§3.6) — the intervals above
-      are already far gentler than `plane-tracker`'s 5–10 s, except in
-      `RACE_LIVE`.
-- [ ] **Display attribution on screen regardless**, small, in a footer:
-      `Data: jolpi.ca · openf1.org`. Put **clickable links** to both in the web
-      UI. `plane-tracker` decision 32 learned that a device-only credit does
-      not satisfy an "include a link" clause, and the cost of doing it anyway
-      is a line of text.
+### 3.7 Terms of use and attribution — read and approved 2026-10-01
+Both services' terms were read in full and **approved by the project owner**.
+This section is the record of what was approved; open question 1 is closed.
+
+#### 3.7.1 Jolpica
+Source: `github.com/jolpica/jolpica-f1/blob/main/TERMS.md` (last updated
+**2025-08-27**) and `docs/rate_limits.md`.
+
+| Term | Value |
+|---|---|
+| Data licence | **CC BY-NC-SA 4.0** |
+| Use | Free for **non-commercial** use; commercial via `admin@jolpi.ca` |
+| **Burst limit** | **4 requests / second** |
+| **Sustained limit** | **500 requests / hour** |
+| Over limit | `HTTP 429 Too Many Requests` — *"Request was throttled"* |
+| Enforcement | *"Abuse or excessive use may result in temporary or permanent blocking… may block without notice"* |
+| Guarantees | **None.** *"volunteer-run, donation-supported… we do not guarantee uptime, availability, or correctness"* |
+| Terms stability | *"We reserve the right to change these terms"* |
+
+**Our usage against the limits.** The §3.6 table peaks at a 10-minute Jolpica
+interval in `POST_RACE`, i.e. **6 requests/hour** against a 500/hour ceiling —
+0.2 % of the sustained budget. Nothing in this design comes near either limit.
+
+- [ ] **DATA-4: their published limits "will decrease in the future"** as token
+      access and a non-Ergast replacement API roll out. Treat the current
+      headroom as temporary and keep the poll table (§3.6) as the single place
+      to retune. Do not spend the headroom on convenience polling.
+- [ ] Their rate-limit guide asks callers to **implement a cache** and **use
+      efficient queries with filters and offsets**. Decision 12 (the
+      compiled-in calendar) and §3.6's state-driven intervals already satisfy
+      this. Record the alignment so it is not accidentally undone.
+- [ ] **No uptime or correctness guarantee** makes §4.3 load-bearing rather
+      than a nicety: the device must be fully useful with Jolpica down.
+
+#### 3.7.2 OpenF1
+Source: `openf1.org` (Access & Support, FAQ, footer) and `openf1.org/docs`,
+read 2026-10-01.
+
+| Term | Value |
+|---|---|
+| Data licence | **CC BY-NC-SA 4.0** |
+| Use | *"educational purposes, personal learning projects, research, and non-commercial fan engagement"* |
+| **Free tier (Community)** | all 18 endpoints, **historical only**, no auth, **3 req/s and 30 req/min** |
+| **Sponsor tier** | **€9.90 / month** — adds **live data during sessions** (REST, MQTT, WebSocket), 6 req/s, 60 req/min, up to 10 concurrent MQTT/WS connections |
+| Historical coverage | **2023 onwards** |
+| Live latency | ~**3 s** after the live event |
+| Attribution | *"credits are not required… a link back to openf1.org helps"* |
+
+**NET-13: the free tier does not cover the live window, and this is the single
+most consequential term in this document.** Quoted exactly:
+
+> *"Data is considered live from **30 minutes before a session starts until 30
+> minutes after it ends**. Outside of this window, data is classified as
+> historical and is free to access."*
+
+And from the API reference:
+
+> *"Historical data (from 2023 onwards) is free and accessible without
+> authentication. **Real-time data requires a paid subscription.**"*
+
+So every live feature in this design — RUNNING order, position-change flashes,
+track status, tyre compound, live weather — sits **inside the paid window**.
+The consequences are designed for in §6.3 (RACE-12) rather than wished away.
+
+- [ ] **The free tier still yields a complete race-day page**, just not a live
+      one: the grid comes from Jolpica (historical, free) before the session,
+      and the classification becomes free 30 minutes after it ends. This is the
+      **baseline the device must be excellent at**, with the sponsorship as an
+      upgrade that unlocks one mode.
+- [ ] **Measured caveat:** every OpenF1 figure in §3.0 was measured on
+      **historical** data (session 11377, five days old). The behaviour of an
+      unauthenticated request *inside* a live window is **unmeasured** — see
+      open question 8.
+- [ ] If the sponsorship is taken, the **auth mechanism is not on the public
+      docs page**; confirm it at sign-up and record it here. Any token goes in
+      `secrets.yaml`, never in the repo (§10).
+- [ ] Our `RACE_LIVE` poll of 5 s is **12 req/min**, inside both the free
+      (30/min) and sponsor (60/min) rate limits. **The gate is the live-window
+      entitlement, not the rate** — do not conflate the two when diagnosing.
+
+#### 3.7.3 Attribution, NonCommercial and ShareAlike (DATA-5)
+Both datasets are **CC BY-NC-SA 4.0**, which has three live terms for us.
+
+- [ ] **BY — attribution is mandatory.** OpenF1's FAQ says credits are not
+      required while its footer licenses the data CC BY-NC-SA 4.0; those
+      conflict, and the cost of attributing anyway is a line of text.
+      **Attribute both**, on screen in a small footer —
+      `Data: jolpi.ca · openf1.org` — and with **clickable links to both** in
+      the web UI. `plane-tracker` decision 32 learned that a device-only credit
+      does not satisfy an "include a link" clause.
+- [ ] **NC — non-commercial.** This is a personal device. Record it so the
+      constraint is not forgotten if the project is ever published or sold as a
+      kit, which the licence would forbid without permission from both.
+- [ ] **SA — ShareAlike, and this one is easy to miss.** Decision 21 noted that
+      the MIT circuit geometry imposes no licence on the firmware. **That does
+      not extend to the Jolpica-derived data we compile in.** The generated
+      calendar (§4.3) and the lap records, most-wins and race counts in the
+      facts table (§5.5) are adaptations of CC BY-NC-SA 4.0 data, distributed
+      inside the firmware. Immaterial for a personal device; if this is ever
+      published, **those generated data files carry CC BY-NC-SA 4.0** while the
+      code does not.
+- [ ] **Keep the licence boundary visible in the tree**: generated headers
+      sourced from Jolpica get a CC BY-NC-SA 4.0 notice in their header
+      comment, emitted by the generator, not added by hand.
+
+#### 3.7.4 Failure handling required by the terms
 - [ ] **Never retry a 4xx tightly.** Treat 4xx as *fatal for that request
       shape* — log it, surface it, back off exponentially to minutes. Only 5xx
-      and network errors get brisk retries. Distinguish **429** in the UI
-      ("rate limited") from a network failure; they need opposite responses.
-- [ ] `Formula 1`, `F1`, `FIA` and the team names are trademarks. This is a
-      personal, non-commercial device. **Do not use the F1 logo or wordmark
-      anywhere in the UI**, and name the device plainly. Record this so it is
-      not forgotten if the project is ever published.
+      and network errors get brisk retries. Jolpica blocks for abuse **without
+      notice**, and a bad-request loop would look exactly like the service
+      being down.
+- [ ] **Distinguish 429 from a network failure in the UI** ("rate limited" vs
+      "no data"); they need opposite responses. Jolpica returns 429 with
+      *"Request was throttled"*.
+- [ ] **Distinguish "live data not available on this tier" from both** (§6.3,
+      RACE-12). Three failure states that look similar and mean different
+      things is exactly the trap §6.12 exists to avoid.
+
+#### 3.7.5 Trademarks
+- [ ] `F1`, `FORMULA 1`, `FORMULA ONE`, `FIA FORMULA ONE WORLD CHAMPIONSHIP`,
+      `GRAND PRIX` and the team names are trademarks of Formula One Licensing
+      B.V. and others. Both data sources carry an explicit non-affiliation
+      disclaimer; **carry the same one** in `README.md` and on the debug page.
+- [ ] **Do not use the F1 logo or wordmark anywhere in the UI**, and name the
+      device plainly.
 
 ---
 
@@ -698,6 +813,7 @@ takes its own taps via `on_short_click`.
 480×480. The brief's two requirements — circuit map and drivers in starting
 order — do not fit together on one screen at a readable size, so they are split
 across two pages (§6.3) with the map page carrying a top-5 strip.
+**Approved by the project owner 2026-10-01** (decision 28).
 
 ```
 ┌──────────────────────────────────────────────┐
@@ -725,6 +841,9 @@ across two pages (§6.3) with the map page carrying a top-5 strip.
       `GRID (PROVISIONAL)` / `GRID` / `LAP n/m` / `FINISHED` / `Q3` /
       `FP2 42:10 remaining` / `LIGHTS OUT IN 02:14:30`. It is what tells the
       reader whether the order below is a prediction, a grid or a live result.
+      It must also carry the **no-live-data** case (§6.3, RACE-12) — a state
+      line that says `LAP 34/57` when nothing is being received is the worst
+      possible outcome on this page.
 - [ ] **UI-4: track status is a coloured dot plus a word** — green, yellow,
       double-yellow, red, SC, VSC, chequered — from OpenF1 `race_control`.
       Never colour alone; the dot and the word must agree.
@@ -768,6 +887,34 @@ current.
 - [ ] **Three order modes, one data path** (§3.5): `GRID (PROVISIONAL)`,
       `GRID`, `RUNNING`. The mode is chosen by state, not by the user — with a
       tap on the header to peek at the grid during a race, reverting after 10 s.
+- [ ] **RACE-12: `RUNNING` requires OpenF1's paid tier, and the device must be
+      excellent without it** (§3.7.2). The free tier returns nothing inside the
+      live window, so the unsponsored path is:
+
+  | Phase | Free tier shows | Source |
+  |---|---|---|
+  | Before qualifying | entry list, car-number order | Jolpica |
+  | After qualifying | `GRID (PROVISIONAL)` | Jolpica qualifying |
+  | Session live | **the grid, held**, with `LIVE TIMING UNAVAILABLE` on the state line | last good Jolpica data |
+  | 30 min after the session | `GRID` confirmed, then final classification | Jolpica results, OpenF1 now free |
+
+      This is a coherent experience, not a broken one: the grid before, the
+      result half an hour after. **Build and test this path first**, with the
+      sponsored `RUNNING` mode layered on top.
+- [ ] **A fourth order mode, `FINAL`**, for the classification — it carries
+      `status` (`DNF`, `+1 LAP`, `ACCIDENT`) and gaps that `RUNNING` does not.
+- [ ] **Never present held data as live.** If the newest OpenF1 row is older
+      than two poll intervals, the mode drops out of `RUNNING` and the state
+      line says so. `plane-tracker` decision 50 is the same lesson from the
+      other direction: an HTTP 200 carrying nothing is not fresh data.
+- [ ] A **`Live timing` switch** in settings, default **off**, gates the OpenF1
+      live polling entirely. Off by default because the free tier cannot serve
+      it, and polling into a window that will not answer wastes the request
+      budget and muddies the diagnostics. Turning it on is the user saying "I
+      sponsored it."
+- [ ] Surface the live-data entitlement as a **diagnostic**: `live timing:
+      off / on, no data / on, receiving`. Three states, because the middle one
+      is the one that needs explaining.
 - [ ] **Gap column**: `interval` from OpenF1 is 3.5 MB per session (§3.0), so
       it is **not** fetched wholesale. Either narrow it hard to the newest rows
       or leave the column blank. **Blank is acceptable**; a wrong gap is not.
@@ -1067,6 +1214,7 @@ and `on_long_press` opens the debug page. Ported from `sky-tracker` exactly.
 | Carousel order | dropdown | calendar / random / current season only |
 | Show practice sessions | checkbox | treat FP as a session worth a page |
 | Show sprint sessions | checkbox | — |
+| Live timing | checkbox | **default off** — gates OpenF1 live polling; needs the sponsor tier (§6.3, RACE-12) |
 | Order columns | dropdown | with team / with gap / with tyre |
 | Force page | dropdown | Auto / Race Day / Carousel (**not persisted**, §4.1) |
 
@@ -1114,6 +1262,7 @@ touchscreen, the device's own **web UI**, and **Home Assistant**.
 | Carousel interval | `number` (15–120, step 15, slider) |
 | Carousel order | `select` |
 | Show practice / sprint | two `switch` |
+| Live timing | `switch` (default off) |
 | Order columns | `select` |
 | Force page | `select` (not restored) |
 
@@ -1138,6 +1287,8 @@ touchscreen, the device's own **web UI**, and **Home Assistant**.
 Cheap, and they make the device debuggable without a serial cable.
 
 - [ ] **Weekend state** (§4.1) — the single most explanatory value.
+- [ ] **Live timing entitlement** — `off` / `on, no data` / `on, receiving`
+      (§6.3). The middle state is the one a reader needs explained.
 - [ ] Next round, next session, and the countdown to it.
 - [ ] Calendar source and age (`compiled` / `fetched, 3 h`).
 - [ ] Last successful Jolpica poll, last successful OpenF1 poll — separately.
@@ -1157,58 +1308,63 @@ Cheap, and they make the device debuggable without a serial cable.
 Ranked by how well each fits what the device is for. The brief asked for ideas;
 these are offered as candidates, not commitments.
 
+**Tier note (§3.7.2):** features marked **[SPONSOR]** need OpenF1's paid tier
+because they read data inside the live window. Features marked **[FREE]** work
+on the free tier. This split is the first thing to check before committing to
+any of them.
+
 ### 8.1 Strong candidates — these earn their place
-- [ ] **Championship standings page.** `driverStandings` is 10.1 KB and
+- [ ] **[FREE] Championship standings page.** `driverStandings` is 10.1 KB and
       `constructorStandings` is 2.5 KB (measured). Both are already in the
       rotation's natural shape — a list with flags and colour bars — so the
       page costs almost nothing beyond what §6.3 builds. This is the most
       obvious missing page in a season tracker.
-- [ ] **"Next session" countdown as the resting state.** The device spends most
+- [ ] **[FREE] "Next session" countdown as the resting state.** The device spends most
       of a race week in `SESSION_SOON`/`RACE_WEEK`. A large, calm countdown
       with the circuit map behind it is the screen that will actually be looked
       at most, and it needs no new data.
-- [ ] **Position-change flashes** (§6.3) — a brief tint on rows that gained or
+- [ ] **[SPONSOR] Position-change flashes** (§6.3) — a brief tint on rows that gained or
       lost places. Makes a 5 s poll feel live for the price of one timestamp
       per row.
-- [ ] **Track status banner** from `race_control` (§6.2). Red flags, safety
+- [ ] **[SPONSOR] Track status banner** from `race_control` (§6.2). Red flags, safety
       cars and chequered flags are the moments a glance at a screen should
       catch, and the feed is measured at 20 KB per session.
-- [ ] **Tyre compound column** from `stints` (8.4 KB measured). Soft/medium/
+- [ ] **[SPONSOR] Tyre compound column** from `stints` (8.4 KB measured). Soft/medium/
       hard as a single coloured letter is one glyph per row and it is the piece
       of information most often missing from a bare order list.
-- [ ] **Track local time** (§6.7) from `gmt_offset`. One line, free, and
+- [ ] **[FREE] Track local time** (§6.7) from `gmt_offset`. One line, free, and
       genuinely clarifying for a calendar that spans 20 time zones.
-- [ ] **Circuit "on this day" line.** The facts table already carries
+- [ ] **[FREE] Circuit "on this day" line.** The facts table already carries
       `firstgp`, `opened`, race count and most-wins (§5.5). A rotating line —
       *"First raced 1950. Hamilton has won here 8 times."* — makes the carousel
       a thing to read rather than a slideshow.
-- [ ] **Weather on the race page** during a live session. `weather` is 36 KB
+- [ ] **[SPONSOR] Weather on the race page** during a live session. `weather` is 36 KB
       per session; narrowed to the newest row it is a handful of bytes, and
       track temperature and a rain flag change how a race reads.
 
 ### 8.2 Worth considering
-- [ ] **Sector-coloured trace** if sector boundaries can be sourced. Deferred
+- [ ] **[FREE] Sector-coloured trace** if sector boundaries can be sourced. Deferred
       in §6.5 because the GeoJSON has no sectors, not because it is a bad idea.
-- [ ] **Fastest-lap highlight** — mark the purple-lap holder on the order page.
+- [ ] **[SPONSOR] Fastest-lap highlight** — mark the purple-lap holder on the order page.
       Needs `laps` narrowed to the current lap (7.9 KB measured).
-- [ ] **Favourite driver / team.** A setting that pins one row to the top of
+- [ ] **[FREE] Favourite driver / team.** A setting that pins one row to the top of
       the order page and shows their gap in the header. This is the single
       feature most likely to make the device feel personal.
-- [ ] **A Home Assistant race-start notification.** The device already knows
+- [ ] **[FREE] A Home Assistant race-start notification.** The device already knows
       the schedule precisely; exposing a binary sensor for "session live" lets
       HA do the rest (lights, a TV, an announcement) with no extra code here.
-- [ ] **Lap-time sparkline** for the selected driver on the detail card. One
+- [ ] **[FREE, post-session] Lap-time sparkline** for the selected driver on the detail card. One
       `lv_line` over the last 20 laps; `laps` gives the data.
-- [ ] **Season progress bar** — rounds completed against rounds remaining, on
+- [ ] **[FREE] Season progress bar** — rounds completed against rounds remaining, on
       the carousel. One line, and it answers "how far through the year are we".
-- [ ] **A quiet line on the empty screens**, in the spirit of
+- [ ] **[FREE] A quiet line on the empty screens**, in the spirit of
       `plane-tracker`'s §5.13: the off-season and the long `IDLE` stretches are
       the natural home for something other than a countdown. Keep the text in a
       **data file**, not scattered in code, and keep the list a **prime
       length** — `plane-tracker` decision 59 found that mixing day and hour with
       factors that divide 24 shows the same line at a given hour forever.
-- [ ] **Pit-stop count** per driver from `stints`.
-- [ ] **A "circuit of the day" at a fixed hour** rather than a carousel, as an
+- [ ] **[FREE, post-session] Pit-stop count** per driver from `stints`.
+- [ ] **[FREE] A "circuit of the day" at a fixed hour** rather than a carousel, as an
       alternative mode. Less motion, more of an object.
 
 ### 8.3 Declined, with reasons
@@ -1367,15 +1523,25 @@ exists.
 | 46 | `sky_diag.h` is **re-targeted or trimmed**, not copied unexamined — it writes to the `skydata` partition we declined (decision 6) | 2026-10-01 | active |
 | 47 | **Live car positions on the track map are declined** — the data rate the APIs expose cannot support 20 cars on this hardware | 2026-10-01 | active |
 | 48 | A **manual `Force page` override** exists for testing and is **not persisted** across reboot | 2026-10-01 | active |
+| 49 | **Race page layout approved**: circuit map plus a top-5 strip on `race_page`, the full 22-driver order on `order_page` | 2026-10-01 | **approved by owner**, confirms 28 |
+| 50 | **Both services' terms read and approved.** Jolpica: CC BY-NC-SA 4.0, non-commercial, 4 req/s burst, 500 req/hour sustained. OpenF1: CC BY-NC-SA 4.0, non-commercial/educational | 2026-10-01 | **approved by owner**, closes open question 1 |
+| 51 | **OpenF1's free tier is historical only.** Live data — 30 min before a session to 30 min after — needs the €9.90/month sponsor tier. Every live feature sits inside that window | 2026-10-01 | active |
+| 52 | **The unsponsored path is the baseline and is built first** (RACE-12): grid before the session, held grid with `LIVE TIMING UNAVAILABLE` during it, classification 30 min after. `RUNNING` mode layers on top | 2026-10-01 | active |
+| 53 | **`Live timing` is a setting, default off.** Polling into a window that will not answer wastes the request budget and muddies the diagnostics | 2026-10-01 | active |
+| 54 | **Attribution is mandatory** — both datasets are CC BY-NC-SA 4.0 (BY). OpenF1's FAQ waives credit while its footer requires it; attribute both anyway | 2026-10-01 | supersedes the "regardless" wording of 43 |
+| 55 | **ShareAlike reaches the generated data, not the code.** The compiled-in calendar and the Jolpica-derived facts are CC BY-NC-SA 4.0 adaptations; generators emit that notice in the header comment. Decision 21's "no licence imposed" covers the MIT geometry only | 2026-10-01 | refines 21 |
+| 56 | **Jolpica's limits will decrease** as token access rolls out; the poll table (§3.6) is the single place to retune and the headroom is not to be spent | 2026-10-01 | active |
+| 57 | **Three failure states are distinct and must look it**: `429 rate limited`, `no data / network`, `live timing unavailable on this tier` | 2026-10-01 | active |
 
 ---
 
 ## 13. Open questions
 
-1. **Terms of use and rate limits for Jolpica and OpenF1.** Neither returned a
-   rate-limit header and neither's terms text has been read (§3.7). This is the
-   one outstanding external dependency and it should be settled before the
-   device polls at 5 s in `RACE_LIVE`. Blocks nothing else.
+1. ~~**Terms of use and rate limits for Jolpica and OpenF1.**~~
+   **CLOSED 2026-10-01** — both read in full and approved by the owner; the
+   record is §3.7. It surfaced one material constraint, now decision 51:
+   OpenF1's live window is a paid tier, which moved the whole live-timing
+   design into RACE-12 (§6.3).
 2. **Does Night Mode default on?** (§6.13) `plane-tracker` made red-at-1 % the
    default for a night-vision instrument. This is a living-room object showing
    a sport, and 19 h of red a day in December is a strong choice to make by
@@ -1396,6 +1562,20 @@ exists.
 7. **Serial port for the first flash** — `plane-tracker` holds
    `/dev/cu.usbserial-21340` on this host and only one board can use it at a
    time.
+8. **What does an unauthenticated OpenF1 request return inside the live
+   window?** Every measurement in §3.0 was taken against historical data, so
+   the gated response shape — 401, 403, 429, an empty array, or a stale
+   snapshot — is **unknown**. RACE-12 must branch on it, and a stale snapshot
+   would be the dangerous case because it looks like success. **Measure it
+   during an actual session**; until then treat anything unexpected as
+   "live timing unavailable" rather than as data.
+9. **Take the €9.90/month OpenF1 sponsorship?** It is the difference between a
+   race-day page that updates and one that shows the grid until the race is
+   over (decision 52). Not needed to build anything — the free path is the
+   baseline — but it is the single largest upgrade to the finished device. A
+   decision for the owner, not a technical one. If taken: confirm the auth
+   mechanism, which is not on the public docs page, and put the token in
+   `secrets.yaml`.
 
 ### Settled before this draft was written
 | Question | Answer |
@@ -1413,6 +1593,12 @@ exists.
 | Does the firmware inherit a licence? | **No** — MIT geometry, unlike `plane-tracker`'s GPL artwork (§5.1) |
 | Rendering approach | YAML shell + C++ headers, `lv_line` for traces (§4.2, §6.5) |
 | Share code or copy? | **Copy** into this project (§4.2) |
+| Terms of use for both sources | **Read and approved** — CC BY-NC-SA 4.0 both (§3.7) |
+| Are our poll rates within the limits? | Yes, with large headroom (§3.7.1, §3.7.2) |
+| Is attribution required? | **Yes** — BY on both; links in the web UI (§3.7.3) |
+| Is live timing free? | **No** — OpenF1 paid tier, 30 min either side of a session (§3.7.2) |
+| Does the device work without it? | **Yes** — RACE-12 is the baseline (§6.3) |
+| Does the race map share a page with the order? | **No** — map + top-5, then the full order (§6.2, decision 49) |
 
 ---
 
@@ -1455,10 +1641,19 @@ exists.
    - [ ] Calendar refresh superseding the compiled floor; source + age
          diagnostic
 5. **M4 — Race day**
-   - [ ] `race_page`: header, state line, map, top-5 strip, track status
-   - [ ] `order_page`: 22 rows, flags, team-colour bars, three order modes
+   - [ ] `race_page`: header, state line, map, top-5 strip
+   - [ ] `order_page`: 22 rows, flags, team-colour bars
    - [ ] Grid extraction (RACE-11) + host test against the position fixture
    - [ ] **Measure 22 rows at `mono12` on hardware** (open question 3)
+   - [ ] **The RACE-12 free-tier path first**: entry list →
+         `GRID (PROVISIONAL)` → held grid with `LIVE TIMING UNAVAILABLE` →
+         `FINAL`. Host-test the four transitions.
+   - [ ] Attribution footer and the web UI links (§3.7.3)
+   - [ ] The three distinct failure states (decision 57)
+4b. **Live timing — only if the sponsorship is taken** (open question 9)
+   - [ ] `Live timing` switch, default off; entitlement diagnostic
+   - [ ] `RUNNING` mode, position-change flashes, track status, tyres, weather
+   - [ ] Measure the gated response shape first (open question 8)
 6. **M5 — Settings and web/HA parity**
    - [ ] Settings page with tabs, staged Save/Cancel, numeric keyboard
    - [ ] Every entity on the web UI and HA, sorted into groups

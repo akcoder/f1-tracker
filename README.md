@@ -28,12 +28,22 @@ first; it is the project.
 | `reference/CREDITS.md` | third-party sources and licences |
 
 ## Data sources
-| Source | Role |
-|---|---|
-| [jolpi.ca](https://jolpi.ca/) | calendar, circuits, drivers, qualifying, results, standings |
-| [openf1.org](https://openf1.org/) | live session state, actual grid, running order, tyres, flags |
+| Source | Role | Licence |
+|---|---|---|
+| [jolpi.ca](https://jolpi.ca/) | calendar, circuits, drivers, qualifying, results, standings | CC BY-NC-SA 4.0 |
+| [openf1.org](https://openf1.org/) | live session state, actual grid, running order, tyres, flags | CC BY-NC-SA 4.0 |
 
 Ergast is dead (HTTP 404 as of 2026-10-01) and is not used.
+
+**Data: [jolpi.ca](https://jolpi.ca/) · [openf1.org](https://openf1.org/)** —
+attribution is required by both licences, and the device shows it in a footer
+with links in its web UI.
+
+> **Live timing needs OpenF1's paid tier.** Their free tier serves historical
+> data only; "live" is defined as 30 minutes before a session until 30 minutes
+> after. The device is built so the **free path is complete** — the grid before
+> the session, the classification half an hour after — with live running order
+> as an upgrade. See REQUIREMENTS.md §6.3 (RACE-12).
 
 ## Sibling projects
 | Project | Relationship |
