@@ -3,8 +3,8 @@
 **Target hardware:** Guition ESP32-4848S040 (ESP32-S3, 4.0" 480×480 IPS)
 **Framework:** ESPHome (ESP-IDF)
 **Status:** Draft rev 2 — living document, updated as decisions are made
-**Last updated:** 2026-10-01 (rev 8: download buffers sized so **every response
-fits one TCP window** — §2.4.9)
+**Last updated:** 2026-10-01 (rev 9: **M0 built** — config validates, firmware
+compiles clean, and §9's estimates are replaced with measured figures)
 
 ---
 
@@ -1673,13 +1673,28 @@ This is why the device stores a position at all.
       a clock-only `mono24` set drew `UPGRADING` as boxes. Our strings are
       driver names, team names and circuit names from a live feed — they
       **will** contain characters nobody predicted.
-- [ ] **UI-40b: accented and non-Latin characters are guaranteed here**, unlike
-      in either sibling. `Autódromo José Carlos Pace`, `Hülkenberg`,
-      `Nürburgring`, `Pérez`, `Antonelli`. `sky-tracker`'s glyph set is ASCII
-      plus `°` and **will draw boxes** for every one of these.
-      **Extend the set with Latin-1 Supplement and Latin Extended-A**, or
-      transliterate at generation time and state that choice. Extending is
-      better: the names are the content.
+- [x] **UI-40b: accented characters are guaranteed here**, unlike in either
+      sibling. **Settled at M0: use `glyphsets: [GF_Latin_Core]`**, ESPHome's
+      own mechanism (via `esphome-glyphsets`), rather than a hand-built literal
+      string. 319 codepoints, declared once as a YAML anchor and reused across
+      all eight faces.
+      **Verified, not assumed:** every character in all **715 real strings**
+      from `reference/samples/` and the 40 circuit traces resolves — **0
+      missing**. The data really does contain `á ã é í ó ü`
+      (`Hülkenberg`, `Autódromo José Carlos Pace`, `Nürburgring`,
+      `Hermanos Rodríguez`), so `sky-tracker`'s ASCII set would have drawn a box
+      mid-name.
+- [ ] **UI-40c: Roboto Mono is missing 12 of `GF_Latin_Core`'s codepoints**, and
+      the build warns about it. All twelve are **combining diacritical marks**
+      (U+0302 circumflex, U+0304 macron, U+0306 breve, …), which no monospace
+      face ships as standalone glyphs. **Harmless for our data**, which uses
+      precomposed forms — but it names a real latent bug: if a source ever
+      returns **decomposed (NFD)** text, `u` + combining diaeresis renders as a
+      letter followed by a box instead of `ü`.
+      **Normalise incoming strings to precomposed form at parse time.** Full
+      Unicode NFC is far too heavy for this device; a small fold table covering
+      the Latin-1 base+mark pairs is enough, since that is the whole range our
+      content occupies. Assert it in the host tests with an NFD fixture.
 - [ ] Adopt `plane-tracker`'s **`check_glyphs.py`** (its decision 52): it
       resolves each label's *effective* font and checks its text against that
       font, including strings set from lambdas via `lv_label_set_text`.
@@ -2133,25 +2148,42 @@ it — which suits a device watched all week rather than only on Sunday.
       it is long, follow `plane-tracker` decision 64 — move pure pixel work to a
       **one-shot task on core 1**, refuse to draw until a `g_ready` flag, and
       set image sources on first use rather than at creation.
-- [ ] **Flash budget — measured against the app partition, not total flash.**
-      With the default table (§2.4.5), 16 MB splits into **two OTA app slots of
-      roughly 6.5–7.8 MB** and the firmware must fit in **one**:
+- [x] **Flash budget — now measured, not estimated.** M0 compiled on
+      2026-10-01 (ESPHome 2026.9.1), which settles the numbers this section
+      previously guessed at:
+
+  | | Measured |
+  |---|---|
+  | **App slot (default table)** | **8,126,464 B — 7.75 MB** (the top of the 6.5–7.8 MB estimate) |
+  | **M0 firmware image** | **1,589,643 B — 1.52 MB, 19.6 % of a slot** |
+  | **Fonts + glyph data** | **212.5 KB** — see below |
+  | `web_server` bundled UI (`local: true`) | 25.5 KB |
+
+  **The font estimate was wrong and is corrected.** This section said ~80 KB;
+  the real figure for eight faces is **212.5 KB**, because the earlier number
+  counted only the five `mono` sizes and ignored `setup_title` (34 px),
+  `setup_body` (22 px) and the MDI icon face — the two large Roboto faces alone
+  are 85 KB of it. Still immaterial against a 7.75 MB slot, but recorded
+  because an estimate that is 2.6× low is worth knowing about.
+
+  Projected total with everything from §5–§6 added:
 
   | Asset | Size |
   |---|---|
+  | M0 image (firmware, LVGL, TLS, fonts, web UI) | **1.52 MB (measured)** |
   | Circuit traces, all 40 | 19.2 KB (measured) |
   | Flags, ~82 countries at two sizes | ~150 KB |
-  | Compiled-in calendar | ~8 KB |
-  | Circuit facts | ~20 KB |
-  | Driver + legend profiles | ~30 KB |
-  | Fonts, 5 sizes, extended glyph set, 4 bpp | ~80 KB |
-  | **Subtotal** | **~310 KB** |
+  | Compiled-in calendar + circuit facts + profiles | ~58 KB |
   | **Portraits, 54 at 240×320** | **1.4–2.2 MB** (§5.6.3) |
+  | **Projected total** | **~3.2 MB — 41 % of one 7.75 MB slot** |
 
-- [ ] **The portraits dominate at 5–7× everything else combined**, and are
-      **25–30 % of one app slot**. Comfortable, but this is the one asset that
-      can grow unnoticed, so **the generator reports the total and fails above
-      3 MB** with the escape hatches listed in §5.6.3.
+- [ ] **The portraits remain the dominant *variable* asset** at 21.8 % of a
+      slot. 41 % projected leaves comfortable headroom, so decision 74's 3 MB
+      generator cap stands with room to spare.
+- [x] **RAM at M0: 119,475 of 341,760 B — 35.0 %**, with no data layer, no
+      track store and no TLS sessions yet. That is the figure to watch as M3
+      and M4 land; §2.4.3's note about logging where the LVGL buffer landed
+      matters more now that a third of the budget is already spoken for.
 - [ ] A portrait decode is one JPEG per card, once per 15–120 s. Free in time.
       But **decode into a single reused PSRAM buffer** (240×320 RGB565 =
       150 KB), never a fresh allocation per card — 54 cards cycling for weeks
@@ -2340,6 +2372,14 @@ exists.
 | 101 | **`RECVMBOX_SIZE` must scale with the window** (≥ window/MSS ≈ 46, so 64). Leaving it at 32 would throttle the larger window back to roughly what it replaced — the quiet way this change does nothing | 2026-10-01 | active |
 | 102 | **The `esp_http_client` receive buffer default is 512 B**, so a 47 KB response is ~94 read calls each resuming the parser. Raised to 4 KB — cheaper than the window change and easier to overlook | 2026-10-01 | active |
 | 103 | **TLS session reuse (65) dwarfs this.** A fresh handshake is ~1.2 s against the ~175 ms NET-15 saves. Recorded so the buffer change is understood as a tail-latency refinement on a rare large fetch, not something that makes the device feel faster | 2026-10-01 | refines 65 |
+| 104 | **M0 is built.** ESPHome 2026.9.1 in `.venv`, config validates, firmware compiles clean. App slot **7.75 MB**, image **1.52 MB (19.6 %)**, RAM **35.0 %** | 2026-10-01 | **done** |
+| 105 | **`glyphsets: [GF_Latin_Core]`**, ESPHome's own mechanism, not a hand-built literal string. Verified against all **715 real strings** in the fixtures and traces: **0 missing** | 2026-10-01 | settles 35 |
+| 106 | **UI-40c: normalise incoming text to precomposed form at parse time.** Roboto Mono lacks all 12 of `GF_Latin_Core`'s combining marks, so decomposed (NFD) input would render `u` + a box instead of `ü`. A small Latin-1 fold table, not full NFC | 2026-10-01 | active |
+| 107 | **The §9 font estimate was 2.6× low** — ~80 KB against a measured **212.5 KB** — because it counted only the five `mono` sizes and ignored the two large Roboto faces and the MDI icon face. Immaterial against the slot; recorded because the error is worth knowing | 2026-10-01 | corrects 9 |
+| 108 | **`deploy.sh` ships at M0, not M7.** Decision 63's gate caught three `-Wformat` warnings in our own lambda on the **first** build — exactly the class of thing it exists for, found immediately | 2026-10-01 | implements 63 |
+| 109 | **ESPHome `select` options are compile-time**, so the watched-driver list (§6.14.1) **cannot** be populated from a live entry list. It is generated from the **compiled driver table** at M2 instead, which means a driver who joins after the build is not selectable until the next one — consistent with RACE-13e | 2026-10-01 | constrains 87 |
+| 110 | **`web_server` OTA is declared explicitly** rather than left implicit, so its plaintext `/update` endpoint is a deliberate choice; `auth: type: digest` gates it, ahead of ESPHome's 2027.1.0 default flip | 2026-10-01 | active |
+| 111 | **The GPIO19/20 USB-Serial-JTAG build warning is expected** and is direct confirmation of decision 5: the GT911 owns GPIO19, so the S3's default console would fight it. GPIO45 is a strapping pin, known-good because `sky-tracker` drives this panel on these exact pins in production | 2026-10-01 | confirms 5 |
 | 90 | **A Sprint is a first-class race day** (RACE-14) — its own grid, result and race page, labelled `SPRINT`. A sprint weekend has two race days. Sprint wins must **not** count toward career win milestones; Jolpica keeps them in a separate endpoint | 2026-10-01 | **decided by owner**, closes open question 6 |
 | 91 | **Portraits are 240×320**, not 150×200. The brief asked to show the picture; at 480 px wide, 150×200 reads as a thumbnail. Budget restated against the **app slot** (~6.5–7.8 MB), not total flash: portraits are 25–30 % of one slot | 2026-10-01 | **delegated**, answers open question 13 |
 | 92 | **Alerts are loud** (§6.14.3): full-width banner for events, brief full-screen takeover for milestones. Safe here specifically because **nothing underneath is changing** — no live timing (58) — which is not a general licence. Nothing ever requires dismissing; a tap only dismisses early. An `Alert style: loud/quiet` setting ships with loud as the default | 2026-10-01 | **decided by owner**, closes open question 12 |
@@ -2451,19 +2491,27 @@ This is a good position to be in: the generators, the data layer, the state
 machine and the whole test suite are host work, and they are most of the
 project's real risk.
 
-1. **M0 — Host setup and a config that compiles**
-   - [ ] ESPHome in a dedicated `.venv`, kept out of `radioconda`
-   - [ ] `f1-tracker.yaml`: hardware block, `sdkconfig_options`, `build_flags`,
-         LVGL buffer strategy, boot ordering, 30 kHz backlight, UART0 logger
-   - [ ] `secrets.yaml` (git-ignored) with a generated API key;
-         `secrets.yaml.example` committed — **no data-source tokens**, both
-         free tiers are unauthenticated (decision 65)
-   - [ ] Entities live on the web UI and HA from the start (§7.1)
-   - [ ] **Port `panel_soft_reset()` properly** (§2.1) rather than inheriting
-         `plane-tracker`'s open question — writing it is host work even though
-         proving it is not
-   - [ ] `esphome config` validates and `esphome compile` succeeds
-   - [ ] **Stop there.** Flashing, and everything that depends on seeing the
+1. **M0 — Host setup and a config that compiles — DONE 2026-10-01**
+   - [x] ESPHome **2026.9.1** in a dedicated `.venv`, kept out of `radioconda`
+   - [x] `f1-tracker.yaml`: hardware, `sdkconfig_options` (including NET-15),
+         `build_flags`, LVGL buffer strategy, boot ordering, 30 kHz backlight,
+         UART0 logger
+   - [x] `secrets.yaml` (git-ignored) with a generated API key and web password;
+         `secrets.yaml.example` committed — **no data-source tokens**, both free
+         tiers are unauthenticated (decision 65)
+   - [x] **23 entities** on the web UI and HA from the start (§7.1): 4 `number`,
+         5 `switch`, 7 `select`, diagnostics and sensors, sorted into the four
+         groups
+   - [x] **`panel_soft_reset()` ported properly** (§2.1, HW-7) — `f1_panel.h`
+         bit-bangs SWRESET over the 9-bit init SPI at `on_boot` priority 1100,
+         before the SPI bus claims the pins. `plane-tracker` left this as an
+         open question; this project does not
+   - [x] LVGL shells for all seven pages (§6.1), the gear with
+         `on_short_click`/`on_long_press`, the OTA panel on the top layer, and
+         the attribution footer (decision 54)
+   - [x] `esphome config` validates and `esphome compile` succeeds
+   - [x] **`deploy.sh`** with the warnings-are-errors gate (decision 108)
+   - [x] **Stop there.** Flashing, and everything that depends on seeing the
          panel, is §14.1
 2. **M1 — Circuit data and the carousel**
    - [ ] `tools/gen_circuits.py` → `f1_circuits.h` (all 40, pre-projected,
@@ -2536,8 +2584,9 @@ project's real risk.
          strips, flags that occurred, weather. All free once the window closes,
          and the feature that recovers most of what live timing would have been
 8. **M7 — Polish**
-   - [ ] Error states, OTA panel, crash record
-   - [ ] `deploy.sh` with warnings-are-errors
+   - [ ] Error states, crash record
+   - [x] ~~`deploy.sh` with warnings-are-errors~~ — **pulled forward to M0**
+         (decision 108); it earned its place on the first build
    - [ ] Enclosure
 
 ### 14.1 Parked until there is a board

@@ -28,14 +28,25 @@ first; it is the project.
 | Path | Contents |
 |---|---|
 | `REQUIREMENTS.md` | the design document (§12 is the decision log) |
-| `f1-tracker.yaml` | ESPHome shell — hardware, entities, LVGL pages *(M0)* |
-| `f1-tracker/` | C++ headers: data task, state machine, map drawing *(M1+)* |
+| `f1-tracker.yaml` | ESPHome shell — hardware, 23 entities, LVGL pages. **Builds.** |
+| `f1-tracker/` | C++ headers. `f1_panel.h` (HW-7 soft reset) done; data task, state machine and map drawing at M1+ |
+| `deploy.sh` | validate + compile + **fail on any warning in our own code** |
 | `tools/` | offline generators *(M1+)*, and `mock_order_page.py` — renders the order page at 480×480 and measures the fit |
 | `reference/mockups/` | rendered layout mockups with the measured verdict |
 | `tests/` | host tests, `make -C tests` *(M1+)* |
 | `reference/f1-circuits/` | vendored GeoJSON circuit traces (MIT) |
 | `reference/samples/` | captured API responses used as offline fixtures |
 | `reference/CREDITS.md` | third-party sources and licences |
+
+## Building
+```
+python3 -m venv .venv && .venv/bin/pip install esphome
+cp secrets.yaml.example secrets.yaml      # then fill it in
+./deploy.sh                               # validate, compile, warning gate
+```
+M0 is built: ESPHome 2026.9.1, image **1.52 MB of a 7.75 MB app slot (19.6 %)**,
+RAM **35.0 %**. Nothing is flashed yet — see REQUIREMENTS.md §14.1 for what
+needs a board.
 
 ## Data sources
 | Source | Role | Licence |

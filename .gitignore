@@ -1,6 +1,6 @@
-secrets.yaml
+__pycache__/
+.DS_Store
 .esphome/
 .venv/
-__pycache__/
 *.pyc
-.DS_Store
+secrets.yaml
