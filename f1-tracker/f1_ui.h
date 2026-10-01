@@ -8,6 +8,7 @@
 #include <cstdlib>
 #include <cstring>
 
+#include "f1_birthday.h"
 #include "f1_calendar.h"
 #include "f1_carousel.h"
 #include "f1_circuits.h"
@@ -66,6 +67,10 @@ struct State {
   char staged_credit[64] = {0};
   const circuits::Circuit *staged_circuit = nullptr;
   const char *staged_iso3 = nullptr;
+  bool staged_birthday = false;
+  int bday_driver = -1;        // index into drivers::P, or -1
+  int bday_age = 0;
+  int bday_mmdd = 0;           // so the check runs once a day, not every tick
 };
 
 inline State g;
@@ -225,6 +230,7 @@ inline void append_line(const char *line) {
 // card cannot be shown at all, in which case the caller skips it rather than
 // displaying a blank.
 inline bool prepare(const carousel::Card &c) {
+  g.staged_birthday = false;
   g.staged_circuit = nullptr;
   g.staged_photo = nullptr;
   g.staged_iso3 = nullptr;
@@ -291,6 +297,15 @@ inline bool prepare(const carousel::Card &c) {
       const auto &p = drivers::P[c.index];
       const auto *lg = legend_row(p.driver_id);
       compose_profile(p, lg != nullptr, drivers::SOURCE_SEASON);
+      // A driver's birthday takes over the badge, because it is the most
+      // interesting thing true about them today.
+      g.staged_birthday = (c.index == g.bday_driver);
+      if (g.staged_birthday) {
+        snprintf(g.staged_badge, sizeof(g.staged_badge), "BIRTHDAY");
+        const size_t k = strlen(g.staged_body);
+        snprintf(g.staged_body + k, sizeof(g.staged_body) - k,
+                 "\n\n%s is %d today.", p.given, g.bday_age);
+      }
       // A driver who is also a legend carries the legend line on their driver
       // card - one card, both facts (decision 86).
       if (lg) append_line(lg->line);
@@ -314,8 +329,18 @@ inline bool prepare(const carousel::Card &c) {
 // resolved, so this is only widget updates - no lookups, no decoding, nothing
 // that could leave the card half-built.
 inline void commit() {
-  if (g.w.badge) lv_label_set_text(g.w.badge, g.staged_badge);
-  if (g.w.title) lv_label_set_text(g.w.title, g.staged_title);
+  if (g.w.badge) {
+    lv_label_set_text(g.w.badge, g.staged_badge);
+    // The badge carries the highlight: orange is the section colour everywhere
+    // else, so a birthday card reads as different without a new visual idiom.
+    lv_obj_set_style_text_color(
+        g.w.badge, lv_color_hex(g.staged_birthday ? 0xFFD54A : 0xFF8A1F), 0);
+  }
+  if (g.w.title) {
+    lv_label_set_text(g.w.title, g.staged_title);
+    lv_obj_set_style_text_color(
+        g.w.title, lv_color_hex(g.staged_birthday ? 0xFFD54A : 0xC9D3F2), 0);
+  }
   if (g.w.body) lv_label_set_text(g.w.body, g.staged_body);
 
   if (g.w.flag != nullptr) {
@@ -406,6 +431,22 @@ inline void set_content(int idx) {
   g.rot.configure(circuits::N, drivers::N, legends::N, (carousel::Content) idx);
   g.staged_ready = false;     // whatever was staged may no longer be admissible
   prepare_next();
+}
+
+// Re-evaluated once a day rather than every tick: a birthday does not change
+// between seconds, and drivers::N is small but the rotation is hot.
+inline void update_birthday(int year, int month, int day) {
+  const int mmdd = month * 100 + day;
+  if (mmdd == g.bday_mmdd) return;
+  g.bday_mmdd = mmdd;
+  g.bday_driver = birthday::today(month, day);
+  g.bday_age = (g.bday_driver >= 0)
+                   ? birthday::age_today(drivers::P[g.bday_driver].dob, year, month, day)
+                   : 0;
+  if (g.bday_driver >= 0)
+    g.rot.set_priority(carousel::DRIVER, g.bday_driver, birthday::EVERY);
+  else
+    g.rot.clear_priority();
 }
 
 inline void toggle_pause() { g.paused = !g.paused; }

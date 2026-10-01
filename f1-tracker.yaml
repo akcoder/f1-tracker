@@ -44,6 +44,7 @@ esphome:
     - f1-tracker/f1_legends.h      # generated: tools/gen_drivers.py
     - f1-tracker/f1_portraits.h    # generated: tools/gen_portraits.py
     - f1-tracker/f1_facts.h        # generated: tools/gen_facts.py
+    - f1-tracker/f1_birthday.h
     - f1-tracker/f1_map.h
     - f1-tracker/f1_state.h
     - f1-tracker/f1_watch.h
@@ -164,7 +165,7 @@ ota:
       - lambda: f1::net::ota_begin();     # 2.4.6: pause the data task
       - lvgl.page.show: race_page
       - lambda: |-
-          lv_label_set_text(id(ota_title), "UPGRADING");
+          lv_label_set_text(id(ota_title), "UPLOADING");
           lv_label_set_text(id(ota_pct), "starting");
           lv_obj_remove_flag(id(ota_panel), LV_OBJ_FLAG_HIDDEN);
           lv_refr_now(NULL);              // the OTA write blocks the loop
@@ -176,15 +177,17 @@ ota:
           last = p;
           char b[16];
           snprintf(b, sizeof(b), "%d%%", p);
+          lv_label_set_text(id(ota_title), p >= 100 ? "UPGRADING" : "UPLOADING");
           lv_label_set_text(id(ota_pct), b);
           lv_refr_now(NULL);
     on_end:
       - lambda: |-
+          lv_label_set_text(id(ota_title), "UPGRADING");
           lv_label_set_text(id(ota_pct), "rebooting");
           lv_refr_now(NULL);
     on_error:
       - lambda: |-
-          lv_label_set_text(id(ota_title), "UPGRADE FAILED");
+          lv_label_set_text(id(ota_title), "UPLOAD FAILED");
           lv_label_set_text(id(ota_pct), "resuming");
           lv_refr_now(NULL);
           f1::net::ota_error();            // resume if the upgrade failed
@@ -622,7 +625,7 @@ lvgl:
                 id: ota_title
                 align: CENTER
                 y: -14
-                text: "UPGRADING"
+                text: "UPLOADING"
                 text_font: mono24
                 text_color: 0xFF8A1F
             - label:
@@ -1232,6 +1235,7 @@ interval:
           const auto t = id(sntp_time).now();
           f1::app::set_clock(t.is_valid() ? (uint32_t) t.timestamp : 0, t.is_valid());
           f1::app::tick(esphome::millis());
+          if (t.is_valid()) f1::ui::update_birthday(t.year, t.month, t.day_of_month);
           if (t.is_valid()) {
             char b[12];
             // 6.7: 24 h local by default; the three-state dropdown lands at M5.

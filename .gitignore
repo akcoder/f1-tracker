@@ -4,6 +4,7 @@ __pycache__/
 .venv/
 *.pyc
 secrets.yaml
+test_birthday
 test_json
 test_state
 test_watch

@@ -23,6 +23,11 @@ LOG=$(mktemp -t f1build)
 echo "==> validating"
 "$ESPHOME" config "$YAML" > /dev/null
 
+# decision 52: a missing glyph draws a box, survives compilation, and only
+# appears on a screen. plane-tracker lost "UPGRADING" exactly this way.
+echo "==> checking glyphs"
+.venv/bin/python tools/check_glyphs.py | tail -3
+
 if [ "${1:-}" = "--config" ]; then echo "config OK"; exit 0; fi
 
 echo "==> compiling"

@@ -53,6 +53,18 @@ class Rotation {
     if (n_[CIRCUIT] > 0 && i >= 0 && i < n_[CIRCUIT]) cur_[CIRCUIT] = i;
   }
 
+  // A card injected every `every` draws, on top of the normal walk - used for a
+  // driver's birthday. It does not consume a cursor, so nothing else is
+  // starved: the rotation resumes exactly where it was.
+  void set_priority(CardType t, int index, int every) {
+    pri_type_ = t;
+    pri_index_ = index;
+    pri_every_ = every > 1 ? every : 2;
+    if (index < 0) pri_count_ = 0;
+  }
+  void clear_priority() { pri_index_ = -1; pri_count_ = 0; }
+  bool has_priority() const { return pri_index_ >= 0; }
+
   bool any() const {
     for (int t = 0; t < N_TYPES; t++)
       if (n_[t] > 0 && allows(content_, (CardType) t)) return true;
@@ -64,6 +76,17 @@ class Rotation {
   // only when nothing at all can be shown.
   bool next(Card &out) {
     if (!any()) return false;
+    // The priority card goes first in its slot, and only if the content filter
+    // admits its type - a birthday driver must not override "circuits only".
+    if (pri_index_ >= 0 && allows(content_, pri_type_) &&
+        pri_index_ < n_[pri_type_]) {
+      if (++pri_count_ >= pri_every_) {
+        pri_count_ = 0;
+        out.type = pri_type_;
+        out.index = pri_index_;
+        return true;
+      }
+    }
     for (int tries = 0; tries < PATTERN_LEN * N_TYPES + N_TYPES; tries++) {
       const CardType t = PATTERN[step_];
       step_ = (step_ + 1) % PATTERN_LEN;
@@ -83,6 +106,10 @@ class Rotation {
   int cur_[N_TYPES] = {0, 0, 0};
   int step_ = 0;
   Content content_ = ALL;
+  CardType pri_type_ = DRIVER;
+  int pri_index_ = -1;
+  int pri_every_ = 4;
+  int pri_count_ = 0;
 };
 
 // The interval setting is a restored number, and plane-tracker decision 60

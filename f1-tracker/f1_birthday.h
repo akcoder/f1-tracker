@@ -1,0 +1,71 @@
+#pragma once
+// Driver birthdays (section 5.6). On a driver's birthday their card is marked
+// and shown more often.
+//
+// Free of LVGL so the date arithmetic and the rotation bias can be tested on
+// the host - a feature that fires once a year is one you cannot debug by
+// waiting for it.
+#include <cstdint>
+#include <cstring>
+
+#include "f1_drivers.h"
+
+namespace f1 {
+namespace birthday {
+
+// Scoped to CURRENT DRIVERS, deliberately. Legends carry a date of birth but no
+// date of death, so the device cannot tell a living driver's birthday from the
+// anniversary of someone long dead - and "HAPPY BIRTHDAY" over Ayrton Senna
+// would be the single worst thing this device could display. Until a death
+// date exists in the data, this stays with the people the feed says are racing.
+inline constexpr bool LEGENDS_INCLUDED = false;
+
+// Day-of-year comparison from an ISO "YYYY-MM-DD" and a UTC epoch. Month and
+// day only - the year is what makes it a birthday rather than a date.
+inline bool is_today(const char *dob, int month, int day) {
+  if (dob == nullptr || std::strlen(dob) < 10) return false;
+  const int m = (dob[5] - '0') * 10 + (dob[6] - '0');
+  const int d = (dob[8] - '0') * 10 + (dob[9] - '0');
+  if (m < 1 || m > 12 || d < 1 || d > 31) return false;
+  // 29 February: on a non-leap year, mark it on the 28th rather than skipping a
+  // driver's birthday three years in four.
+  if (m == 2 && d == 29 && month == 2 && day == 28) return true;
+  return m == month && d == day;
+}
+
+inline int age_today(const char *dob, int year, int month, int day) {
+  if (dob == nullptr || std::strlen(dob) < 10) return 0;
+  const int y = (dob[0] - '0') * 1000 + (dob[1] - '0') * 100 +
+                (dob[2] - '0') * 10 + (dob[3] - '0');
+  const int m = (dob[5] - '0') * 10 + (dob[6] - '0');
+  const int d = (dob[8] - '0') * 10 + (dob[9] - '0');
+  if (y < 1900 || year < y) return 0;
+  int age = year - y;
+  if (month < m || (month == m && day < d)) age--;
+  return age;
+}
+
+// Index into drivers::P whose birthday is today, or -1. The first match wins;
+// two drivers sharing a birthday is possible and the second simply waits for
+// the rotation to reach them normally.
+inline int today(int month, int day) {
+  for (int i = 0; i < drivers::N; i++)
+    if (is_today(drivers::P[i].dob, month, day)) return i;
+  return -1;
+}
+
+inline int count_today(int month, int day) {
+  int n = 0;
+  for (int i = 0; i < drivers::N; i++)
+    if (is_today(drivers::P[i].dob, month, day)) n++;
+  return n;
+}
+
+// How often the birthday card is injected. Every 4th card means it appears
+// roughly once every three minutes at the default 45 s interval - noticeable
+// across a day without becoming the only thing on screen, which is the balance
+// 5.13's "rare beats frequent" rule asks for even on a good day.
+inline constexpr int EVERY = 4;
+
+}  // namespace birthday
+}  // namespace f1
