@@ -155,6 +155,15 @@ inline void set_content(int idx) {
 inline void toggle_pause() { g.paused = !g.paused; }
 inline bool paused() { return g.paused; }
 
+// Settings-page helper: keep the slider's units beside it so the number means
+// something without the user having to guess.
+inline void settings_labels(lv_obj_t *lbl, int seconds) {
+  if (lbl == nullptr) return;
+  char b[16];
+  snprintf(b, sizeof(b), "%d s", carousel::clamp_interval_s((float) seconds));
+  lv_label_set_text(lbl, b);
+}
+
 inline void setup(const Widgets &w, float interval_s, int content_idx) {
   g.w = w;
   set_interval(interval_s);

@@ -850,20 +850,39 @@ lvgl:
             scrollable: false
             clickable: false
 
-    - id: settings_page         # UI-16 (7)
+    - id: settings_page         # UI-16 (section 7)
       skip: true
       bg_color: 0x000000
       bg_opa: COVER
       scrollable: false
+      on_load:
+        # 7 / decision 38: STAGED Save/Cancel. On-screen edits live in the LVGL
+        # widgets and are written to entities only on Save; Cancel restores what
+        # was captured here. Brightness is the deliberate exception below.
+        - lambda: |-
+            id(bright_on_open) = id(backlight).current_values.get_brightness();
+            id(bright_day_open) = id(bright_day);
+            auto set = [](lv_obj_t *o, bool on) {
+              if (on) lv_obj_add_state(o, LV_STATE_CHECKED);
+              else lv_obj_remove_state(o, LV_STATE_CHECKED);
+            };
+            set(id(sw_autodim), id(auto_dim).state);
+            set(id(sw_alerts), id(watched_alerts).state);
+            set(id(sw_milestone), id(milestone_only).state);
+            lv_slider_set_value(id(sl_carousel), (int) id(carousel_secs).state, LV_ANIM_OFF);
+            lv_slider_set_value(id(sl_bright),
+                (int) roundf((id(auto_dim).state ? id(bright_day)
+                                                 : id(bright_on_open)) * 100.0f), LV_ANIM_OFF);
+            f1::ui::settings_labels(id(lbl_carousel), (int) id(carousel_secs).state);
       widgets:
         - label:
             x: 16
-            y: 16
+            y: 14
             text: "SETTINGS"
             text_font: mono16
             text_color: 0xFF8A1F
-        - button:               # 7: staged Save/Cancel (decision 38)
-            x: 240
+        - button:
+            x: 238
             y: 8
             width: 110
             height: 38
@@ -872,9 +891,16 @@ lvgl:
             widgets:
               - label: {align: CENTER, text: "Cancel", text_font: mono16}
             on_click:
+              # Cancel restores the brightness captured in on_load - the one
+              # setting that was applied live.
+              - lambda: id(bright_day) = id(bright_day_open);
+              - light.turn_on:
+                  id: backlight
+                  brightness: !lambda return id(bright_on_open);
+                  transition_length: 0s
               - lvgl.page.show: race_page
         - button:
-            x: 358
+            x: 356
             y: 8
             width: 110
             height: 38
@@ -883,13 +909,74 @@ lvgl:
             widgets:
               - label: {align: CENTER, text: "Save", text_font: mono16}
             on_click:
+              # 7.1.2: every change routes through the ENTITIES, which are the
+              # single source of truth. The widgets are one view of them.
+              - lambda: |-
+                  auto sw = [](lv_obj_t *o, switch_::Switch *e) {
+                    if (lv_obj_has_state(o, LV_STATE_CHECKED)) e->turn_on(); else e->turn_off();
+                  };
+                  sw(id(sw_autodim), id(auto_dim));
+                  sw(id(sw_alerts), id(watched_alerts));
+                  sw(id(sw_milestone), id(milestone_only));
+                  id(carousel_secs).make_call()
+                      .set_value(lv_slider_get_value(id(sl_carousel))).perform();
               - lvgl.page.show: race_page
-        - label:                # UI-44a: the trap, stated where it is edited
-            align: BOTTOM_LEFT
+
+        - label: {x: 16, y: 66, text: "Auto-dim display", text_font: mono14, text_color: 0xC9D3F2}
+        - switch: {id: sw_autodim, x: 380, y: 60, width: 72, height: 32}
+        - label:
             x: 16
-            y: -12
-            width: 448
+            y: 90
+            width: 440
             text: "Latitude and longitude set sunrise/sunset for auto-dim only.\nThe time zone is fixed in firmware and does not follow them."
+            text_font: mono12
+            text_color: 0x7E8BB3
+
+        - label: {x: 16, y: 136, text: "Brightness", text_font: mono14, text_color: 0xC9D3F2}
+        - slider:
+            id: sl_bright
+            x: 150
+            y: 138
+            width: 300
+            height: 18
+            min_value: 1
+            max_value: 100
+            on_value:
+              # The deliberate exception (decision 38): brightness is applied
+              # LIVE so the change is visible, and Cancel restores it. The guard
+              # against the light's own on_state echo is the comparison.
+              - lambda: |-
+                  float v = (float) x / 100.0f;
+                  if (id(auto_dim).state) id(bright_day) = v;
+                  if (fabsf(id(backlight).current_values.get_brightness() - v) < 0.005f) return;
+                  auto call = id(backlight).turn_on();
+                  call.set_brightness(v);
+                  call.perform();
+
+        - label: {x: 16, y: 180, text: "Carousel", text_font: mono14, text_color: 0xC9D3F2}
+        - label: {id: lbl_carousel, x: 150, y: 180, text: "45 s", text_font: mono14, text_color: 0x7E8BB3}
+        - slider:
+            id: sl_carousel
+            x: 230
+            y: 182
+            width: 220
+            height: 18
+            min_value: 15
+            max_value: 120
+            on_value:
+              - lambda: f1::ui::settings_labels(id(lbl_carousel), (int) x);
+
+        - label: {x: 16, y: 224, text: "Watched driver alerts", text_font: mono14, text_color: 0xC9D3F2}
+        - switch: {id: sw_alerts, x: 380, y: 218, width: 72, height: 32}
+        - label: {x: 16, y: 262, text: "Milestones only", text_font: mono14, text_color: 0xC9D3F2}
+        - switch: {id: sw_milestone, x: 380, y: 256, width: 72, height: 32}
+
+        - label:
+            id: settings_note
+            x: 16
+            y: 310
+            width: 448
+            text: ""
             text_font: mono12
             text_color: 0x7E8BB3
         - label:
@@ -899,7 +986,6 @@ lvgl:
             text: "v${fw_version}"
             text_font: mono12
             text_color: 0x5A6687
-
     - id: debug_page            # UI-27: long-press the gear
       skip: true
       bg_color: 0x000000
