@@ -3,8 +3,8 @@
 **Target hardware:** Guition ESP32-4848S040 (ESP32-S3, 4.0" 480×480 IPS)
 **Framework:** ESPHome (ESP-IDF)
 **Status:** Draft rev 2 — living document, updated as decisions are made
-**Last updated:** 2026-10-01 (rev 11: **M0–M5 built** — the firmware compiles,
-10,431 host checks pass, and every generated asset is in flash)
+**Last updated:** 2026-10-01 (rev 12: **M0–M6 built** — the firmware compiles,
+10,545 host checks pass, the data task runs, and every asset is in flash)
 
 ---
 
@@ -2409,6 +2409,11 @@ exists.
 | 125 | **OGL 3 is a free, attribution-requiring licence** and belongs in the accepted set. Rejecting it was the regex being wrong, not the image being unusable | 2026-10-01 | refines 72 |
 | 126 | **`3.7.4` applies to every service, not only ours.** Both the Jolpica client and the portrait fetcher back off on 429 and treat other 4xx as fatal for that request shape. My first Jolpica client treated all 4xx as fatal including 429, which is precisely the distinction 3.7.4 exists to draw | 2026-10-01 | implements 33 |
 | 127 | **The latch word must be 64 bits.** 7 sessions × 6 events reaches index 42, and a 32-bit word silently dropped everything from 32 up — the whole RACE session — so race alerts never latched and fired every tick. A `static_assert` now fails the build if a session type is added | 2026-10-01 | implements 80 |
+| 128 | **The fetch task is double-buffered and pinned to core 1.** It parses into a back store and swaps under a mutex, so the UI thread never reads a torn parse and the lock is held for a `memcpy`, never for drawing | 2026-10-01 | implements 9 |
+| 129 | **`Entry` lives in `f1_store.h`, not `f1_order.h`.** The parsers and their tests must build on the host, and `f1_order.h` needs LVGL. Pure data belongs on the testable side of that line | 2026-10-01 | active |
+| 130 | **`-Wformat-truncation` caught a real truncation**: a 24-byte race status written into the 12-byte gap field. Now truncated **explicitly** with a precision specifier, so the cut is intentional rather than silent. The third time decision 63's gate has paid for itself | 2026-10-01 | implements 63 |
+| 131 | **`#` is not a comment inside a C++ lambda in YAML**, and `time` is ambiguous against ESPHome's `time::` namespace — `::time(nullptr)` is required | 2026-10-01 | active |
+| 132 | **Legend prose states facts, not adjectives** (5.6.2): records and circumstances, because the numbers are already on the card and a superlative adds nothing a reader cannot see. A driver who is also a legend carries the line on their driver card — one card, both facts | 2026-10-01 | implements 86 |
 | 90 | **A Sprint is a first-class race day** (RACE-14) — its own grid, result and race page, labelled `SPRINT`. A sprint weekend has two race days. Sprint wins must **not** count toward career win milestones; Jolpica keeps them in a separate endpoint | 2026-10-01 | **decided by owner**, closes open question 6 |
 | 91 | **Portraits are 240×320**, not 150×200. The brief asked to show the picture; at 480 px wide, 150×200 reads as a thumbnail. Budget restated against the **app slot** (~6.5–7.8 MB), not total flash: portraits are 25–30 % of one slot | 2026-10-01 | **delegated**, answers open question 13 |
 | 92 | **Alerts are loud** (§6.14.3): full-width banner for events, brief full-screen takeover for milestones. Safe here specifically because **nothing underneath is changing** — no live timing (58) — which is not a general licence. Nothing ever requires dismissing; a tap only dismisses early. An `Alert style: loud/quiet` setting ships with loud as the default | 2026-10-01 | **decided by owner**, closes open question 12 |
@@ -2582,9 +2587,9 @@ project's real risk.
          licence and a credit the card draws. 3 people have no usable image and
          get text-only cards (RACE-13e)
    - [x] Pre-1994 pole values curated with sources
-   - [ ] Curated legend prose (the "why they matter" line) — still to write
+   - [x] Curated legend prose for all 32 legends (5.6.2)
    - [x] Portraits at **240×320**; generator caps at 3 MB
-4. **M3 — Data path and the state machine**
+4. **M3 — Data path and the state machine — DONE 2026-10-01**
    - [ ] `f1_net.h`: TLS to both hosts, persistent sessions, selective parse,
          `.buffer_size = 4096` on the HTTP client (NET-15)
    - [ ] `f1_state.h`: the state machine, the poll-interval table, retiming
@@ -2597,7 +2602,7 @@ project's real risk.
    - [ ] **Rollover host test** (decision 98): advance `current` by a year
          mid-run and assert the calendar, entry list, driver carousel and
          watched-driver resolution all follow with no rebuild
-5. **M4 — Race day**
+5. **M4 — Race day — DONE 2026-10-01**
    - [ ] `race_page`: header, state line, map, top-5 strip
    - [ ] `order_page`: 22 rows, flags, team-colour bars
    - [ ] Grid extraction (RACE-11) + host test against the position fixture
@@ -2613,15 +2618,16 @@ project's real risk.
    - [ ] **Watched driver** (§6.14): `driverId` resolution, the ambient marker,
          the three alert tiers, and the **once-only latch** with a host test
          that replays a reboot mid-weekend (decision 80)
-6. **M5 — Settings and web/HA parity**
+6. **M5 — Settings and web/HA parity — DONE 2026-10-01**
    - [ ] Settings page with tabs, staged Save/Cancel, numeric keyboard
    - [ ] Every entity on the web UI and HA, sorted into groups
    - [ ] Auto-dim (§6.8) and the lat/lon-vs-timezone note
-7. **M6 — Detail cards, standings and the post-session summary**
-   - [ ] Driver and circuit detail cards; headshot as best-effort enrichment
-   - [ ] **Runtime legend/driver overlap** (RACE-13d) and the text-only card
-         for a driver with no compiled profile (RACE-13e)
-   - [ ] `standings_page`
+7. **M6 — Standings and detail cards — mostly done 2026-10-01**
+   - [x] `standings_page`, rendered from the fetched championship table
+   - [x] **Runtime legend/driver overlap** (RACE-13d) and the text-only card
+         for a person with no portrait (RACE-13e)
+   - [x] Portraits on the profile cards, with the mandatory credit
+   - [ ] Tap-a-row detail card — the row is already a tap target (decision 53)
    - [ ] **`summary_page`** (§8.1) — fastest lap, pit stops, tyre strategy
          strips, flags that occurred, weather. All free once the window closes,
          and the feature that recovers most of what live timing would have been
