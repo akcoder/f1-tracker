@@ -46,6 +46,7 @@ esphome:
     - f1-tracker/f1_json.h
     - f1-tracker/f1_order.h
     - f1-tracker/f1_net.h
+    - f1-tracker/f1_app.h
     - f1-tracker/f1_carousel.h
     - f1-tracker/f1_ui.h
   on_boot:
@@ -76,6 +77,15 @@ esphome:
             w.font_small = id(mono12)->get_lv_font();
             f1::ui::setup(w, id(carousel_secs).state, id(carousel_content).active_index().value_or(0));
             f1::order::setup(id(order_rows), id(order_hdr), id(mono12)->get_lv_font());
+            f1::app::Widgets aw;
+            aw.race_title  = id(race_title);
+            aw.race_state  = id(race_state);
+            aw.race_sub    = id(race_sub);
+            aw.race_clock  = id(race_clock);
+            aw.order_title = id(order_title);
+            aw.banner      = id(watch_banner);
+            aw.banner_text = id(watch_text);
+            f1::app::setup(aw);
 
 esp32:
   board: esp32-s3-devkitc-1
@@ -562,6 +572,30 @@ lvgl:
                 text: ""
                 text_color: 0xC9D3F2   # the theme default is dark grey: invisible here
                 text_font: mono16
+      - obj:                     # 6.14.3: the watched-driver alert. A STRIP, never
+          id: watch_banner       # a modal, and nothing ever requires dismissing.
+          align: TOP_MID
+          y: 60
+          width: 480
+          height: 96
+          hidden: true
+          bg_color: 0x1A2547
+          bg_opa: COVER
+          border_width: 0
+          radius: 0
+          pad_all: 0
+          scrollable: false
+          widgets:
+            - label:
+                id: watch_text
+                align: CENTER
+                width: 460
+                text: ""
+                text_font: mono24
+                text_color: 0xFFFFFF
+                text_align: CENTER
+          on_click:              # a tap dismisses EARLY; never the only way out
+            - lambda: f1::app::dismiss_banner();
   pages:
     - id: wifi_page             # NET-2b: first page, so it is what boots
       skip: true
@@ -900,9 +934,18 @@ lvgl:
               - lvgl.page.show: race_page
 
 interval:
-  - interval: 1s                # UI-20: carousel advance. The tick is cheap; the
-    then:                       # interval check lives in f1::ui::advance.
-      - lambda: f1::ui::advance(esphome::millis());
+  - interval: 1s                # the application tick (f1_app.h). Everything on
+    then:                       # screen is a function of ONE state (4.1), so this
+      - lambda: |-              # is the only place that reads it and writes widgets.
+          const auto t = id(sntp_time).now();
+          f1::app::set_clock(t.is_valid() ? (uint32_t) t.timestamp : 0, t.is_valid());
+          f1::app::tick(esphome::millis());
+          if (t.is_valid()) {
+            char b[12];
+            // 6.7: 24 h local by default; the three-state dropdown lands at M5.
+            snprintf(b, sizeof(b), "%02d:%02d", t.hour, t.minute);
+            lv_label_set_text(id(race_clock), b);
+          }
   - interval: 1s                # UI-27: debug page, only while it is showing
     then:
       - lambda: |-
