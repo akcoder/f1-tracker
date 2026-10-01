@@ -12,6 +12,7 @@
 #include "f1_carousel.h"
 #include "f1_circuits.h"
 #include "f1_drivers.h"
+#include "f1_facts.h"
 #include "f1_flags.h"
 #include "f1_legends.h"
 #include "f1_map.h"
@@ -234,20 +235,47 @@ inline bool prepare(const carousel::Card &c) {
           round = calendar::R[i].round;
           g.staged_iso3 = calendar::R[i].iso3;   // decision 18: the CIRCUIT's country
         }
-      int k = snprintf(g.staged_body, sizeof(g.staged_body), "%s\n%.3f km",
+      int k = snprintf(g.staged_body, sizeof(g.staged_body), "%s   %.3f km",
                        ct.location, ct.length_m / 1000.0f);
       if (ct.firstgp)
         k += snprintf(g.staged_body + k, sizeof(g.staged_body) - k, "   first GP %u",
                       (unsigned) ct.firstgp);
-      if (ct.altitude_m)
-        k += snprintf(g.staged_body + k, sizeof(g.staged_body) - k, "\n%d m above sea level",
-                      (int) ct.altitude_m);
       // decision 33: all 40 ship, so a circuit that is not racing must say so
       // or the device looks like it invented a race.
-      if (round) snprintf(g.staged_body + k, sizeof(g.staged_body) - k,
-                          "\nRound %d, %u", round, (unsigned) calendar::SEASON);
-      else snprintf(g.staged_body + k, sizeof(g.staged_body) - k,
-                    "\nnot on the %u calendar", (unsigned) calendar::SEASON);
+      if (round) k += snprintf(g.staged_body + k, sizeof(g.staged_body) - k,
+                               "   Round %d, %u", round, (unsigned) calendar::SEASON);
+      else k += snprintf(g.staged_body + k, sizeof(g.staged_body) - k,
+                         "   not on the %u calendar", (unsigned) calendar::SEASON);
+
+      // 5.5 / MAP-4: the facts worth reading, generated offline (decision 27).
+      // Look-up is by the circuitId the calendar uses, not the trace id.
+      const char *cid = nullptr;
+      for (int i = 0; i < calendar::N_ROUNDS && !cid; i++)
+        if (map::by_circuit_id(calendar::R[i].circuit_id) == &ct)
+          cid = calendar::R[i].circuit_id;
+      const facts::Fact *f = cid ? facts::find(cid) : nullptr;
+      if (f == nullptr) f = facts::find(ct.id);     // historical circuits
+      if (f != nullptr) {
+        // DATA-11: fastest-lap data starts in 2004, so this is NOT an all-time
+        // lap record for any circuit that raced before then. Say which it is.
+        if (f->fl_time[0])
+          k += snprintf(g.staged_body + k, sizeof(g.staged_body) - k,
+                        "\n\nFastest lap  %s   %s %u  (since %u)",
+                        f->fl_time, f->fl_who, (unsigned) f->fl_year,
+                        (unsigned) facts::FASTEST_LAP_FROM);
+        if (f->last_year)
+          k += snprintf(g.staged_body + k, sizeof(g.staged_body) - k,
+                        "\nLast winner  %s, %s\n             %u %s",
+                        f->last_driver, f->last_team, (unsigned) f->last_year,
+                        f->last_event);
+        if (f->most_wins_n > 1)
+          k += snprintf(g.staged_body + k, sizeof(g.staged_body) - k,
+                        "\nMost wins    %s (%u)", f->most_wins,
+                        (unsigned) f->most_wins_n);
+        if (f->races)
+          k += snprintf(g.staged_body + k, sizeof(g.staged_body) - k,
+                        "   %u races held", (unsigned) f->races);
+      }
       return true;
     }
     case carousel::DRIVER: {

@@ -43,6 +43,7 @@ esphome:
     - f1-tracker/f1_drivers.h      # generated: tools/gen_drivers.py
     - f1-tracker/f1_legends.h      # generated: tools/gen_drivers.py
     - f1-tracker/f1_portraits.h    # generated: tools/gen_portraits.py
+    - f1-tracker/f1_facts.h        # generated: tools/gen_facts.py
     - f1-tracker/f1_map.h
     - f1-tracker/f1_state.h
     - f1-tracker/f1_watch.h
@@ -792,10 +793,10 @@ lvgl:
             text_color: 0xC9D3F2
         - obj:                  # MAP-5a: the trace lives in its own container and
             id: card_map        # nothing moving may sit inside its bounds
-            x: 40
-            y: 56
-            width: 400
-            height: 320
+            x: 90
+            y: 52
+            width: 300
+            height: 240
             bg_color: 0x0B1220
             bg_opa: COVER
             border_width: 0
@@ -838,10 +839,10 @@ lvgl:
         - label:
             id: card_body
             x: 12
-            y: 386
+            y: 300
             width: 456
             text: ""
-            text_font: mono14
+            text_font: mono12
             text_color: 0x7E8BB3
         - label:                # decision 72: the photographer's credit is
             id: card_credit     # MANDATORY wherever a photo is shown

@@ -3,8 +3,8 @@
 **Target hardware:** Guition ESP32-4848S040 (ESP32-S3, 4.0" 480×480 IPS)
 **Framework:** ESPHome (ESP-IDF)
 **Status:** Draft rev 2 — living document, updated as decisions are made
-**Last updated:** 2026-10-01 (rev 10: **M1 built** — circuit and calendar
-generators, carousel, 1823 host tests, and all 40 traces verified by render)
+**Last updated:** 2026-10-01 (rev 11: **M0–M5 built** — the firmware compiles,
+10,431 host checks pass, and every generated asset is in flash)
 
 ---
 
@@ -2399,6 +2399,16 @@ exists.
 | 115 | **The GeoJSON traces do not repeat the first point**, so the device must close the lap explicitly or every circuit shows a visible gap at the start/finish line. `closed` is generated per trace; all 40 are closed laps | 2026-10-01 | active |
 | 116 | **LVGL's line widget is compiled out unless a `line:` appears in the YAML**, so `lv_line_create` does not link. The trace, tick and north arrow are **declared in YAML** and C++ only swaps their point arrays — better practice anyway: LVGL owns parentage and styling, we own geometry | 2026-10-01 | active |
 | 117 | **`tools/preview_circuits.py` renders the GENERATED header**, not the source GeoJSON, through the same `fit_box()` arithmetic the device uses. It verifies MAP-3/MAP-5 without hardware: a wrong rotation, a squashed aspect or a trace escaping its box is visible immediately. All 40 confirmed | 2026-10-01 | active |
+| 118 | **M2 is built.** 23 driver and 32 legend profiles, 48 portraits (0.98 MB), 48 flags (28.1 kB), 41 circuits of facts. Image **2.71 MB — 33.4 % of the slot**, RAM 36.3 % | 2026-10-01 | **done** |
+| 119 | **Cards are prepare-then-commit.** The next card is fully resolved into a staging buffer during the current card's dwell — profile row, flag, portrait, composed text — and the switch is only widget updates. If it is not ready the current card is **held**: a card that is late beats a card that is empty. The portrait and its credit are set together so a photo can never appear uncredited | 2026-10-01 | **asked for by owner** |
+| 120 | **DATA-11: fastest-lap data begins in 2004**, the same shape of gap as DATA-8's 1994 for qualifying. Monza has raced since 1950 but returns 25 fastest laps. The card therefore says **"fastest lap … (since 2004)"**, never "lap record", which would be wrong for every circuit older than that | 2026-10-01 | active |
+| 121 | **Circuit cards carry fastest lap, most recent winner with the event name, most wins and races held** — all computed offline from Jolpica and baked in (decision 27). 35 of 41 circuits have a fastest lap | 2026-10-01 | **asked for by owner** |
+| 122 | **Ergast driverIds are not `firstname_surname` by rule.** The bare surname belongs to whoever the dataset assigned it to, and it is **not** the earlier driver: Graham Hill is `hill` while Damon is `damon_hill`; Jacques Villeneuve is `villeneuve` while his father Gilles, racing 18 years earlier, is `gilles_villeneuve`. The generator now fails with the real lookup URL rather than an IndexError | 2026-10-01 | active |
+| 123 | **Wikimedia serves a per-file list of thumbnail widths.** Constructing a `/thumb/` URL by hand earns HTTP 400 — 640, 320, 800 and 1024 were all refused for a file that served 250. Ask the API for a `thumburl` via `iiurlwidth`, which is guaranteed servable. Fetching full-resolution originals earns 429, and the 429 body names this as the fix | 2026-10-01 | active |
+| 124 | **Commons normalises `File:A_B.jpg` to spaces**, so a key taken from the image URL never matches one taken from the API response. This silently discarded 47 of 48 portraits as unattributable — a lookup that fails closed looks exactly like a licence problem | 2026-10-01 | active |
+| 125 | **OGL 3 is a free, attribution-requiring licence** and belongs in the accepted set. Rejecting it was the regex being wrong, not the image being unusable | 2026-10-01 | refines 72 |
+| 126 | **`3.7.4` applies to every service, not only ours.** Both the Jolpica client and the portrait fetcher back off on 429 and treat other 4xx as fatal for that request shape. My first Jolpica client treated all 4xx as fatal including 429, which is precisely the distinction 3.7.4 exists to draw | 2026-10-01 | implements 33 |
+| 127 | **The latch word must be 64 bits.** 7 sessions × 6 events reaches index 42, and a 32-bit word silently dropped everything from 32 up — the whole RACE session — so race alerts never latched and fired every tick. A `static_assert` now fails the build if a session type is added | 2026-10-01 | implements 80 |
 | 90 | **A Sprint is a first-class race day** (RACE-14) — its own grid, result and race page, labelled `SPRINT`. A sprint weekend has two race days. Sprint wins must **not** count toward career win milestones; Jolpica keeps them in a separate endpoint | 2026-10-01 | **decided by owner**, closes open question 6 |
 | 91 | **Portraits are 240×320**, not 150×200. The brief asked to show the picture; at 480 px wide, 150×200 reads as a thumbnail. Budget restated against the **app slot** (~6.5–7.8 MB), not total flash: portraits are 25–30 % of one slot | 2026-10-01 | **delegated**, answers open question 13 |
 | 92 | **Alerts are loud** (§6.14.3): full-width banner for events, brief full-screen takeover for milestones. Safe here specifically because **nothing underneath is changing** — no live timing (58) — which is not a general licence. Nothing ever requires dismissing; a tap only dismisses early. An `Alert style: loud/quiet` setting ships with loud as the default | 2026-10-01 | **decided by owner**, closes open question 12 |
@@ -2557,22 +2567,23 @@ project's real risk.
    - *This milestone is deliberately first: it is the state the device spends
      most of the year in, it needs no live data, and it proves the map
      rendering that everything else depends on.*
-3. **M2 — Facts, flags, profiles and portraits**
-   - [ ] `tools/gen_facts.py` — GeoJSON properties, offline Jolpica
-         aggregation (lap records, most wins, race counts), curated rows with
-         per-value sources
-   - [ ] Copy and extend `sky_flags.h`: add `MCO`, `BHR`, `SAU`
-   - [ ] Generated demonym→ISO3 table + host test against the driver fixture
-   - [ ] Extended font glyph set; `check_glyphs.py` over the generated tables
-   - [ ] `tools/gen_drivers.py` → `f1_drivers.h` + `f1_legends.h`: career
-         counts via `MRData.total`, the 1950–2026 champion sweep, **disk cache
-         and rate limiting**, and the **pre-1994 pole guard** (decision 71)
-   - [ ] `tools/gen_portraits.py` → Commons lookup, batched and rate-limited,
-         licence + photographer recorded, **build fails on an unattributable
-         image**, total reported and capped at 2 MB
-   - [ ] Curated legend prose and the pre-1994 pole values, with sources
-   - [ ] Portraits at **240×320** (decision 91); generator reports the total
-         and fails above 3 MB
+3. **M2 — Facts, flags, profiles and portraits — DONE 2026-10-01**
+   - [x] `tools/gen_facts.py` → `f1_facts.h`: fastest lap, most recent winner
+         with the event name, most wins and races held, for 41 circuits.
+         **35 have a fastest lap**; DATA-11 labels it "since 2004"
+   - [x] `tools/gen_flags.py` → `f1_flags.h`: **48 flags, 28.1 kB** in RGB565,
+         including `MCO`, `BHR` and `SAU`. Far under the ~150 kB estimate
+   - [x] Demonym→ISO3 in the generator; a driver with no resolvable
+         nationality draws **no flag** (decision 20)
+   - [x] `glyphsets: [GF_Latin_Core]`, verified against 715 real strings
+   - [x] `tools/gen_drivers.py` → **23 drivers, 32 legends**. The pole guard
+         worked: **24 curated, 8 from the API, 0 wrong**
+   - [x] `tools/gen_portraits.py` → **48 portraits, 0.98 MB**, each with a
+         licence and a credit the card draws. 3 people have no usable image and
+         get text-only cards (RACE-13e)
+   - [x] Pre-1994 pole values curated with sources
+   - [ ] Curated legend prose (the "why they matter" line) — still to write
+   - [x] Portraits at **240×320**; generator caps at 3 MB
 4. **M3 — Data path and the state machine**
    - [ ] `f1_net.h`: TLS to both hosts, persistent sessions, selective parse,
          `.buffer_size = 4096` on the HTTP client (NET-15)
