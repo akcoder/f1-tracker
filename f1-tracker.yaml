@@ -40,6 +40,9 @@ esphome:
     - f1-tracker/f1_circuits.h     # generated: tools/gen_circuits.py
     - f1-tracker/f1_calendar.h     # generated: tools/gen_calendar.py
     - f1-tracker/f1_flags.h        # generated: tools/gen_flags.py
+    - f1-tracker/f1_drivers.h      # generated: tools/gen_drivers.py
+    - f1-tracker/f1_legends.h      # generated: tools/gen_drivers.py
+    - f1-tracker/f1_portraits.h    # generated: tools/gen_portraits.py
     - f1-tracker/f1_map.h
     - f1-tracker/f1_state.h
     - f1-tracker/f1_watch.h
@@ -72,6 +75,9 @@ esphome:
             w.tick    = id(trace_tick)->obj;
             w.north   = id(trace_north)->obj;
             w.badge   = id(card_badge);
+            w.photo   = id(card_photo);
+            w.flag    = id(card_flag);
+            w.credit  = id(card_credit);
             w.title   = id(card_title);
             w.body    = id(card_body);
             w.font_small = id(mono12)->get_lv_font();
@@ -256,6 +262,14 @@ light:
 # i-acute, o-acute and u-diaeresis (Hulkenberg, Autodromo Jose Carlos Pace,
 # Nurburgring, Hermanos Rodriguez). sky-tracker's ASCII set would draw boxes
 # mid-name. decision 51: every size gets the SAME set.
+image:
+  # A 1x1 placeholder, purely so the LVGL image widgets have a valid src: at
+  # compile time. C++ repoints them at the real flag and portrait data in flash
+  # (f1_ui.h, f1_order.h) - nothing is ever copied.
+  - file: reference/pixel.png
+    id: pixel_img
+    type: RGB565
+
 font:
   - file: "gfonts://Roboto Mono"
     id: mono12                # order rows (6.3.1), circuit facts
@@ -809,6 +823,18 @@ lvgl:
                   points: [{x: 0, y: 0}, {x: 1, y: 0}]
                   line_width: 2
                   line_color: 0x7E8BB3
+        - image:                # 5.6.3: the portrait. Hidden on a circuit card and
+            id: card_photo      # on a person with no attributable image (RACE-13e).
+            src: pixel_img
+            x: 24
+            y: 86
+            hidden: true
+        - image:                # nationality / circuit country flag (6.6)
+            id: card_flag
+            src: pixel_img
+            x: 300
+            y: 30
+            hidden: true
         - label:
             id: card_body
             x: 12
@@ -817,6 +843,15 @@ lvgl:
             text: ""
             text_font: mono14
             text_color: 0x7E8BB3
+        - label:                # decision 72: the photographer's credit is
+            id: card_credit     # MANDATORY wherever a photo is shown
+            x: 12
+            y: 456
+            width: 300
+            text: ""
+            text_font: mono12
+            text_color: 0x5A6687
+            hidden: true
         - label:                # 3.7.3 / decision 54: attribution, every page
             align: BOTTOM_RIGHT
             x: -10

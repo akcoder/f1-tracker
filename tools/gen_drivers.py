@@ -31,9 +31,9 @@ LEGENDS = [
     ("fangio", 0), ("ascari", 0), ("brabham", 0), ("clark", 0), ("stewart", 0),
     ("lauda", 0), ("prost", 0), ("senna", 0), ("michael_schumacher", 0),
     ("vettel", 0), ("fittipaldi", 0), ("piquet", 0), ("hakkinen", 0),
-    ("graham_hill", 0), ("alonso", 0), ("hamilton", 0), ("max_verstappen", 0),
+    ("hill", 0), ("alonso", 0), ("hamilton", 0), ("max_verstappen", 0),
     # single champions of note (10)
-    ("hunt", 1), ("mansell", 1), ("rindt", 1), ("jacques_villeneuve", 1),
+    ("hunt", 1), ("mansell", 1), ("rindt", 1), ("villeneuve", 1),
     ("damon_hill", 1), ("hawthorn", 1), ("surtees", 1), ("rosberg", 1),
     ("raikkonen", 1), ("button", 1),
     # never champion (5)
@@ -41,16 +41,23 @@ LEGENDS = [
 ]
 GROUPS = ["Multiple champion", "World champion", "Never champion"]
 
+# Ergast-lineage driverIds are not "firstname_surname" by rule: the bare surname
+# belongs to whichever driver the dataset assigned it to, and it is NOT the
+# earlier one. Graham Hill is `hill` and Damon Hill is `damon_hill`; Jacques
+# Villeneuve is `villeneuve` while his father Gilles, who raced 18 years
+# earlier, is `gilles_villeneuve`. Guessing an id produces an empty Drivers
+# array, which is why build() checks rather than indexing blindly.
+
 # DATA-8: curated poles for pre-1994 careers. The API cannot supply these.
 # source: each driver's career record, cross-checked against their Wikipedia
 # article infobox (the same page the portrait comes from).
 CURATED_POLES = {
     "fangio": 29, "ascari": 14, "brabham": 13, "clark": 33, "stewart": 17,
     "lauda": 24, "prost": 33, "senna": 65, "michael_schumacher": 68,
-    "fittipaldi": 6, "piquet": 24, "graham_hill": 13, "hunt": 14, "mansell": 32,
+    "fittipaldi": 6, "piquet": 24, "hill": 13, "hunt": 14, "mansell": 32,
     "rindt": 10, "hawthorn": 4, "surtees": 8, "moss": 16,
     "gilles_villeneuve": 2, "amon": 5, "ickx": 13, "peterson": 14,
-    "hakkinen": 26, "damon_hill": 20, "jacques_villeneuve": 13,
+    "hakkinen": 26, "damon_hill": 20, "villeneuve": 13,
 }
 QUALI_DATA_FROM = 1994
 
@@ -184,7 +191,16 @@ def main():
     print(f"champion sweep: {len(titles)} drivers with at least one title")
 
     def build(did, group, entry=None):
-        d = entry or c.get(f"drivers/{did}/")["MRData"]["DriverTable"]["Drivers"][0]
+        if entry:
+            d = entry
+        else:
+            rows = c.get(f"drivers/{did}/")["MRData"]["DriverTable"]["Drivers"]
+            if not rows:
+                raise SystemExit(
+                    f"FAIL: no driver with id '{did}'. Ergast ids are not\n"
+                    f"       firstname_surname by rule - check the real id with\n"
+                    f"       https://api.jolpi.ca/ergast/f1/drivers/{did}/?format=json")
+            d = rows[0]
         first, last = seasons_of(c, did)
         wins, starts, podiums, poles, psrc = career(c, did, first)
         nat = d.get("nationality")

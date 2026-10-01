@@ -19,7 +19,7 @@ retried tightly.
 
   python3 tools/gen_portraits.py
 """
-import argparse, datetime, io, json, os, re, sys, time, urllib.parse, urllib.request
+import argparse, datetime, io, json, os, re, sys, time, urllib.error, urllib.parse, urllib.request
 from PIL import Image
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -34,10 +34,19 @@ JPEG_Q = 88
 CAP_BYTES = 3 * 1024 * 1024   # decision 74
 BATCH = 40
 GAP_S = 2.0
+THUMB_W = 500            # requested via the API's iiurlwidth, which returns a
+                         # thumburl it guarantees is servable. We need 240 px
+                         # after the 3:4 crop, so 500 leaves headroom.
 
 # Licences that require crediting the photographer. Anything not matched here
 # is treated as unattributable and fails the build.
-OK_LICENCE = re.compile(r"(cc[ -]?by|public domain|cc0|pd-|attribution)", re.I)
+# Free licences that permit redistribution. All of these require crediting the
+# photographer except CC0/PD, and we credit everything anyway (decision 72).
+# OGL (the UK Open Government Licence) is here because Hamilton's portrait uses
+# it: it is a free, attribution-requiring licence, and rejecting it was the
+# regex being wrong rather than the image being unusable.
+OK_LICENCE = re.compile(
+    r"(cc[ -]?by|cc0|public domain|pd-|attribution|ogl|open government)", re.I)
 
 
 def api(url, **params):
@@ -94,33 +103,59 @@ def fetch_page_images(titles):
     return out
 
 
+def norm_file(f):
+    """Commons normalises File:A_B.jpg to File:A B.jpg, so a key taken from the
+    URL (underscores) never matches a key taken from the API response (spaces).
+    Both sides go through this."""
+    return urllib.parse.unquote(f).replace("_", " ").strip()
+
+
 def fetch_licences(files):
     out = {}
     fl = list(files)
     for i in range(0, len(fl), BATCH):
         chunk = fl[i:i + BATCH]
+        # iiurlwidth makes the API return a thumburl it guarantees is servable.
+        # Constructing the /thumb/ path by hand does NOT work: Wikimedia serves a
+        # per-file list of widths and refuses anything else with HTTP 400 - 640,
+        # 320, 800 and 1024 were all refused for a file that served 250.
         d = api(COMMONS, action="query", prop="imageinfo",
-                iiprop="extmetadata", titles="|".join("File:" + f for f in chunk))
+                iiprop="extmetadata|url", iiurlwidth=THUMB_W,
+                titles="|".join("File:" + f for f in chunk))
         for pg in d.get("query", {}).get("pages", {}).values():
             ii = (pg.get("imageinfo") or [{}])[0]
             em = ii.get("extmetadata", {})
-            name = pg.get("title", "").replace("File:", "")
+            name = norm_file(pg.get("title", "").replace("File:", ""))
+            thumb = ii.get("thumburl") or ii.get("url") or ""
             lic = (em.get("LicenseShortName", {}) or {}).get("value", "")
             art = (em.get("Artist", {}) or {}).get("value", "")
             art = re.sub(r"<[^>]+>", "", art or "").strip()
             art = re.sub(r"\s+", " ", art)[:48]
-            out[name] = (lic, art)
+            out[name] = (lic, art, thumb)
     return out
 
 
 def download(url):
     os.makedirs(CACHE, exist_ok=True)
     key = os.path.join(CACHE, re.sub(r"[^A-Za-z0-9._-]", "_", url)[-120:])
-    if not os.path.exists(key):
-        time.sleep(GAP_S)
-        with urllib.request.urlopen(urllib.request.Request(url, headers=UA), timeout=90) as r:
-            open(key, "wb").write(r.read())
-    return key
+    if os.path.exists(key):
+        return key
+    backoff = 20.0
+    for attempt in range(5):
+        try:
+            time.sleep(GAP_S)
+            with urllib.request.urlopen(urllib.request.Request(url, headers=UA),
+                                        timeout=90) as r:
+                open(key, "wb").write(r.read())
+            return key
+        except urllib.error.HTTPError as e:
+            if e.code != 429:
+                raise
+            # 3.7.4 applies to every service, not just ours: back off hard.
+            print(f"    429 from Wikimedia; backing off {backoff:.0f}s", file=sys.stderr)
+            time.sleep(backoff)
+            backoff = min(backoff * 2, 300.0)
+    raise RuntimeError("rate limited after retries")
 
 
 def portrait(path):
@@ -169,7 +204,8 @@ def main():
     for did, t in titles.items():
         url = images.get(t)
         if url:
-            files[did] = (url, urllib.parse.unquote(url.rsplit("/", 1)[-1]).split("?")[0])
+            fn = urllib.parse.unquote(url.rsplit("/", 1)[-1]).split("?")[0]
+            files[did] = (url, norm_file(fn))
     lic = fetch_licences({f for _, f in files.values()})
 
     rows, total, skipped = [], 0, []
@@ -179,15 +215,15 @@ def main():
             skipped.append((did, "no page image"))
             continue
         url, fname = files[did]
-        l, artist = lic.get(fname, ("", ""))
+        l, artist, thumb = lic.get(fname, ("", "", ""))
         # decision 72: fail rather than ship an image we cannot attribute.
         if not l or not OK_LICENCE.search(l):
             skipped.append((did, f"unattributable licence '{l or '?'}'"))
             continue
         try:
-            im = portrait(download(url))
+            im = portrait(download(thumb or url))
         except Exception as e:
-            skipped.append((did, f"download/decode failed: {e}"))
+            skipped.append((did, f"download/decode failed: {str(e)[:70]}"))
             continue
         buf = io.BytesIO()
         im.save(buf, "JPEG", quality=JPEG_Q, optimize=True, progressive=False)
