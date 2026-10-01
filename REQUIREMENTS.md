@@ -3,8 +3,8 @@
 **Target hardware:** Guition ESP32-4848S040 (ESP32-S3, 4.0" 480×480 IPS)
 **Framework:** ESPHome (ESP-IDF)
 **Status:** Draft rev 2 — living document, updated as decisions are made
-**Last updated:** 2026-10-01 (rev 7: season is **resolved at runtime, never
-fixed** — the device follows the rollover for its whole life, §4.2.1)
+**Last updated:** 2026-10-01 (rev 8: download buffers sized so **every response
+fits one TCP window** — §2.4.9)
 
 ---
 
@@ -143,8 +143,9 @@ overflowed the budget every tick, and the panel visibly jumped.
 | `CONFIG_LCD_RGB_RESTART_IN_VSYNC: y` | Re-syncs panel DMA each vblank, so a stall cannot leave the picture permanently shifted |
 | `CONFIG_SPIRAM_XIP_FROM_PSRAM: y` | Runs code and rodata from PSRAM. Flash and PSRAM share one bus on the S3: flash fetches starved the panel's refills (jitter) and flash writes stalled the cache entirely (picture shift during uploads) |
 | `CONFIG_ESP32S3_DATA_CACHE_LINE_64B: y` | Fewer, larger PSRAM bursts for bounce-buffer copies |
-| `CONFIG_LWIP_TCP_WND_DEFAULT: "32768"` | Default window is 5.7 KB. **From Alaska the data hosts are ~100 ms away** and throughput is capped at window/RTT — measured 57 KB/s → ~320 KB/s |
-| `CONFIG_LWIP_TCP_RECVMBOX_SIZE: "32"` | Matches the larger window |
+| `CONFIG_LWIP_TCP_WND_DEFAULT: "65535"` | **Raised from `sky-tracker`'s 32768** so every response fits one window — §2.4.9 |
+| `CONFIG_LWIP_TCP_RECVMBOX_SIZE: "64"` | Must scale with the window: ≥ window/MSS = 65535/1440 = 46 |
+| `CONFIG_LWIP_TCP_SACK_OUT: y` | Selective ACK — recovers from a single lost segment without re-sending the window behind it (§2.4.9) |
 | `CONFIG_SPIRAM_TRY_ALLOCATE_WIFI_LWIP: y` | Keeps lwIP/Wi-Fi buffers out of the ~70 KB of free internal RAM |
 
 - [ ] **Do NOT add `CONFIG_LCD_RGB_ISR_IRAM_SAFE`.** `sky-tracker` explicitly
@@ -223,7 +224,91 @@ loudest at low duty, which is exactly where dimming parks it.
 - [ ] Use **30 kHz**. This device will sit dimmed overnight for most of the
       year at 61.58 N (§6.8), so it lands squarely in the whine band.
 
-#### 2.4.8 `logger: hardware_uart: UART0`
+#### 2.4.8 Download buffers — sized so every response fits one window (NET-15)
+**Decision 99: raise the TCP receive window from 32 KB to 64 KB, and the HTTP
+client's receive buffer from its 512 B default to 4 KB.**
+
+Throughput over a long link is capped by **window ÷ round-trip time**, and from
+Alaska these hosts are **~100 ms away**. `sky-tracker` measured exactly this:
+the IDF default gave 57 KB/s and a 32 KB window gave ~320 KB/s — which matches
+the arithmetic to within rounding, so the model is trustworthy enough to size
+against.
+
+| Window | Ceiling @100 ms | 48 KB response | Windows needed | Note |
+|---|---|---|---|---|
+| 5,760 (IDF default) | 56 KB/s | 1,653 ms | 9 | ESPHome out of the box |
+| 32,768 (`sky-tracker`) | 320 KB/s | 250 ms | **2** | one mid-transfer stall |
+| **65,535 (chosen)** | **640 KB/s** | **75 ms** | **1** | **no stall** |
+| 131,072 | 1,280 KB/s | 38 ms | 1 | needs window scaling; 37 ms for a rare fetch |
+
+**The argument is not raw throughput, it is the stall.** At 32 KB our largest
+response needs **two** window-fulls, so the transfer pauses for a full
+round-trip in the middle waiting for an ACK. At 64 KB **every response this
+device will ever make fits in a single window** — checked against all ten
+runtime responses, largest 47.0 KB (§3.0):
+
+| Response | Size | At 64 KB |
+|---|---|---|
+| OpenF1 `sessions?year=X` | 47.0 KB | one window |
+| OpenF1 `position` (whole session) | 35.1 KB | one window |
+| OpenF1 `weather` | 35.3 KB | one window |
+| OpenF1 `race_control` flags | 19.9 KB | one window |
+| Jolpica `races` | 14.0 KB | one window |
+| …and every other, down to 0.8 KB | | one window |
+
+- [ ] **65,535 is the largest unscaled window** (the TCP header field is 16
+      bits). Staying at or below it means **window scaling is not required**,
+      which is one less option to get wrong. Going further needs
+      `CONFIG_LWIP_WND_SCALE` and buys 37 ms on a response we fetch rarely —
+      **not worth it**, and recorded so it is not re-proposed.
+- [ ] **`CONFIG_LWIP_TCP_RECVMBOX_SIZE` must scale with the window** — at least
+      window/MSS = 65535/1440 ≈ 46, so **64**. Leaving it at 32 would throttle
+      the larger window back to roughly what it replaced, which is the quiet
+      way this change fails to do anything.
+- [ ] **Raise the `esp_http_client` receive buffer to 4096.** Its default is
+      **512 bytes**, so a 47 KB response is ~94 read calls, each resuming the
+      selective parser (§4.2). This is cheaper than the window change and
+      easier to overlook. We construct `esp_http_client_config_t` ourselves in
+      the C++ data task (ARCH-3), so it is one field: `.buffer_size = 4096`.
+- [ ] **`CONFIG_LWIP_TCP_SACK_OUT: y`** so a single lost segment does not force
+      a retransmit of everything behind it. On a 64 KB window over WiFi that is
+      a much bigger penalty than it was at 32 KB.
+
+**Cost, stated honestly:**
+- [ ] **+32 KB per socket** over the previous setting. With
+      `CONFIG_SPIRAM_TRY_ALLOCATE_WIFI_LWIP: y` (§2.4.2) these buffers come
+      from **PSRAM**, so the ~70 KB of free internal RAM is unaffected — which
+      is the budget that actually binds (§9).
+- [ ] **PSRAM bandwidth is the caveat, not PSRAM capacity.** 64 KB against
+      8 MB is nothing, but `plane-tracker` decision 65 measured that network
+      and crypto work on the PSRAM bus is what produced `lvgl took a long time
+      (1231 ms)` warnings, because the RGB panel refills from the same bus. A
+      larger window moves **more** bytes through it per fetch — in a shorter
+      burst. **Watch for the warning after this change**, and if it appears,
+      the window is the first thing to walk back.
+- [ ] Two hosts means potentially **two sockets**, so budget **128 KB** of
+      PSRAM for receive windows, not 64.
+
+**What this does not fix, so the expectation is right:**
+- [ ] **The TLS handshake dominates everything here.** `plane-tracker` measured
+      ~**1.2 s** of crypto for a fresh handshake — an order of magnitude more
+      than the 175 ms this change saves on our largest response. **NET-12
+      (persistent TLS sessions, decision 65) is by far the larger lever**, and
+      this change is a refinement on top of it, not a substitute.
+- [ ] **Measured latency is mostly not transfer.** Jolpica responded in
+      0.33–0.85 s (§3.0) for payloads of 0.8–14 KB, which at any of these
+      window sizes transfer in tens of milliseconds. Most of that time is
+      server processing and round-trips. **Do not expect this change to make
+      the device feel faster** — it removes a stall on the few large fetches
+      and makes the worst case predictable.
+- [ ] **Our poll rate is 18 requests/hour** (§3.6.2). This is a tail-latency
+      improvement on a rare event, which is a fine reason to make a one-line
+      change and a poor reason to expect much from it.
+- [ ] **Re-measure after the first flash** and record real figures here,
+      replacing this arithmetic. The model is corroborated by `sky-tracker`'s
+      two data points but it is still a model.
+
+#### 2.4.9 `logger: hardware_uart: UART0`
 The S3's default console is USB Serial/JTAG on GPIO19/20, and **GPIO19 is the
 GT911's SDA**. Leaving the default collides with touch.
 
@@ -2079,6 +2164,10 @@ it — which suits a device watched all week rather than only on Sunday.
 - [ ] **JSON parsing is the main unknown** — a 48 KB response with ~20 fields
       per row. Measure early, prefer selective parsing, and size the buffer for
       48 KB rather than the common case.
+- [ ] **Network receive buffers are PSRAM, not internal RAM** (§2.4.8): a
+      64 KB window per socket, so budget **128 KB** across the two hosts. The
+      capacity is nothing against 8 MB; the **bandwidth** shares a bus with the
+      panel, which is the thing to watch.
 - [ ] Wi-Fi reconnect and API-unavailable states **must not block rendering**.
       The carousel in particular must keep turning with no network (§6.4).
 - [ ] **Free-only removes this project's one timing pressure.** With no 5 s
@@ -2246,6 +2335,11 @@ exists.
 | 96 | **RACE-13d: the legend/current-driver overlap is resolved at _runtime_**, against the live entry list. **Corrects decision 86.** Baked overlap + a runtime season rollover would make a newly retired driver vanish from both rotations. `max_verstappen` is therefore listed in the legends table (32 rows), not omitted | 2026-10-01 | **corrects 86** |
 | 97 | **RACE-13e: a driver with no compiled profile still gets a text-only card** from the live entry list. A rookie who joins after the build has no portrait and no career record; render what is known rather than skipping them. **Portraits are the one thing a rebuild is genuinely needed for**, and the README says so | 2026-10-01 | active |
 | 98 | **A season rollover must need no firmware update**, and that is a host test: advance `current` by a year mid-run and assert the calendar, entry list, driver carousel and watched-driver resolution all follow | 2026-10-01 | active |
+| 99 | **NET-15: TCP receive window raised to 65,535 and the `esp_http_client` buffer to 4 KB.** Sized so **every** runtime response (largest 47.0 KB) fits **one window** — at `sky-tracker`'s 32 KB the biggest needs two, stalling a full round-trip mid-transfer. 48 KB worst case: 250 ms → 75 ms | 2026-10-01 | active |
+| 100 | **65,535 is deliberately the ceiling** — the largest unscaled TCP window, so `CONFIG_LWIP_WND_SCALE` is not needed. 128 KB would save a further 37 ms on a rarely-fetched response and add an option to get wrong | 2026-10-01 | active |
+| 101 | **`RECVMBOX_SIZE` must scale with the window** (≥ window/MSS ≈ 46, so 64). Leaving it at 32 would throttle the larger window back to roughly what it replaced — the quiet way this change does nothing | 2026-10-01 | active |
+| 102 | **The `esp_http_client` receive buffer default is 512 B**, so a 47 KB response is ~94 read calls each resuming the parser. Raised to 4 KB — cheaper than the window change and easier to overlook | 2026-10-01 | active |
+| 103 | **TLS session reuse (65) dwarfs this.** A fresh handshake is ~1.2 s against the ~175 ms NET-15 saves. Recorded so the buffer change is understood as a tail-latency refinement on a rare large fetch, not something that makes the device feel faster | 2026-10-01 | refines 65 |
 | 90 | **A Sprint is a first-class race day** (RACE-14) — its own grid, result and race page, labelled `SPRINT`. A sprint weekend has two race days. Sprint wins must **not** count toward career win milestones; Jolpica keeps them in a separate endpoint | 2026-10-01 | **decided by owner**, closes open question 6 |
 | 91 | **Portraits are 240×320**, not 150×200. The brief asked to show the picture; at 480 px wide, 150×200 reads as a thumbnail. Budget restated against the **app slot** (~6.5–7.8 MB), not total flash: portraits are 25–30 % of one slot | 2026-10-01 | **delegated**, answers open question 13 |
 | 92 | **Alerts are loud** (§6.14.3): full-width banner for events, brief full-screen takeover for milestones. Safe here specifically because **nothing underneath is changing** — no live timing (58) — which is not a general licence. Nothing ever requires dismissing; a tap only dismisses early. An `Alert style: loud/quiet` setting ships with loud as the default | 2026-10-01 | **decided by owner**, closes open question 12 |
@@ -2401,7 +2495,8 @@ project's real risk.
    - [ ] Portraits at **240×320** (decision 91); generator reports the total
          and fails above 3 MB
 4. **M3 — Data path and the state machine**
-   - [ ] `f1_net.h`: TLS to both hosts, persistent sessions, selective parse
+   - [ ] `f1_net.h`: TLS to both hosts, persistent sessions, selective parse,
+         `.buffer_size = 4096` on the HTTP client (NET-15)
    - [ ] `f1_state.h`: the state machine, the poll-interval table, retiming
    - [ ] Host tests for the state machine, **including a `04:00Z` race read
          from Alaska**
@@ -2460,6 +2555,8 @@ Not forgotten — **blocked**. Collected here so the backlog stays honest.
 | Confirm 240×320 portraits read well on the panel | settled at 240×320 (decision 91); this is confirmation only | §5.6.3 |
 | Where the LVGL buffer landed (internal RAM or PSRAM) | logged at boot | §2.4.3 |
 | Free internal RAM / PSRAM with everything enabled | the real budget (§9) | §9 |
+| **Does the 64 KB window trigger `lvgl took a long time`?** | more bytes through the PSRAM bus per fetch; the window is the first thing to walk back | §2.4.8, decision 99 |
+| Real transfer times vs the §2.4.8 arithmetic | the model is corroborated but unverified on this board | §2.4.8 |
 | Boot time, and whether icon/portrait work needs core 1 | `plane-tracker` decision 64 | §9 |
 | `MAP-5a` — the `lv_line` redraw cost at ~300×300 | PSRAM bandwidth | §6.5 |
 
