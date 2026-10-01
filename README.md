@@ -44,16 +44,36 @@ python3 -m venv .venv && .venv/bin/pip install esphome
 cp secrets.yaml.example secrets.yaml      # then fill it in
 ./deploy.sh                               # validate, compile, warning gate
 ```
-M0 and M1 are built: ESPHome 2026.9.1, image **1.55 MB of a 7.75 MB app slot
-(20.0 %)**, RAM **35.6 %**, **1823 host tests passing**. All 40 circuit traces
-are compiled in (19,176 B) and verified by render. Nothing is flashed yet — see
-REQUIREMENTS.md §14.1 for what needs a board.
+**M0–M5 are built.** ESPHome 2026.9.1, image **2.71 MB of a 7.75 MB app slot
+(33.4 %)**, RAM **36.3 %**, **10,431 host checks passing**. Nothing is flashed
+yet — see REQUIREMENTS.md §14.1 for what needs a board.
+
+Everything the device shows is compiled in, so the carousel runs with no
+network at all:
+
+| Asset | Size |
+|---|---|
+| 40 circuit traces | 19,176 B |
+| 48 country flags (RGB565, two sizes) | 28.1 kB |
+| 23 driver + 32 legend profiles | ~12 kB |
+| 48 portraits (240×320 JPEG) | 0.98 MB |
+| Circuit facts for 41 circuits | ~9 kB |
+| Season calendar | ~5 kB |
 
 ```
+make -C tests                          # 10,431 checks
+
+# regenerate (all cached; a rerun costs no API requests)
 python3 tools/gen_circuits.py --all-circuits reference/samples/jolpica-all-circuits.json
-python3 tools/gen_calendar.py          # season comes from /current/, never pinned
-make -C tests
-python3 tools/preview_circuits.py      # contact sheet of all 40 traces
+python3 tools/gen_calendar.py          # season from /current/, never pinned
+python3 tools/gen_drivers.py           # careers, with the pre-1994 pole guard
+python3 tools/gen_flags.py
+python3 tools/gen_facts.py             # fastest lap, last winner, most wins
+python3 tools/gen_portraits.py         # Commons, fails on an unattributable image
+
+# render the real generated data at 480x480, so layout is measured not guessed
+python3 tools/preview_circuits.py
+python3 tools/mock_order_page.py --font /path/to/RobotoMono.ttf
 ```
 
 ## Data sources
