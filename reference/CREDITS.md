@@ -48,6 +48,12 @@ same licence). See REQUIREMENTS.md §3.7 for the full record.
 - **Live data is a paid tier** — €9.90/month. "Live" is defined as **30 minutes
   before a session starts until 30 minutes after it ends**; outside that window
   the data is historical and free.
+- **We use the free tier only** (REQUIREMENTS.md decision 58). The device
+  computes the live window from the session calendar and **does not issue
+  requests inside it** (NET-14), so it never relies on data it is not entitled
+  to and never makes a request that could be throttled or misread as a fault.
+- **No authentication is used for either source**, so neither places anything
+  in `secrets.yaml`.
 - OpenF1's FAQ states credits are **not** required; its footer licenses the data
   CC BY-NC-SA 4.0, which requires them. **We attribute anyway.**
 

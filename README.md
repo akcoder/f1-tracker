@@ -39,11 +39,19 @@ Ergast is dead (HTTP 404 as of 2026-10-01) and is not used.
 attribution is required by both licences, and the device shows it in a footer
 with links in its web UI.
 
-> **Live timing needs OpenF1's paid tier.** Their free tier serves historical
-> data only; "live" is defined as 30 minutes before a session until 30 minutes
-> after. The device is built so the **free path is complete** — the grid before
-> the session, the classification half an hour after — with live running order
-> as an upgrade. See REQUIREMENTS.md §6.3 (RACE-12).
+> **Free tiers only — no subscription.** OpenF1's free tier serves historical
+> data; "live" is defined as 30 minutes before a session until 30 minutes
+> after, and that window is a paid tier we decline. The device **computes the
+> window and never requests inside it** (NET-14), so it is a season tracker and
+> a race-weekend companion rather than a live timing screen.
+>
+> This does not affect anything above: the circuit map, the carousel, the
+> facts, the starting order, both sets of flags and the auto-dim were never
+> live features. The race page is **clock-driven** — it counts down to lights
+> out, then to the result — and the interesting session data (fastest lap, pit
+> stops, tyre strategy, flags that occurred) arrives on a **post-session
+> summary** half an hour after the race. See REQUIREMENTS.md §3.6.1, §3.6.2 and
+> §8.3.1.
 
 ## Sibling projects
 | Project | Relationship |
