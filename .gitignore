@@ -4,4 +4,7 @@ __pycache__/
 .venv/
 *.pyc
 secrets.yaml
+test_json
+test_state
 tests/test_m1
+tools/.cache/
