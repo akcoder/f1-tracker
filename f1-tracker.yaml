@@ -28,11 +28,24 @@ esphome:
     # per-frame) but a 22-row order page plus flags, bars, clock and banner
     # comfortably exceeding 32 regions during a race weekend.
     - "-DLV_INV_BUF_SIZE=128"
+    # Decision 116 again, from the other side. ESPHome compiles an LVGL widget
+    # type in only when one appears in the YAML, so lv_image_create does not
+    # link. The trace lines ARE declared in YAML because there are exactly
+    # three of them; the 22 order-row flags cannot be, because C++ creates them
+    # (UI-10a). Where the widget count is fixed, declare it; where widgets are
+    # built dynamically, enable the type here.
+    - "-DLV_USE_IMAGE=1"
   includes:
     - f1-tracker/f1_panel.h
     - f1-tracker/f1_circuits.h     # generated: tools/gen_circuits.py
     - f1-tracker/f1_calendar.h     # generated: tools/gen_calendar.py
+    - f1-tracker/f1_flags.h        # generated: tools/gen_flags.py
     - f1-tracker/f1_map.h
+    - f1-tracker/f1_state.h
+    - f1-tracker/f1_watch.h
+    - f1-tracker/f1_json.h
+    - f1-tracker/f1_order.h
+    - f1-tracker/f1_net.h
     - f1-tracker/f1_carousel.h
     - f1-tracker/f1_ui.h
   on_boot:
@@ -62,6 +75,7 @@ esphome:
             w.body    = id(card_body);
             w.font_small = id(mono12)->get_lv_font();
             f1::ui::setup(w, id(carousel_secs).state, id(carousel_content).active_index().value_or(0));
+            f1::order::setup(id(order_rows), id(order_hdr), id(mono12)->get_lv_font());
 
 esp32:
   board: esp32-s3-devkitc-1
