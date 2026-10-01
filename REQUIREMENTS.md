@@ -2393,6 +2393,12 @@ exists.
 | 109 | **ESPHome `select` options are compile-time**, so the watched-driver list (§6.14.1) **cannot** be populated from a live entry list. It is generated from the **compiled driver table** at M2 instead, which means a driver who joins after the build is not selectable until the next one — consistent with RACE-13e | 2026-10-01 | constrains 87 |
 | 110 | **`web_server` OTA is declared explicitly** rather than left implicit, so its plaintext `/update` endpoint is a deliberate choice; `auth: type: digest` gates it, ahead of ESPHome's 2027.1.0 default flip | 2026-10-01 | active |
 | 111 | **The GPIO19/20 USB-Serial-JTAG build warning is expected** and is direct confirmation of decision 5: the GT911 owns GPIO19, so the S3's default console would fight it. GPIO45 is a strapping pin, known-good because `sky-tracker` drives this panel on these exact pins in production | 2026-10-01 | confirms 5 |
+| 112 | **M1 is built.** Both generators, the carousel, the LVGL trace drawing, and **1823 host tests, 0 failures**. Image 1.52 → **1.55 MB (20.0 %)**, RAM 35.0 → **35.6 %**. The 40 traces cost exactly the predicted **19,176 B** | 2026-10-01 | **done** |
+| 113 | **MAP-2a: known-distinct neighbouring venues are excluded by name, not by threshold.** `zeltweg` false-matched the Red Bull Ring at 2.4 km while `kyalami` is a true match at 1.3 km, so no distance cut separates them. The generator carries an `EXCLUDE` set with a reason per row | 2026-10-01 | refines 23 |
+| 114 | **No circuit is north-up.** Closest is Istanbul at 4.75°, spread to 168.5° (Monaco), so MAP-3's north arrow is **permanent furniture**, not an occasional cue, and should be designed into the card. A 2° snap is applied defensively | 2026-10-01 | refines 24 |
+| 115 | **The GeoJSON traces do not repeat the first point**, so the device must close the lap explicitly or every circuit shows a visible gap at the start/finish line. `closed` is generated per trace; all 40 are closed laps | 2026-10-01 | active |
+| 116 | **LVGL's line widget is compiled out unless a `line:` appears in the YAML**, so `lv_line_create` does not link. The trace, tick and north arrow are **declared in YAML** and C++ only swaps their point arrays — better practice anyway: LVGL owns parentage and styling, we own geometry | 2026-10-01 | active |
+| 117 | **`tools/preview_circuits.py` renders the GENERATED header**, not the source GeoJSON, through the same `fit_box()` arithmetic the device uses. It verifies MAP-3/MAP-5 without hardware: a wrong rotation, a squashed aspect or a trace escaping its box is visible immediately. All 40 confirmed | 2026-10-01 | active |
 | 90 | **A Sprint is a first-class race day** (RACE-14) — its own grid, result and race page, labelled `SPRINT`. A sprint weekend has two race days. Sprint wins must **not** count toward career win milestones; Jolpica keeps them in a separate endpoint | 2026-10-01 | **decided by owner**, closes open question 6 |
 | 91 | **Portraits are 240×320**, not 150×200. The brief asked to show the picture; at 480 px wide, 150×200 reads as a thumbnail. Budget restated against the **app slot** (~6.5–7.8 MB), not total flash: portraits are 25–30 % of one slot | 2026-10-01 | **delegated**, answers open question 13 |
 | 92 | **Alerts are loud** (§6.14.3): full-width banner for events, brief full-screen takeover for milestones. Safe here specifically because **nothing underneath is changing** — no live timing (58) — which is not a general licence. Nothing ever requires dismissing; a tap only dismisses early. An `Alert style: loud/quiet` setting ships with loud as the default | 2026-10-01 | **decided by owner**, closes open question 12 |
@@ -2526,16 +2532,28 @@ project's real risk.
    - [x] **`deploy.sh`** with the warnings-are-errors gate (decision 108)
    - [x] **Stop there.** Flashing, and everything that depends on seeing the
          panel, is §14.1
-2. **M1 — Circuit data and the carousel**
-   - [ ] `tools/gen_circuits.py` → `f1_circuits.h` (all 40, pre-projected,
-         pre-fitted, with the `circuitId` cross-reference)
-   - [ ] `tools/gen_calendar.py` → `f1_calendar.h`
-   - [ ] Host tests: circuit matching, projection, fit, non-degenerate geometry
-   - [ ] `circuit_page` drawing a trace with `lv_line`, north arrow,
-         start/finish tick
-   - [ ] Carousel timing, order and fade; **working with no network**
-   - [ ] Three-type interleave (UI-20a) and the type badge (UI-20b) — the
-         driver and legend cards fill in at M2, the rotation lands here
+2. **M1 — Circuit data and the carousel — DONE 2026-10-01**
+   - [x] `tools/gen_circuits.py` → `f1_circuits.h`: all 40 traces, projected
+         with `cos(lat₀)`, rotated for best fill, normalised to `int16`, with a
+         41-row `circuitId` cross-reference. **19,176 B of point data — exactly
+         the §5.2 prediction.** Fails the build on an unmatched calendar
+         circuit or degenerate geometry
+   - [x] `tools/gen_calendar.py` → `f1_calendar.h`: season from `/current/` at
+         build time, **never pinned** (decision 94); session starts as UTC
+         epochs; circuit country → ISO3; CC BY-NC-SA notice emitted (decision 55)
+   - [x] `f1_map.h` and `f1_carousel.h` — free of LVGL, so they build on the host
+   - [x] **Host tests: 1823 checks, 0 failures** (`make -C tests`) — fit inside
+         four box shapes with aspect preserved and ≥98 % fill, sorted-and-
+         complete id map, every calendar round resolving, the `zeltweg`
+         exclusion, calendar ordering, sprint/FP3 exclusivity, carousel
+         coverage, no-three-in-a-row, every content filter, empty lists, and the
+         restored-interval clamp
+   - [x] `circuit_page` drawing the trace, start/finish tick and north arrow;
+         carousel timing, fade, content filter and hold-to-pause
+   - [x] `tools/preview_circuits.py` — **all 40 traces verified by render**
+         (decision 117)
+   - [ ] Driver and legend cards fill in at M2; the rotation already handles
+         empty lists, which is the state the device ships in today
    - *This milestone is deliberately first: it is the state the device spends
      most of the year in, it needs no live data, and it proves the map
      rendering that everything else depends on.*
@@ -2614,6 +2632,7 @@ Not forgotten — **blocked**. Collected here so the backlog stays honest.
 | `min_power` — the lowest still-visible duty | panel-specific; 0.10 is `sky-tracker`'s value | §2.4.7 |
 | **Does 30 kHz actually stop the backlight whine?** | audible, not measurable in software | §2.4.7, decision 4 |
 | Confirm the 18 px row height in LVGL | **answered by render** (decision 88); LVGL metrics are not PIL's, and 1 px of padding is thin | §6.3.1 |
+| Confirm the circuit traces on the panel | **verified by render** (decision 117); this confirms LVGL's line rasteriser agrees with PIL's | §6.5 |
 | Confirm 240×320 portraits read well on the panel | settled at 240×320 (decision 91); this is confirmation only | §5.6.3 |
 | Where the LVGL buffer landed (internal RAM or PSRAM) | logged at boot | §2.4.3 |
 | Free internal RAM / PSRAM with everything enabled | the real budget (§9) | §9 |
