@@ -3,8 +3,8 @@
 **Target hardware:** Guition ESP32-4848S040 (ESP32-S3, 4.0" 480×480 IPS)
 **Framework:** ESPHome (ESP-IDF)
 **Status:** Draft rev 2 — living document, updated as decisions are made
-**Last updated:** 2026-10-01 (rev 3: **free data tiers only** — no paid
-subscription, §3.6.1. Live timing is out of scope; the brief is unaffected)
+**Last updated:** 2026-10-01 (rev 4: watched-driver alerts §6.14, driver and
+legend profiles §5.6, mixed carousel §6.4, licensing accepted §3.8)
 
 ---
 
@@ -15,8 +15,14 @@ A wall/desk-mounted 480×480 touchscreen that renders the Formula 1 season.
 On a **race day** it shows the circuit map for that weekend's track and the
 drivers in starting order, each with the flag of their nationality, under a
 header carrying the circuit's country flag. On a **non-race day** it rotates
-through the circuit map of every track on the calendar, 15–120 s each, with
-facts about the circuit on screen.
+through **three kinds of card** — the circuit map of every track on the
+calendar, a profile of every current driver, and a profile of an F1 legend —
+15–120 s each, with facts, photographs and career records (§6.4).
+
+**One driver is watched.** The device ships watching **Max Verstappen** and
+raises an alert when he is racing, when his grid slot is known, when his result
+lands, and when he passes a career milestone (§6.14). The watched driver is a
+setting, so it is a mechanism rather than a hard-coded name.
 
 This is the **third board** in the same family, after `sky-tracker` (installed,
 rev 4) and `plane-tracker` (in bring-up). It uses the **same hardware and the
@@ -322,8 +328,11 @@ change. Nothing else is needed from it when no session is live.
 | `Circuit.Location.country` | **authoritative** for the circuit flag (§6.6) |
 | `Circuit.Location.locality` | facts line |
 | `Circuit.Location.lat` / `long` | centroid match to the vendored trace at build time only — **not used at runtime** |
-| `Driver.driverId`, `code`, `givenName`, `familyName` | driver list; `code` is the 3-letter acronym |
-| `Driver.permanentNumber` | car number |
+| `Driver.driverId` | **the only stable driver key** — see §3.4 |
+| `Driver.code`, `givenName`, `familyName` | driver list; `code` is the 3-letter acronym |
+| `Driver.permanentNumber` | car number. **Reassigned between seasons** — never a key (§3.4) |
+| `Driver.dateOfBirth` | age on the profile card (§5.6) |
+| `Driver.url` | Wikipedia page — the **photo lookup key** at build time (§5.6.3) |
 | `Driver.nationality` | demonym → ISO3 → driver flag (§6.6). **Often absent** — see §3.4 |
 | `QualifyingResults[].position`, `Driver`, `Constructor`, `Q1`/`Q2`/`Q3` | provisional starting order (§3.5) |
 | `Results[].position`, `grid`, `status`, `Time` | finishing order and actual grid, post-race |
@@ -384,6 +393,41 @@ Each of these was **observed in the live data on 2026-10-01** and will occur.
 - [ ] **OpenF1 `position` is event-driven**, so a driver who never changes
       position after the start has exactly one row. Absence of recent rows
       means "unchanged", **not** "missing" (§3.5).
+- [ ] **DATA-6: car numbers are reassigned between seasons, so they are not an
+      identity.** Measured in the 2026 data: **Lando Norris carries `1`**
+      (reigning champion) and **Max Verstappen carries `3`** — not the `1` he
+      held as champion, nor his permanent `33`. A watched-driver feature keyed
+      on car number (§6.14) would silently follow whoever holds that number
+      into the next season. **Key on `driverId`** (`"max_verstappen"`), which
+      is stable for the life of the dataset, and resolve the per-session OpenF1
+      `driver_number` through the 3-letter acronym when a live row must be
+      matched.
+- [ ] **DATA-7: `permanentNumber` and `code` are absent for historical
+      drivers.** Measured: Ayrton Senna's row carries only `driverId`, `url`,
+      `givenName`, `familyName`, `dateOfBirth` and `nationality` — no number
+      and no acronym. Legend cards (§5.6) must render without either.
+- [ ] **DATA-8: pole counts from the API are wrong for anyone who raced before
+      1994**, because Ergast-lineage qualifying data starts there. Measured
+      against known career totals:
+
+  | Driver | API poles | Actual | Verdict |
+  |---|---|---|---|
+  | Verstappen | 65 | 65 | correct (post-1994 career) |
+  | Hamilton | 118 | 118 | correct |
+  | M. Schumacher | 36 | 68 | **partial** — 1994 onward only |
+  | Senna | **3** | 65 | **badly wrong** |
+  | Prost | **0** | 33 | **badly wrong** |
+  | Clark | **0** | 33 | **badly wrong** |
+  | Fangio | **0** | 29 | **badly wrong** |
+
+      A legends card reading *"Alain Prost — 0 poles"* is the single most
+      embarrassing thing this device could display. **Hand-curate poles for
+      every driver whose career began before 1994, or omit the line entirely
+      for them** (§5.6.2).
+- [ ] **Wins and starts are correct across every era** — verified against known
+      totals for Fangio (24/51), Clark (25/72), Senna (41/162), Prost (51/202),
+      Schumacher (91/308), Hamilton (106/395) and Verstappen (71/248). Results
+      data runs from 1950, so only qualifying is affected by DATA-8.
 - [ ] Treat an empty or unparseable body as a **failed poll**: keep the
       existing state, do not clear it, retry on the next cycle.
 
@@ -626,6 +670,32 @@ Both datasets are **CC BY-NC-SA 4.0**, which has three live terms for us.
       RACE-12). Three failure states that look similar and mean different
       things is exactly the trap §6.12 exists to avoid.
 
+### 3.8 Licensing posture — accepted by the owner 2026-10-01
+**The project owner accepts the licensing terms of every source used here.**
+This is a personal, non-commercial, single-device project, which is the use all
+three licences contemplate.
+
+| Source | Licence | What acceptance commits us to |
+|---|---|---|
+| Jolpica | CC BY-NC-SA 4.0 | attribute; non-commercial; SA on the generated data (§3.7.3) |
+| OpenF1 | CC BY-NC-SA 4.0 | attribute; non-commercial |
+| `f1-circuits` | MIT | retain the notice |
+| flag-icons | MIT | retain the notice |
+| Commons photographs | mostly CC BY-SA / CC BY | **credit the photographer on the card** (§5.6.3) |
+
+- [ ] Acceptance is **recorded, not assumed**: every obligation above is a
+      checkbox elsewhere in this document, and the build fails on an
+      unattributable photograph (§5.6.3).
+- [ ] **One thing acceptance cannot do**, stated plainly so it is not
+      rediscovered: F1's own media CDN (`media.formula1.com`, OpenF1's
+      `headshot_url`) carries **no public licence to accept**. That is why
+      §5.6.3 sources portraits from Commons instead — not caution, but the
+      availability of actual terms to comply with.
+- [ ] If this project is ever published, shared as a kit, or sold, **NC makes
+      that a different question** and both data sources must be contacted.
+      Recorded in §3.7.3 as well, because it is the obligation most easily
+      forgotten years later.
+
 #### 3.7.5 Trademarks
 - [ ] `F1`, `FORMULA 1`, `FORMULA ONE`, `FIA FORMULA ONE WORLD CHAMPIONSHIP`,
       `GRAND PRIX` and the team names are trademarks of Formula One Licensing
@@ -837,6 +907,111 @@ country, locality, and the round's date.
 
 ---
 
+## 5.6 Driver and legend profiles (DATA-9)
+
+The carousel shows a profile card for every current driver and for a curated
+set of F1 legends (§6.4). Everything on those cards is **generated offline and
+compiled in** — the device fetches no profile data and no photographs at
+runtime.
+
+### 5.6.1 Why this is a build-time job
+- The data is **static for a season** (a career record changes 23 times a year),
+  so fetching it is waste.
+- The counts are **expensive to derive but cheap to store**: a career win total
+  needs a query per driver, and arrives as a 3-byte number.
+- It keeps the carousel working with **no network at all** (§4.3), which is the
+  state the device spends most of the year in.
+- Photographs cannot be fetched per card anyway — see §5.6.3.
+
+### 5.6.2 Career statistics — generated, with one hand-curated field
+**Measured: `MRData.total` with `limit=1` returns a career count in a tiny
+response.** This is the whole technique:
+
+| Statistic | Query | Verified |
+|---|---|---|
+| Career wins | `/drivers/{id}/results/1/?limit=1` → `total` | ✅ all eras |
+| Race starts | `/drivers/{id}/races/?limit=1` → `total` | ✅ all eras |
+| Poles | `/drivers/{id}/qualifying/1/?limit=1` → `total` | ❌ **1994 onward only** (DATA-8) |
+| Podiums | three queries, positions 1–3 | ✅ all eras |
+| Championships | iterate `/{season}/driverStandings/1/` for 1950–2026 and collect the winner | ✅ ~77 small requests, once |
+| Seasons, teams, first/last race | `/drivers/{id}/results/?limit=1` + `offset` | ✅ |
+
+- [ ] `tools/gen_drivers.py` emits `f1-tracker/f1_drivers.h` and
+      `f1_legends.h`. **Rate-limit the generator to well inside 4 req/s and
+      500 req/hour** (§3.7.1) and **cache every response on disk**, so a rerun
+      costs nothing. A generator that hammers a volunteer-run service is the
+      easiest way to get this project's IP blocked.
+- [ ] **Poles are hand-curated for every pre-1994 driver** (DATA-8), entered
+      with a `// source:` comment per value as §5.5 does for circuit facts.
+      The generator must **refuse to emit an API pole count for a driver whose
+      first season precedes 1994** — a build-time guard, not a convention,
+      because this is the one field that will otherwise be silently wrong.
+- [ ] Assert at build time that every curated driver has **non-zero wins or a
+      recorded reason for zero**. A legend with 0 wins is possible (Chris Amon)
+      but should be deliberate, not a failed lookup.
+- [ ] Legend cards also carry a **short curated line on why they matter** — one
+      or two sentences, in the shape of `sky_lore.h`'s constellation cards,
+      which is the right precedent in this family for exactly this kind of
+      prose.
+
+### 5.6.3 Photographs
+- [ ] **Source: Wikimedia Commons, baked into the firmware at build time.**
+      `sky_photos.h` already does precisely this for the planet images —
+      fetched once, scaled to display size, stored as baseline JPEG, with
+      per-image credits in the header comment. Follow that pattern exactly.
+- [ ] **Coverage checked 2026-10-01: every current driver and every proposed
+      legend has a page image on their English Wikipedia article.** The
+      per-image licence was not resolved during this survey — a batched query
+      returned **HTTP 429**, and per §3.7.4 a 4xx is not retried tightly. The
+      generator resolves it properly (next item).
+- [ ] **The generator records the licence and the photographer for every image**
+      via the Commons `imageinfo` API (`extmetadata.LicenseShortName`,
+      `extmetadata.Artist`), writes both into the generated header, and
+      **fails the build on an image it cannot attribute.** Most Commons F1
+      photography is CC BY-SA or CC BY, both of which require credit.
+- [ ] **Display the photographer's credit on the card**, small. This is the
+      same requirement `plane-tracker` records for aircraft photos (its §5.12),
+      and here it is mandatory rather than courteous.
+- [ ] **Batch and rate-limit the Commons queries**, one request for many
+      titles. The 429 above was earned by a per-driver loop; the API accepts
+      `titles=A|B|C` and should be used that way.
+- [ ] **Do not use OpenF1's `headshot_url`.** Measured, it points at
+      `media.formula1.com/.../d_driver_fallback_image.png/...` — F1's own media
+      CDN, carrying no public licence, and the path is a fallback transform
+      that may not even resolve to a real portrait. Commons has an actual
+      licence we can comply with; this does not.
+- [ ] Target **~150×200 px** per portrait, stored as baseline JPEG and decoded
+      with the copied `sky_jpg.h` on display. At one card per 15–120 s a decode
+      per card is free.
+- [ ] **Flash budget, to be measured by the generator and capped:** 22 drivers
+      + ~32 legends ≈ 54 portraits. At 15–25 KB each that is **0.8–1.4 MB** —
+      comfortable against 16 MB, but **4–5× every other asset in this project
+      combined** (§9). The generator reports the total and **fails above
+      2 MB**, so the budget cannot drift unnoticed.
+
+### 5.6.4 Who counts as a legend
+Taste, not data — so this is **a proposed list for the owner to edit**, not a
+decision. Criteria recorded so additions are consistent: **every multiple World
+Champion**, plus **single champions of lasting significance**, plus **great
+drivers who never won a title**.
+
+| Group | Drivers |
+|---|---|
+| Multiple champions | Fangio, Ascari, Brabham, Clark, Stewart, Lauda, Prost, Senna, M. Schumacher, Alonso, Hamilton, Vettel, Verstappen, Fittipaldi, Piquet, Hakkinen, Graham Hill, Jack Brabham |
+| Single champions of note | Hunt, Mansell, Rindt, Villeneuve (Jacques), Damon Hill, Hawthorn, Surtees, Rosberg (Nico) |
+| Never champion | Moss, Gilles Villeneuve, Amon, Ickx, Peterson, Barrichello |
+
+- [ ] Verstappen appears in both the **current drivers** and the **legends**
+      set. Show him once — the current-driver card wins, and his legend-tier
+      record appears on it.
+- [ ] Alonso and Hamilton are the same case if either is still racing in 2026.
+      **Resolve by `driverId` against the current entry list at build time**,
+      not by hand, so the overlap cannot drift.
+- [ ] Keep the list in **one editable table** with the group recorded per row,
+      so the carousel can weight or filter by group later.
+
+---
+
 ## 6. Display
 
 ### 6.1 Pages
@@ -993,16 +1168,59 @@ current.
 - [ ] A **retirement** keeps its row, greyed, with the status word (`DNF`,
       `ACCIDENT`, `+1 LAP`) rather than vanishing.
 
-### 6.4 Circuit Carousel — the non-race-day page (UI-20)
-The default screen for most of the year.
+### 6.4 The Carousel — the non-race-day page (UI-20)
+The default screen for most of the year. **Three card types, one rotation:**
+circuits, current drivers and legends.
 
-- [ ] Rotate through the circuits, **one at a time**, advancing on a timer.
-      **Interval is a setting: 15–120 s, step 15, default 45 s** — the brief
-      asked for 30 s to 1 minute, and the range brackets it.
-- [ ] Each card shows: the **map** (large, §6.5), the **circuit name**, the
+- [ ] Rotate **one card at a time**, advancing on a timer. **Interval is a
+      setting: 15–120 s, step 15, default 45 s** — the brief asked for 30 s to
+      1 minute, and the range brackets it.
+- [ ] **UI-20a: card types are interleaved deterministically, not shuffled.**
+      With 40 circuits, 22 drivers and ~32 legends, a random draw clusters —
+      three legends in a row, then eleven circuits. Walk the three lists in
+      parallel on a fixed pattern (**circuit → driver → circuit → legend**,
+      repeating), so each type appears at a predictable rhythm and every card
+      is reached. Each list advances its own cursor, so the lists need not be
+      the same length.
+- [ ] **Setting: `Carousel content`** — `all` (default) / `circuits only` /
+      `drivers only` / `legends only` / `circuits + drivers`. The brief asked
+      for circuits *and* drivers *and* legends, so `all` ships as the default;
+      the filters exist because a season tracker someone uses daily should be
+      tunable.
+- [ ] **Circuit card:** the **map** (large, §6.5), the **circuit name**, the
       **country flag** and country, the locality, and **the facts** (§5.5).
-- [ ] **Order is calendar order**, and in `RACE_WEEK` the cycle **starts at the
-      next round** so the upcoming circuit is the first thing seen.
+- [ ] **Driver card:** the **portrait** (§5.6.3), full name, **nationality
+      flag**, car number, team, age from `dateOfBirth`, and the career record —
+      starts, wins, poles, podiums, championships (§5.6.2). Plus the
+      **current season**: championship position and points, which is the only
+      part a live fetch improves (free, no window — Jolpica standings).
+- [ ] **Legend card:** the **portrait**, full name, **nationality flag**, the
+      **era** (`1984–1994`), the career record, championships with the years,
+      and the **curated line on why they matter** (§5.6.2).
+- [ ] **Legend cards must render with no car number and no acronym** — DATA-7,
+      measured absent for historical drivers.
+- [ ] **Omit the poles line entirely for pre-1994 drivers** unless a curated
+      value exists (DATA-8). A blank is correct; a zero is a lie.
+- [ ] **Photographer credit on every card carrying a photograph** (§5.6.3),
+      small, bottom of the card.
+- [ ] **UI-20b: the three card types must be instantly distinguishable** — a
+      glance should never leave a reader unsure whether they are looking at a
+      circuit or a person. Use a consistent **type badge** in the same corner
+      on all three (`CIRCUIT` / `DRIVER` / `LEGEND`) rather than relying on
+      layout alone, because a portrait and a map already differ so much that
+      the *layout* carries no signal when the card changes.
+- [ ] **Circuit order is calendar order**, and in `RACE_WEEK` the cycle
+      **starts at the next round** so the upcoming circuit is the first thing
+      seen. Driver order is championship order; legend order is the curated
+      table's order.
+- [ ] **UI-20c: in `RACE_WEEK`, bias the driver cards toward this weekend's
+      entry list** and the circuit cards toward the next round. The carousel
+      should feel like it knows what is coming up.
+- [ ] **UI-20d: cross-link the watched driver into the circuit cards.** The
+      facts table is generated offline (§5.5) and already aggregates per-circuit
+      winners, so *"Verstappen has won here 3 times"* costs nothing and ties
+      the two features together. Omit the line where he has never won there
+      rather than printing a zero.
 - [ ] **Mark the next round** on its card (`NEXT · R14 · Mar 8`) and mark
       circuits not on the current calendar (`not on the 2026 calendar`). Both
       matter: the set ships all 40 (§5.2), so without the second label the
@@ -1265,6 +1483,82 @@ This is why the device stores a position at all.
 
 ---
 
+### 6.14 The watched driver (UI-50)
+The device watches one driver and says so. It ships watching **Max
+Verstappen**, and the mechanism is generic so the name is a setting rather than
+a constant.
+
+#### 6.14.1 Identity — key on `driverId`, never the car number
+**Measured 2026-10-01, and this is the trap:** Verstappen's 2026 row is
+`driverId: "max_verstappen"`, `code: "VER"`, `permanentNumber: "3"`. He does
+**not** hold `1` (Norris does, as reigning champion) and he does not hold his
+permanent `33`.
+
+- [ ] **The watched driver is stored as a `driverId`.** A number-keyed watch
+      would have followed Norris in 2026 and someone else in 2027 — a bug that
+      produces plausible, confidently wrong output (DATA-6).
+- [ ] Resolve to a live `driver_number` only where an OpenF1 row must be
+      matched, and do it through the acronym for that session.
+- [ ] Default `max_verstappen`, settable from a `select` populated from the
+      **current entry list** (§7), so it cannot be set to a driver who is not
+      racing.
+
+#### 6.14.2 What "driving" means on a free tier
+The device cannot see cars on track (§3.6.1). It **can** know, to the second,
+that a session is under way and that the watched driver is entered in it —
+both from the calendar and the entry list, neither of which has a live window.
+That is enough for a truthful alert, and it is the whole reason this feature
+works at all under decision 58.
+
+| Trigger | Alert | Source |
+|---|---|---|
+| Race day, he is entered | `MAX IS RACING TODAY` | calendar + entry list |
+| Any session window open | `MAX IS ON TRACK — QUALIFYING` | calendar |
+| Grid known | `MAX STARTS P3` | Jolpica qualifying |
+| Window closed, result in | `MAX WINS` / `MAX FINISHES P4` / `MAX RETIRES — GEARBOX` | Jolpica results |
+| Career milestone | `MAX — 72ND WIN` / `250TH START` | generated totals + this result |
+| Championship | `MAX IS WORLD CHAMPION` | standings |
+
+- [ ] **UI-50a: never say he is on track when only the clock says so and the
+      session was cancelled.** `is_cancelled` is in the OpenF1 session data
+      (§3.3) and a cancelled session must suppress the alert.
+- [ ] **A withdrawal is not a result.** If he is in the entry list but absent
+      from the classification, say nothing rather than inventing a DNF.
+
+#### 6.14.3 Alert design — the rules matter more than the list
+`plane-tracker`'s §5.13 established the house rules for anything that
+interrupts, and they apply directly:
+
+- [ ] **Never cover the instrument.** The alert is a **strip**, not a modal,
+      and **nothing ever needs dismissing**. The circuit map, the order list and
+      the carousel keep working underneath.
+- [ ] **Rare beats frequent.** An alert on every poll becomes wallpaper within
+      a week. Three tiers, with hard rules:
+
+  | Tier | Fires | Behaviour |
+  |---|---|---|
+  | **Ambient** | whenever he is in the current context | a small persistent marker — his flag and `VER` in the header, his row highlighted on the order page. **Not an alert at all** |
+  | **Event** | session start, grid set, result | the strip, for ~20 s, then it collapses into the ambient marker |
+  | **Milestone** | a win, a round-number win/start/pole, a title | the strip, held until the next session, and a **distinct colour** |
+
+- [ ] **Each event fires once.** Latch it against a `(round, session, event)`
+      key held in a `restore_value` global so a reboot mid-weekend does not
+      replay the whole set. This is the most likely bug in the feature.
+- [ ] **Keep the alert text in a data file**, not scattered through the code, so
+      lines can be added over seasons and pushed by OTA. Same rule
+      `plane-tracker` records for its own quiet lines.
+- [ ] **UI-50b: the ambient marker is the feature most of the time**, and it is
+      the one worth polishing. His row highlighted on the order page and his
+      flag in the header is what a glance actually wants; the strip is for the
+      handful of moments that deserve one.
+- [ ] **Promoted from §8.2.** This was listed as the optional "favourite
+      driver" idea. It is now a requirement, and the §8.2 entry is retired.
+- [ ] A **`Watched driver alerts` checkbox**, default on, and a separate
+      **`Milestone alerts only`** option for someone who wants the rare tier
+      without the per-session one. Offering the choice costs one switch.
+
+---
+
 ## 7. Settings screen (UI-16)
 
 Opened via the **gear icon in the lower-right** of the primary page: 46×46 at
@@ -1281,6 +1575,10 @@ and `on_long_press` opens the debug page. Ported from `sky-tracker` exactly.
 | Clock format | dropdown | 24 h local / 12 h local / UTC-Zulu |
 | Carousel interval | slider | 15–120 s, step 15, default **45** |
 | Carousel order | dropdown | calendar / random / current season only |
+| Carousel content | dropdown | all (default) / circuits / drivers / legends / circuits + drivers (§6.4) |
+| Watched driver | dropdown | from the current entry list, default **Max Verstappen** (§6.14) |
+| Watched driver alerts | checkbox | default **on** |
+| Milestone alerts only | checkbox | default off — the rare tier without the per-session one |
 | Show practice sessions | checkbox | treat FP as a session worth a page |
 | Show sprint sessions | checkbox | — |
 | Order columns | dropdown | with team / with gap / with tyre |
@@ -1329,6 +1627,10 @@ touchscreen, the device's own **web UI**, and **Home Assistant**.
 | Clock format | `select` (24 h / 12 h / Zulu) |
 | Carousel interval | `number` (15–120, step 15, slider) |
 | Carousel order | `select` |
+| Carousel content | `select` |
+| Watched driver | `select` (populated from the entry list) |
+| Watched driver alerts | `switch` |
+| Milestone alerts only | `switch` |
 | Show practice / sprint | two `switch` |
 | Order columns | `select` |
 | Force page | `select` (not restored) |
@@ -1357,6 +1659,11 @@ Cheap, and they make the device debuggable without a serial cable.
 - [ ] **Order mode** — `ENTRY LIST` / `GRID (PROVISIONAL)` / `GRID` / `FINAL`
       (§6.3), and **when the next OpenF1 window closes**, which is the next
       moment anything will change.
+- [ ] **Watched driver** — resolved `driverId`, whether he is in the current
+      entry list, and which alerts have latched this weekend (§6.14.3). The
+      latch set is the first thing to look at when an alert does or does not
+      fire.
+- [ ] **Carousel** — current card type and index, and the counts of each type.
 - [ ] Next round, next session, and the countdown to it.
 - [ ] Calendar source and age (`compiled` / `fetched, 3 h`).
 - [ ] Last successful Jolpica poll, last successful OpenF1 poll — separately.
@@ -1427,9 +1734,10 @@ turns out to be the most interesting consequence of the free-only decision.
 - [ ] **Fastest-lap highlight** on the `FINAL` order — mark who set it and the
       time. Free after the window, and Jolpica's `fastest` endpoint (1.2 KB)
       gives it directly without touching `laps` at all.
-- [ ] **Favourite driver / team.** A setting that pins one row to the top of
-      the order page and shows their gap in the header. This is the single
-      feature most likely to make the device feel personal.
+- [ ] ~~**Favourite driver / team.**~~ **Promoted to a requirement** — §6.14,
+      the watched driver, shipping as Max Verstappen. A **favourite *team***
+      remains open as a smaller version of the same idea: tint the two rows and
+      show the constructors' position in the header.
 - [ ] **A Home Assistant race-start notification.** The device already knows
       the schedule precisely; exposing a binary sensor for "session live" lets
       HA do the rest (lights, a TV, an announcement) with no extra code here.
@@ -1505,10 +1813,17 @@ it — which suits a device watched all week rather than only on Sunday.
       **one-shot task on core 1**, refuse to draw until a `g_ready` flag, and
       set image sources on first use rather than at creation.
 - [ ] **Flash budget**, estimated from measurements:
-      traces 19.2 KB · flags ~150 KB · calendar ~8 KB · facts ~20 KB ·
-      fonts (5 sizes, extended glyph set, 4 bpp) ~80 KB. Call it **~280 KB** of
-      assets. Trivial against 16 MB, and the default partition table (§2.4.5)
-      leaves two large app slots.
+      traces 19.2 KB · flags ~150 KB · calendar ~8 KB · circuit facts ~20 KB ·
+      driver + legend profiles ~30 KB · fonts (5 sizes, extended glyph set,
+      4 bpp) ~80 KB — about **310 KB** — **plus ~54 portraits at 15–25 KB =
+      0.8–1.4 MB** (§5.6.3).
+- [ ] **The portraits are now the dominant asset, 4–5× everything else
+      combined.** Still trivial against 16 MB with the default partition table
+      (§2.4.5), but it is the one asset that can grow without anyone noticing,
+      so **the generator reports the total and fails above 2 MB** (§5.6.3).
+- [ ] A portrait decode is one JPEG per card, i.e. once per 15–120 s. Free.
+      But **decode into a reused buffer**, not a fresh allocation per card — 54
+      cards cycling for weeks is exactly where a slow leak shows up.
 - [ ] **RAM is the real budget**, as in both siblings: 460 KB framebuffer +
       57.6 KB LVGL buffer + TLS buffers for **two** hosts + `web_server`.
       Measure free internal RAM and PSRAM with everything enabled, and log it
@@ -1655,6 +1970,22 @@ exists.
 | 64 | **Live features move to post-session form rather than being dropped**: track status, tyres, weather, fastest lap and lap traces are all free once the window closes, and a post-session summary page recovers most of what live timing would have given | 2026-10-01 | active |
 | 65 | **No authentication anywhere.** Both free tiers are unauthenticated, so neither source puts anything in `secrets.yaml` | 2026-10-01 | active |
 | 66 | **Peak request rate is 18/hour** (`POST_SESSION`), against Jolpica's 500/hour. There is no demanding case left in this design | 2026-10-01 | active |
+| 67 | **All licensing terms accepted by the owner** (§3.8) — personal, non-commercial, single device. Every obligation is a checkbox elsewhere in this document rather than a general assurance | 2026-10-01 | **decided by owner** |
+| 68 | **The carousel carries three card types**: circuits, current drivers and legends, interleaved deterministically (circuit → driver → circuit → legend), filterable by a `Carousel content` setting, default `all` | 2026-10-01 | active |
+| 69 | **Driver and legend profiles are generated offline and compiled in** — career records, portraits and prose. The device fetches no profile data at runtime, so the carousel works with no network | 2026-10-01 | active |
+| 70 | **Career counts come from `MRData.total` with `limit=1`** — a career win total in a tiny response. The technique that makes §5.6.2 cheap | 2026-10-01 | active |
+| 71 | **DATA-8: API pole counts are hand-curated for pre-1994 drivers, or omitted.** Measured: Prost 0, Fangio 0, Clark 0, Senna 3 against actuals of 33/29/33/65. The generator **refuses** to emit an API pole count for a pre-1994 career — a build guard, because a blank is correct and a zero is a lie | 2026-10-01 | active |
+| 72 | **Portraits come from Wikimedia Commons, baked in, with the photographer credited on the card.** The generator records licence and artist and **fails the build on an unattributable image** | 2026-10-01 | active |
+| 73 | **OpenF1's `headshot_url` is not used.** It points at F1's own media CDN with no public licence, via a fallback transform that may not resolve. Commons has terms we can actually comply with | 2026-10-01 | active |
+| 74 | **Portraits are the dominant flash asset** (0.8–1.4 MB vs ~310 KB for everything else). The generator reports the total and fails above 2 MB | 2026-10-01 | active |
+| 75 | **The legends list is taste, not data** — proposed in §5.6.4 for the owner to edit, with the selection criteria recorded so additions stay consistent | 2026-10-01 | **needs owner input** |
+| 76 | **One driver is watched; the device ships watching Max Verstappen**, and the watched driver is a setting so it is a mechanism rather than a constant | 2026-10-01 | **decided by owner** |
+| 77 | **DATA-6: the watched driver is keyed on `driverId`, never the car number.** Measured: Norris holds `1` in 2026 and Verstappen holds `3`, not `1` and not his permanent `33`. A number-keyed watch would silently follow whoever holds the number next season | 2026-10-01 | active |
+| 78 | **"Driving" is derived from the calendar and the entry list**, not from live track data — both are free of OpenF1's live window, which is what makes the alert work at all under 58 | 2026-10-01 | active |
+| 79 | **Alerts are a strip, never a modal, and nothing ever needs dismissing.** Three tiers: ambient marker (always), event (~20 s, then collapses), milestone (held, distinct colour). `plane-tracker`'s §5.13 rules | 2026-10-01 | active |
+| 80 | **Each alert event latches once** against a `(round, session, event)` key in a `restore_value` global, so a mid-weekend reboot does not replay the set. The most likely bug in the feature | 2026-10-01 | active |
+| 81 | **The ambient marker is the feature most of the time** — his flag in the header and his row highlighted — and is the part worth polishing. The strip is for the few moments that deserve one | 2026-10-01 | active |
+| 82 | A **cancelled session suppresses the "on track" alert** (`is_cancelled`), and a **withdrawal is never reported as a DNF** | 2026-10-01 | active |
 
 ---
 
@@ -1696,12 +2027,25 @@ exists.
    response is NET-14 (§3.6.1), the cost is stated in §3.6.2, and the affected
    features are preserved in §8.3 in case it is ever reconsidered. **The
    original brief is unaffected.**
-10. **Is the `POST_SESSION` window-close moment exactly right?** The +30 min
+10. **Which legends?** §5.6.4 proposes ~32 across three groups (multiple
+   champions, notable single champions, great non-champions) with the criteria
+   recorded. **Edit the list freely** — it is the one part of this project that
+   is purely taste. I will build whatever the table says.
+11. **Is the `POST_SESSION` window-close moment exactly right?** The +30 min
    boundary is OpenF1's published definition, but whether their data is
    actually readable at +30:00 or a little later is unmeasured. Decision 60
    makes this transition the race page's one real moment, so **retry rather
    than trusting the boundary** — and measure the true lag after the first
    race the device sees.
+12. **How loud should the watched-driver alerts be?** §6.14.3 sets three tiers
+   and I have defaulted to the quiet end — ambient marker always, event strip
+   for ~20 s, milestone held. If you want it louder (a full-width banner, a
+   colour change across the whole page) or quieter (milestones only), say
+   which; the `Milestone alerts only` switch already covers the quiet case.
+13. **Portrait size and crop.** ~150×200 px is my default, which fits a
+   two-column card beside the career record. A larger portrait (240×320) looks
+   better and roughly doubles the flash. Both are fine; it is an aesthetic
+   call, and it is easier to decide against a real card on hardware at M2.
 
 ### Settled before this draft was written
 | Question | Answer |
@@ -1751,16 +2095,26 @@ exists.
    - [ ] `circuit_page` drawing a trace with `lv_line`, north arrow,
          start/finish tick
    - [ ] Carousel timing, order and fade; **working with no network**
+   - [ ] Three-type interleave (UI-20a) and the type badge (UI-20b) — the
+         driver and legend cards fill in at M2, the rotation lands here
    - *This milestone is deliberately first: it is the state the device spends
      most of the year in, it needs no live data, and it proves the map
      rendering that everything else depends on.*
-3. **M2 — Facts and flags**
+3. **M2 — Facts, flags, profiles and portraits**
    - [ ] `tools/gen_facts.py` — GeoJSON properties, offline Jolpica
          aggregation (lap records, most wins, race counts), curated rows with
          per-value sources
    - [ ] Copy and extend `sky_flags.h`: add `MCO`, `BHR`, `SAU`
    - [ ] Generated demonym→ISO3 table + host test against the driver fixture
    - [ ] Extended font glyph set; `check_glyphs.py` over the generated tables
+   - [ ] `tools/gen_drivers.py` → `f1_drivers.h` + `f1_legends.h`: career
+         counts via `MRData.total`, the 1950–2026 champion sweep, **disk cache
+         and rate limiting**, and the **pre-1994 pole guard** (decision 71)
+   - [ ] `tools/gen_portraits.py` → Commons lookup, batched and rate-limited,
+         licence + photographer recorded, **build fails on an unattributable
+         image**, total reported and capped at 2 MB
+   - [ ] Curated legend prose and the pre-1994 pole values, with sources
+   - [ ] Decide portrait size against a real card on hardware (open question 13)
 4. **M3 — Data path and the state machine**
    - [ ] `f1_net.h`: TLS to both hosts, persistent sessions, selective parse
    - [ ] `f1_state.h`: the state machine, the poll-interval table, retiming
@@ -1781,6 +2135,9 @@ exists.
    - [ ] `RESULTS IN ~mm:ss` countdown (UI-3a) — the only moving element
    - [ ] Attribution footer and the web UI links (§3.7.3)
    - [ ] The two distinct failure states (decision 57)
+   - [ ] **Watched driver** (§6.14): `driverId` resolution, the ambient marker,
+         the three alert tiers, and the **once-only latch** with a host test
+         that replays a reboot mid-weekend (decision 80)
 6. **M5 — Settings and web/HA parity**
    - [ ] Settings page with tabs, staged Save/Cancel, numeric keyboard
    - [ ] Every entity on the web UI and HA, sorted into groups

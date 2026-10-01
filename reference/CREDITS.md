@@ -20,6 +20,33 @@
 - **Additions needed here:** `MCO` (measured as the only gap for the 2026
   season), plus `BHR` and `SAU` for calendar safety
 
+## Driver and legend portraits — Wikimedia Commons
+- **Source:** Wikimedia Commons, via each driver's English Wikipedia page image
+- **Licences:** per image — mostly CC BY-SA or CC BY, both of which **require
+  crediting the photographer**
+- **Coverage checked 2026-10-01:** every current driver and every proposed
+  legend has a page image. Per-image licences are resolved by the generator,
+  not by hand.
+- **`tools/gen_portraits.py` records the licence and the photographer for every
+  image and fails the build on one it cannot attribute.** The credit is
+  displayed on the card (REQUIREMENTS.md §5.6.3).
+- Queries are **batched and rate-limited** — a per-driver loop earned an
+  HTTP 429 during the initial survey.
+- **OpenF1's `headshot_url` is deliberately not used.** It points at
+  `media.formula1.com`, which carries no public licence, through a fallback
+  transform that may not resolve to a real portrait (decision 73).
+
+## Licensing posture
+**All licensing terms are accepted by the project owner.** This is a personal,
+non-commercial, single-device project — the use every licence here
+contemplates. The obligations that acceptance creates are implemented, not
+merely acknowledged: attribution on the device and in the web UI, photographer
+credits on cards, a build that fails on an unattributable image, and
+CC BY-NC-SA 4.0 notices emitted into the Jolpica-derived generated files.
+
+If the project is ever published, shared as a kit or sold, the **NonCommercial**
+term makes that a different question and both data sources must be contacted.
+
 ## Fonts
 - **Roboto Mono** — Apache 2.0, via ESPHome's `gfonts://`
 - **Material Design Icons** — Apache 2.0 (`@mdi/font`), via a `type: web` URL

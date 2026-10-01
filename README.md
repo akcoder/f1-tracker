@@ -6,8 +6,13 @@ ESP32-4848S040 — the same board, font stack and UI cues as `sky-tracker`.
 - **Race day:** the circuit map for the weekend's track, the drivers in
   starting order, a nationality flag per driver and the circuit's country flag
   in the header.
-- **Non-race day:** a carousel through every circuit's map, 15–120 s each, with
-  facts about the circuit.
+- **Non-race day:** a carousel of three card types, 15–120 s each — every
+  circuit's map with facts, a profile of every current driver, and a profile of
+  an F1 legend. Each profile carries a portrait, a nationality flag and the
+  full career record.
+- **One driver is watched.** It ships watching **Max Verstappen** and raises an
+  alert when he is racing, when his grid slot is known, when his result lands,
+  and when he passes a career milestone. The watched driver is a setting.
 - Latitude and longitude are stored for **one purpose only** — computing
   sunrise and sunset so the display can auto-dim (a checkbox setting).
 
@@ -58,6 +63,10 @@ with links in its web UI.
 |---|---|
 | `sky-tracker` (`/Volumes/config/esphome/`) | the installed reference: UI cues, flags, platform config, settings page |
 | `plane-tracker` (`../plane-tracker`) | document style, requirement-ID convention, and 65 decisions already distilled from `sky-tracker` |
+
+Driver and legend portraits come from Wikimedia Commons with the photographer
+credited on each card. All licensing terms are accepted; this is a personal,
+non-commercial, single-device project.
 
 Not affiliated with, endorsed by, or connected to Formula 1. `F1`, `FORMULA 1`
 and `FIA` are trademarks of their respective owners; no logos or wordmarks are
