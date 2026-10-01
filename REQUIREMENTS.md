@@ -3,8 +3,9 @@
 **Target hardware:** Guition ESP32-4848S040 (ESP32-S3, 4.0" 480×480 IPS)
 **Framework:** ESPHome (ESP-IDF)
 **Status:** Draft rev 2 — living document, updated as decisions are made
-**Last updated:** 2026-10-01 (rev 5: red night mode **declined**, legends list
-**settled**, **no hardware yet** — M0 reordered around a host-only track)
+**Last updated:** 2026-10-01 (rev 6: target season **2027**, sprints are race
+days, **louder** alerts, 240×320 portraits, and open question 3 **answered by
+measurement** — §6.3.1)
 
 ---
 
@@ -741,6 +742,22 @@ OFF_SEASON ─> IDLE ─> RACE_WEEK ─> SESSION_SOON ─> SESSION_LIVE ─┐
       the race-day screen on the wrong day for roughly half the calendar.
       **Derive state from the session timestamps, in UTC, never from a local
       date.** This is the single most likely bug in this project.
+- [ ] **RACE-14: a Sprint is a first-class race day** (decision 90). It has its
+      own grid, its own result and its own classification, so it drives the
+      same `RACE_LIVE` → `POST_SESSION` path as the Grand Prix and gets the
+      full race page. The header says **`SPRINT`** so the two are never
+      confused, and a sprint weekend therefore has **two** race days.
+- [ ] Sprint sessions appear as `Sprint` and `SprintQualifying` in the Jolpica
+      round, and **only on sprint weekends** (§3.4) — `ThirdPractice` is absent
+      on those. Drive it off whichever session objects exist.
+- [ ] The watched-driver alerts (§6.14) fire for the Sprint too, which is the
+      main practical consequence: twice the alerts on a sprint weekend. The
+      `Show sprint sessions` setting (§7) gates it for anyone who disagrees.
+- [ ] **Milestone counting must not double-count.** A sprint win is not a Grand
+      Prix win in the career totals, and Jolpica keeps them in separate
+      endpoints (`/sprint/` vs `/results/`). The generated win total (§5.6.2)
+      comes from `/results/` only, so a sprint victory must not fire a
+      "nth win" milestone.
 - [ ] `RACE_LIVE` has no reliable end time in the Jolpica feed (no duration).
       Bound it with **3 h** from the start, and leave it early if OpenF1
       reports the session ended or the classification is final.
@@ -773,6 +790,46 @@ database.
       sky-tracker 4.5.34"), so a later divergence can be diffed rather than
       guessed at. Copy, do not factor a shared library — `plane-tracker`
       decision 31, and the same reasoning applies a third time.
+
+### 4.2.1 Target season: 2027 (RACE-13)
+**Decision 89: the device is built for the 2027 season.** 2026 is test data.
+
+This settles open question 5 by making it moot — the 2026 calendar Jolpica
+serves is provisional and internally odd (23 rounds against 24 circuits, a
+round named *"Bahrain Grand Prix in Malaysia"* at Sepang, §3.4), and none of
+that matters if the device ships into 2027.
+
+**Measured 2026-10-01, and it is the thing to design around:**
+
+| Query | Result |
+|---|---|
+| `/ergast/f1/2027/races/` | `total = 0` — **no 2027 calendar yet** |
+| `/ergast/f1/2027/drivers/` | `total = 0` — **no 2027 entry list yet** |
+| `/ergast/f1/current/` | `total = 23` — `current` still resolves to 2026 |
+
+- [ ] **RACE-13a: the device must handle "the target season does not exist
+      yet."** This is the *normal* state from the end of one season until the
+      next calendar is published, which is months. It is not an error, and it
+      must not look like one.
+- [ ] **Never hard-code a season year.** Resolve the season as: the latest
+      season Jolpica serves a non-empty calendar for, preferring the newest.
+      `current` is a good hint but it lagged into October 2026, so it cannot be
+      the only signal.
+- [ ] **`OFF_SEASON` is the state that covers this**, and it is the state the
+      device will be in when it is first switched on. It must be the
+      best-looking idle screen in the project, not a placeholder — the carousel
+      runs on compiled-in data regardless (§4.3), so there is plenty to show.
+- [ ] **Build the compiled-in calendar from whatever is newest at build time**
+      and record the season in the generated header. A device flashed before
+      the 2027 calendar exists ships with 2026 baked in and picks 2027 up over
+      the network the moment it appears — which is exactly what §4.3 is for.
+- [ ] **The 2027 entry list is also unavailable**, so the watched-driver
+      `select` (§6.14.1) and the driver carousel cards (§5.6) are built from
+      the newest available season and refreshed when 2027 lands. Verstappen's
+      `driverId` is stable across this, which is the point of decision 77.
+- [ ] Keep the **2026 fixtures as test data** (`reference/samples/`). They are
+      a complete, real season's shapes and they exercise every data-quality
+      case in §3.4 — a better test corpus than a clean 2027 would be.
 
 ### 4.3 The season calendar is compiled in, then refreshed (DATA-3)
 A generated header carries the calendar as built, and the network refreshes it.
@@ -985,14 +1042,28 @@ response.** This is the whole technique:
       CDN, carrying no public licence, and the path is a fallback transform
       that may not even resolve to a real portrait. Commons has an actual
       licence we can comply with; this does not.
-- [ ] Target **~150×200 px** per portrait, stored as baseline JPEG and decoded
-      with the copied `sky_jpg.h` on display. At one card per 15–120 s a decode
-      per card is free.
-- [ ] **Flash budget, to be measured by the generator and capped:** 22 drivers
-      + ~32 legends ≈ 54 portraits. At 15–25 KB each that is **0.8–1.4 MB** —
-      comfortable against 16 MB, but **4–5× every other asset in this project
-      combined** (§9). The generator reports the total and **fails above
-      2 MB**, so the budget cannot drift unnoticed.
+- [ ] **Decision 91: portraits are 240×320**, stored as baseline JPEG and
+      decoded with the copied `sky_jpg.h` on display. The brief asked to *show
+      picture and profile data* — the picture is the feature, and 150×200 is
+      31 % of a 480 px width, which reads as a thumbnail beside the text rather
+      than a portrait. 240×320 is half the screen width and carries the card.
+- [ ] A decode is one JPEG per card, i.e. once per 15–120 s, so the larger size
+      costs nothing at runtime. A 240×320 RGB565 decode buffer is **150 KB**,
+      which comes from PSRAM and is **reused**, never reallocated per card
+      (§9).
+- [ ] **Budget — and the constraint is the app partition, not total flash.**
+      54 portraits at 240×320, baseline JPEG q≈0.9, run **25–40 KB each →
+      1.4–2.2 MB**. The earlier "trivial against 16 MB" framing was wrong: with
+      the default partition table (§2.4.5) the 16 MB is split into **two OTA
+      app slots of roughly 6.5–7.8 MB**, and the firmware must fit in **one**.
+      Against a slot, 2 MB of portraits is **25–30 %** — fine, but not
+      negligible, and not a number to let drift.
+- [ ] **The generator reports the total and fails above 3 MB.** If it is ever
+      approached, the escape hatches in order: drop legend portraits to
+      180×240 while keeping current drivers at 240×320; then lower JPEG
+      quality; then trim the legends list (§5.6.4), which is one table.
+- [ ] **Measure the real figure at M2** and replace the estimate here. The
+      range above is from JPEG rules of thumb, not from these images.
 
 ### 5.6.4 Who counts as a legend — settled
 **Decision 75 is settled: the list below ships.** Delegated to me by the owner,
@@ -1148,11 +1219,8 @@ current.
       needs a **flag image** and a **team-colour bar**, neither of which a
       table cell holds. 22 rows × 4 children is 88 static objects, which is
       affordable precisely because nothing here moves per-frame (§2.4.1).
-- [ ] **UI-10b: 22 rows in 480 px leaves ~19 px per row** after a header.
-      `mono12` with `pad_all: 2` and a `BOTTOM` border, as `sky-tracker`'s list
-      does at `pad_all: 5`. Measure it on hardware before committing the
-      layout — if it does not fit, drop the TEAM column before shrinking the
-      font.
+- [ ] **UI-10b: 22 rows fit at `mono12` with the TEAM column.** Measured, not
+      estimated — see §6.3.1. The fallback of dropping TEAM is **not needed**.
 - [ ] **UI-10c: the order page is the single source of truth for position.**
       `plane-tracker` decision 47 and 57 both came from two places counting the
       same thing and disagreeing. The header's `LAP n/m`, the top-5 strip and
@@ -1199,6 +1267,56 @@ current.
       to make a 5 s poll feel live without any animation.
 - [ ] A **retirement** keeps its row, greyed, with the status word (`DNF`,
       `ACCIDENT`, `+1 LAP`) rather than vanishing.
+
+#### 6.3.1 The layout is measured, not estimated (answers open question 3)
+`tools/mock_order_page.py` renders this page at 480×480 using **real Roboto
+Mono metrics, the real 2026 entry list and the real OpenF1 team colours**, and
+reports the fit. Output is committed under `reference/mockups/`. Rerun with:
+
+```
+python3 tools/mock_order_page.py --font /path/to/RobotoMono.ttf
+```
+
+**Measured 2026-10-01:**
+
+| | |
+|---|---|
+| Roboto Mono advance @ 12 px | **7.0 px/char** (monospace, so width is exactly `7 × chars`) |
+| 12 px ascent / descent | 13 / 4 → **natural line height 17 px** |
+| Longest surname | `VERSTAPPEN` — 10 ch, **70 px** |
+| Longest team | `Red Bull Racing` — 15 ch, **105 px** |
+| Widest row, all columns + bar + flag | **~322 px** of 480 — width was never the constraint |
+
+| Variant | Row height | TEAM column | Last row ends | Verdict |
+|---|---|---|---|---|
+| a | 18 px | yes | y=456 | **fits**, 22 px slack |
+| b | 19 px | yes | y=478 | fits, but flush to the edge |
+| c | 18 px | **no** | y=456 | fits — the fallback is unnecessary |
+| d | 17 px | yes | y=434 | fits; 17 px is the natural line, so no padding at all |
+| **RECOMMENDED** | **18 px** | **yes** | y=472 | **fits**, and spends the slack on the state line |
+
+- [x] **Decision 88: 22 rows at `mono12`, 18 px per row, TEAM column kept.**
+      18 px gives 1 px of padding over the 17 px natural line, which the render
+      shows is enough. 19 px puts P22 flush against the bottom edge and 17 px
+      removes padding entirely.
+- [ ] **Spend the 22 px of slack on the state line** (UI-3), which §6.2 calls
+      the page's most important element. The recommended render promotes it to
+      `mono15` on its own line with the countdown in `mono12` beneath, and
+      still ends at y=472.
+- [ ] **UI-10d: the GAP column is never empty except in `ENTRY LIST`** — a
+      finding from the render, which initially showed race gaps against a
+      provisional grid. In `GRID (PROVISIONAL)` and `GRID` it carries the
+      **gap to pole**, computed from Jolpica's Q1/Q2/Q3 times, which are free
+      and have no live window. In `FINAL` it carries the race gap. This is
+      strictly better than the blank column decision 31 settled for, because
+      the data was there all along; decision 31 was about *live* intervals.
+- [ ] **The render confirms decision 35 was necessary**: `HÜLKENBERG` appears
+      in the real entry list. `sky-tracker`'s ASCII glyph set would have drawn
+      a box in the middle of a driver's name.
+- [ ] **Still verify on hardware** (§14.1). LVGL's text metrics are not PIL's,
+      and 1 px of padding is not much margin. But the layout question — *does
+      it fit with TEAM, or must a column go* — is now answered, and the answer
+      is that it fits.
 
 ### 6.4 The Carousel — the non-race-day page (UI-20)
 The default screen for most of the year. **Three card types, one rotation:**
@@ -1590,9 +1708,25 @@ interrupts, and they apply directly:
 
   | Tier | Fires | Behaviour |
   |---|---|---|
-  | **Ambient** | whenever he is in the current context | a small persistent marker — his flag and `VER` in the header, his row highlighted on the order page. **Not an alert at all** |
-  | **Event** | session start, grid set, result | the strip, for ~20 s, then it collapses into the ambient marker |
-  | **Milestone** | a win, a round-number win/start/pole, a title | the strip, held until the next session, and a **distinct colour** |
+  | **Ambient** | whenever he is in the current context | a persistent marker — his flag and `VER` in the header, his row highlighted on the order page. **Not an alert at all** |
+  | **Event** | session start, grid set, result | a **full-width banner** across the upper third, in his team's colour, with his flag at card size and the message in `mono24`. Holds **~30 s**, then collapses into the ambient marker |
+  | **Milestone** | a win, a round-number win/start/pole, a title | a **full-screen takeover** for ~8 s — flag, portrait, the number — then it collapses to the banner, which is **held until the next session** |
+
+- [ ] **UI-50c: loud is safe on this device, and that is not a general
+      licence.** `plane-tracker`'s rule is never to cover the instrument,
+      because on a radar scope the aircraft are live and covering them loses
+      information. **Here nothing underneath is changing** — the grid is
+      static between sessions and there is no live timing at all (decision 58)
+      — so a banner or a brief takeover costs the reader nothing. The tier
+      above is deliberately louder than the sibling projects would allow, and
+      the reason it is allowed is specific to this device.
+- [ ] **Nothing ever requires dismissing**, loud or not. Every tier
+      self-retires on a timer, and **a tap dismisses early** rather than being
+      the only way out. A banner that needs acknowledging is a different and
+      much worse thing than a banner that is simply large.
+- [ ] **The takeover is milestone-only**, and milestones are rare by
+      construction — a win, a round number, a title. If it ever fires twice in
+      a weekend, the latch (below) is broken.
 
 - [ ] **Each event fires once.** Latch it against a `(round, session, event)`
       key held in a `restore_value` global so a reboot mid-weekend does not
@@ -1609,6 +1743,11 @@ interrupts, and they apply directly:
 - [ ] A **`Watched driver alerts` checkbox**, default on, and a separate
       **`Milestone alerts only`** option for someone who wants the rare tier
       without the per-session one. Offering the choice costs one switch.
+- [ ] **`Alert style`: `loud` (default) / `quiet`.** `quiet` demotes the event
+      banner to a one-line strip and the milestone takeover to a banner. The
+      loud design ships as the default because it was asked for; the quiet
+      path exists because a device in a living room may be watched by someone
+      who did not ask for it.
 
 ---
 
@@ -1631,6 +1770,7 @@ and `on_long_press` opens the debug page. Ported from `sky-tracker` exactly.
 | Watched driver | dropdown | from the current entry list, default **Max Verstappen** (§6.14) |
 | Watched driver alerts | checkbox | default **on** |
 | Milestone alerts only | checkbox | default off — the rare tier without the per-session one |
+| Alert style | dropdown | **loud** (default) / quiet (§6.14.3) |
 | Show practice sessions | checkbox | treat FP as a session worth a page |
 | Show sprint sessions | checkbox | — |
 | Order columns | dropdown | with team / with gap / with tyre |
@@ -1682,6 +1822,7 @@ touchscreen, the device's own **web UI**, and **Home Assistant**.
 | Watched driver | `select` (populated from the entry list) |
 | Watched driver alerts | `switch` |
 | Milestone alerts only | `switch` |
+| Alert style | `select` |
 | Show practice / sprint | two `switch` |
 | Order columns | `select` |
 | Force page | `select` (not restored) |
@@ -1863,18 +2004,30 @@ it — which suits a device watched all week rather than only on Sunday.
       it is long, follow `plane-tracker` decision 64 — move pure pixel work to a
       **one-shot task on core 1**, refuse to draw until a `g_ready` flag, and
       set image sources on first use rather than at creation.
-- [ ] **Flash budget**, estimated from measurements:
-      traces 19.2 KB · flags ~150 KB · calendar ~8 KB · circuit facts ~20 KB ·
-      driver + legend profiles ~30 KB · fonts (5 sizes, extended glyph set,
-      4 bpp) ~80 KB — about **310 KB** — **plus ~54 portraits at 15–25 KB =
-      0.8–1.4 MB** (§5.6.3).
-- [ ] **The portraits are now the dominant asset, 4–5× everything else
-      combined.** Still trivial against 16 MB with the default partition table
-      (§2.4.5), but it is the one asset that can grow without anyone noticing,
-      so **the generator reports the total and fails above 2 MB** (§5.6.3).
-- [ ] A portrait decode is one JPEG per card, i.e. once per 15–120 s. Free.
-      But **decode into a reused buffer**, not a fresh allocation per card — 54
-      cards cycling for weeks is exactly where a slow leak shows up.
+- [ ] **Flash budget — measured against the app partition, not total flash.**
+      With the default table (§2.4.5), 16 MB splits into **two OTA app slots of
+      roughly 6.5–7.8 MB** and the firmware must fit in **one**:
+
+  | Asset | Size |
+  |---|---|
+  | Circuit traces, all 40 | 19.2 KB (measured) |
+  | Flags, ~82 countries at two sizes | ~150 KB |
+  | Compiled-in calendar | ~8 KB |
+  | Circuit facts | ~20 KB |
+  | Driver + legend profiles | ~30 KB |
+  | Fonts, 5 sizes, extended glyph set, 4 bpp | ~80 KB |
+  | **Subtotal** | **~310 KB** |
+  | **Portraits, 54 at 240×320** | **1.4–2.2 MB** (§5.6.3) |
+
+- [ ] **The portraits dominate at 5–7× everything else combined**, and are
+      **25–30 % of one app slot**. Comfortable, but this is the one asset that
+      can grow unnoticed, so **the generator reports the total and fails above
+      3 MB** with the escape hatches listed in §5.6.3.
+- [ ] A portrait decode is one JPEG per card, once per 15–120 s. Free in time.
+      But **decode into a single reused PSRAM buffer** (240×320 RGB565 =
+      150 KB), never a fresh allocation per card — 54 cards cycling for weeks
+      is exactly where a slow leak shows up, and this device is expected to run
+      for a season.
 - [ ] **RAM is the real budget**, as in both siblings: 460 KB framebuffer +
       57.6 KB LVGL buffer + TLS buffers for **two** hosts + `web_server`.
       Measure free internal RAM and PSRAM with everything enabled, and log it
@@ -2042,6 +2195,12 @@ exists.
 | 85 | **The legends list is settled at 31 rows** (§5.6.4), delegated by the owner. Two errors in the draft fixed: Jack Brabham was duplicated, and Räikkönen and Button were missing. Barrichello dropped on the stated bar | 2026-10-01 | settles 75 |
 | 86 | **A driver in both sets gets one card** — their current-driver card with a `LEGEND` badge. The overlap is resolved at build time by `driverId` against the entry list, so a retirement moves a driver into the legend rotation with no edit. Measured overlap: Alonso, Hamilton, Verstappen | 2026-10-01 | active |
 | 87 | **DATA-10: the season driver list is not the race entry list.** Measured: 32 rows for 2026, only 23 with a `code` and number; the rest are reserves. Build the watched-driver `select` from the round's own data, not the season pool | 2026-10-01 | active |
+| 88 | **22 order rows fit at `mono12`, 18 px per row, TEAM column kept** — measured by rendering the real layout with real font metrics and the real entry list (§6.3.1). The fallback of dropping TEAM is unnecessary. 19 px puts P22 flush to the edge; 17 px removes padding entirely | 2026-10-01 | **answers open question 3** |
+| 89 | **Target season is 2027**; 2026 becomes test data. Measured: Jolpica serves **no 2027 calendar or entry list yet** (`total = 0`), so "the target season does not exist yet" is the normal state for months and must not look like an error. Never hard-code a season year | 2026-10-01 | **decided by owner**, moots open question 5 |
+| 90 | **A Sprint is a first-class race day** (RACE-14) — its own grid, result and race page, labelled `SPRINT`. A sprint weekend has two race days. Sprint wins must **not** count toward career win milestones; Jolpica keeps them in a separate endpoint | 2026-10-01 | **decided by owner**, closes open question 6 |
+| 91 | **Portraits are 240×320**, not 150×200. The brief asked to show the picture; at 480 px wide, 150×200 reads as a thumbnail. Budget restated against the **app slot** (~6.5–7.8 MB), not total flash: portraits are 25–30 % of one slot | 2026-10-01 | **delegated**, answers open question 13 |
+| 92 | **Alerts are loud** (§6.14.3): full-width banner for events, brief full-screen takeover for milestones. Safe here specifically because **nothing underneath is changing** — no live timing (58) — which is not a general licence. Nothing ever requires dismissing; a tap only dismisses early. An `Alert style: loud/quiet` setting ships with loud as the default | 2026-10-01 | **decided by owner**, closes open question 12 |
+| 93 | **UI-10d: the GAP column carries the gap to pole in grid modes**, from Jolpica's Q1/Q2/Q3 times — free, no live window. Found by rendering §6.3.1, which showed race gaps against a provisional grid. Decision 31's blank column was about *live* intervals only | 2026-10-01 | refines 31 |
 
 ---
 
@@ -2055,22 +2214,24 @@ exists.
 2. ~~**Does Night Mode default on?**~~ **CLOSED 2026-10-01 — declined
    entirely** (decision 83). Not a default question in the end: the feature is
    absent, and auto-dim (§6.8) covers the need.
-3. **Do 22 rows fit at `mono12`?** (§6.3) ~19 px per row is tight. **Blocked on
-   hardware** (§14.1) — it is a layout judgement, not a calculation. Fallback
-   is dropping the TEAM column, not shrinking the font.
+3. ~~**Do 22 rows fit at `mono12`?**~~ **CLOSED 2026-10-01 — measured, yes**
+   (decision 88, §6.3.1). Rendered at 480×480 with real Roboto Mono metrics
+   and the real entry list: 18 px rows, TEAM column kept, 22 px of slack spent
+   on the state line. `tools/mock_order_page.py` reproduces it. Hardware
+   confirmation remains in §14.1, but the layout question is answered.
 4. ~~**Driver headshot licence and hotlinking terms.**~~ **CLOSED 2026-10-01**
    — all licensing terms accepted (decision 67), and the design moved to
    Wikimedia Commons with the photographer credited and a build that fails on
    an unattributable image (§5.6.3, decisions 72–73). OpenF1's `headshot_url`
    is not used.
-5. **Is the 2026 calendar Jolpica serves correct?** It returns 23 rounds
-   against 24 circuits, with at least one oddly-named round (§3.4). Worth
-   cross-checking against OpenF1's `sessions?year=2026` before building the
-   compiled-in calendar from it.
-6. **What is "race day" for a sprint weekend?** The Sprint is a race with its
-   own grid and result. Recommend treating it as a first-class `RACE_LIVE`
-   session, which the state machine already allows, and saying `SPRINT` in the
-   header.
+5. ~~**Is the 2026 calendar Jolpica serves correct?**~~ **MOOT 2026-10-01** —
+   the target season is **2027** (decision 89). 2026's oddities become test
+   data rather than a problem. Replaced by a sharper question: **the 2027
+   calendar does not exist yet** (`total = 0`), so RACE-13a — handling that
+   gracefully for months — is now the requirement.
+6. ~~**What is "race day" for a sprint weekend?**~~ **CLOSED 2026-10-01 — yes,
+   first-class** (decision 90). Own grid, own result, own race page, labelled
+   `SPRINT`; a sprint weekend has two race days.
 7. ~~**Serial port for the first flash.**~~ **MOOT 2026-10-01** — no hardware
    yet (decision 84). Recorded in §2.2 for when a board arrives; the port
    contention with `plane-tracker` still applies then.
@@ -2094,29 +2255,24 @@ exists.
    makes this transition the race page's one real moment, so **retry rather
    than trusting the boundary** — and measure the true lag after the first
    race the device sees.
-12. **How loud should the watched-driver alerts be?** §6.14.3 sets three tiers
-   and I have defaulted to the quiet end — ambient marker always, event strip
-   for ~20 s, milestone held. If you want it louder (a full-width banner, a
-   colour change across the whole page) or quieter (milestones only), say
-   which; the `Milestone alerts only` switch already covers the quiet case.
-13. **Portrait size and crop.** ~150×200 px is my default, which fits a
-   two-column card beside the career record; 240×320 looks better and roughly
-   doubles the flash. **Blocked on hardware** (§14.1) — judge it against a real
-   card. The generator takes the size as a parameter, so this is a rerun, not
-   a rewrite.
+12. ~~**How loud should the watched-driver alerts be?**~~ **CLOSED 2026-10-01
+   — louder** (decision 92). Full-width team-coloured banner for events,
+   ~8 s full-screen takeover for milestones. An `Alert style` setting keeps a
+   quiet path for anyone else in the room.
+13. ~~**Portrait size and crop.**~~ **CLOSED 2026-10-01 — 240×320**
+   (decision 91), delegated. The generator takes the size as a parameter, so
+   it is a rerun if it ever looks wrong on hardware.
 
-### 13.1 What is actually outstanding, by who can answer it
+### 13.1 What is actually outstanding
 | # | Question | Owner | Blocked on |
 |---|---|---|---|
-| 5 | Is Jolpica's provisional 2026 calendar right? | me | nothing — cross-check against OpenF1 |
-| 6 | Is a Sprint a first-class race day? | owner (recommend **yes**, labelled `SPRINT`) | nothing |
-| 8 | Gated OpenF1 response shape | me, defensively | a live session happening |
-| 11 | True lag at the +30 min boundary | me | the first race the device sees |
-| 12 | Alert loudness | owner (defaulted **quiet**) | nothing |
-| 3 | 22 rows at `mono12` | me | **hardware** (§14.1) |
-| 13 | Portrait size | owner | **hardware** (§14.1) |
+| 8 | Gated OpenF1 response shape — defensive only since NET-14 | me | a live session happening |
+| 11 | True lag at OpenF1's +30 min boundary | me | the first race the device sees |
+| 14 | **When does Jolpica publish the 2027 calendar?** RACE-13a handles its absence, but the first real end-to-end test needs it | me | Jolpica |
 
-**Nothing on this list blocks M0, M1, M2 or M3.**
+**Every question that needed an owner decision is closed.** The three above are
+measurements waiting on the world, not choices — and **none of them blocks M0,
+M1, M2 or M3.**
 
 ### Settled before this draft was written
 | Question | Answer |
@@ -2194,7 +2350,8 @@ project's real risk.
          licence + photographer recorded, **build fails on an unattributable
          image**, total reported and capped at 2 MB
    - [ ] Curated legend prose and the pre-1994 pole values, with sources
-   - [ ] Decide portrait size against a real card on hardware (open question 13)
+   - [ ] Portraits at **240×320** (decision 91); generator reports the total
+         and fails above 3 MB
 4. **M3 — Data path and the state machine**
    - [ ] `f1_net.h`: TLS to both hosts, persistent sessions, selective parse
    - [ ] `f1_state.h`: the state machine, the poll-interval table, retiming
@@ -2244,8 +2401,8 @@ Not forgotten — **blocked**. Collected here so the backlog stays honest.
 | **Prove `panel_soft_reset()` at priority 1100** | the symptom is a panel that fails to initialise | §2.1, HW-7 |
 | `min_power` — the lowest still-visible duty | panel-specific; 0.10 is `sky-tracker`'s value | §2.4.7 |
 | **Does 30 kHz actually stop the backlight whine?** | audible, not measurable in software | §2.4.7, decision 4 |
-| **Do 22 order rows fit at `mono12`?** | ~19 px per row; a layout judgement | §6.3, open question 3 |
-| **Portrait size — 150×200 or 240×320?** | an aesthetic call against a real card | §5.6.3, open question 13 |
+| Confirm the 18 px row height in LVGL | **answered by render** (decision 88); LVGL metrics are not PIL's, and 1 px of padding is thin | §6.3.1 |
+| Confirm 240×320 portraits read well on the panel | settled at 240×320 (decision 91); this is confirmation only | §5.6.3 |
 | Where the LVGL buffer landed (internal RAM or PSRAM) | logged at boot | §2.4.3 |
 | Free internal RAM / PSRAM with everything enabled | the real budget (§9) | §9 |
 | Boot time, and whether icon/portrait work needs core 1 | `plane-tracker` decision 64 | §9 |

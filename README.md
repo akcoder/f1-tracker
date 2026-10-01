@@ -12,7 +12,9 @@ ESP32-4848S040 — the same board, font stack and UI cues as `sky-tracker`.
   full career record.
 - **One driver is watched.** It ships watching **Max Verstappen** and raises an
   alert when he is racing, when his grid slot is known, when his result lands,
-  and when he passes a career milestone. The watched driver is a setting.
+  and when he passes a career milestone — a full-width banner for events, a
+  brief full-screen takeover for milestones. The watched driver is a setting.
+- **Target season: 2027.** Sprints are first-class race days.
 - Latitude and longitude are stored for **one purpose only** — computing
   sunrise and sunset so the display can auto-dim (a checkbox setting).
 
@@ -26,7 +28,8 @@ first; it is the project.
 | `REQUIREMENTS.md` | the design document (§12 is the decision log) |
 | `f1-tracker.yaml` | ESPHome shell — hardware, entities, LVGL pages *(M0)* |
 | `f1-tracker/` | C++ headers: data task, state machine, map drawing *(M1+)* |
-| `tools/` | offline generators: circuits, calendar, facts, flags *(M1+)* |
+| `tools/` | offline generators *(M1+)*, and `mock_order_page.py` — renders the order page at 480×480 and measures the fit |
+| `reference/mockups/` | rendered layout mockups with the measured verdict |
 | `tests/` | host tests, `make -C tests` *(M1+)* |
 | `reference/f1-circuits/` | vendored GeoJSON circuit traces (MIT) |
 | `reference/samples/` | captured API responses used as offline fixtures |
