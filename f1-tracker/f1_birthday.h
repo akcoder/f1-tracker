@@ -71,19 +71,20 @@ inline int count_today(int month, int day) {
 //   cards - about once an hour at the 45 s default, 21 times a day.
 //
 //   every 4th : every  3 min, 480/day, 23.0x the natural rate   <- wallpaper
-//   every 12th: every  9 min, 160/day,  7.7x
-//   every 20th: every 15 min,  96/day,  4.6x                    <- chosen
+//   every 10th: every  8 min, 192/day,  9.2x                    <- chosen
+//   every 20th: every 15 min,  96/day,  4.6x                    <- too rare
 //   every 46th: every 35 min,  42/day,  2.0x                    <- barely a bias
 //
-// 5.13's rule is "rare beats frequent": a thing that appears constantly becomes
-// wallpaper within a week, and a birthday lasts one day. 4.6x is enough that
-// someone glancing at the device through the day will meet it several times
-// and notice, without it becoming what the device is showing.
+// 5.13's rule is "rare beats frequent", and the first attempt at 4 was 23x
+// natural, which is wallpaper. 20 went too far the other way: a birthday lasts
+// one day, and something seen four times an hour on a device glanced at
+// occasionally can be missed entirely. 10 is the balance - roughly once per
+// eight minutes, so it is met on most visits without dominating any of them.
 //
 // Note this is a CARD count, not a time: at the 15 s minimum interval it is one
-// every 5 minutes, and at the 120 s maximum one every 40. That spread is
+// every 2.5 minutes, and at the 120 s maximum one every 20. That spread is
 // acceptable - someone who sets a 15 s carousel has asked for more churn.
-inline constexpr int EVERY = 20;
+inline constexpr int EVERY = 10;
 
 }  // namespace birthday
 }  // namespace f1
