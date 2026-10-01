@@ -30,6 +30,11 @@ esphome:
     - "-DLV_INV_BUF_SIZE=128"
   includes:
     - f1-tracker/f1_panel.h
+    - f1-tracker/f1_circuits.h     # generated: tools/gen_circuits.py
+    - f1-tracker/f1_calendar.h     # generated: tools/gen_calendar.py
+    - f1-tracker/f1_map.h
+    - f1-tracker/f1_carousel.h
+    - f1-tracker/f1_ui.h
   on_boot:
     - priority: 1100           # HW-7: before the SPI bus (1000) and the panel init
       then:
@@ -44,6 +49,19 @@ esphome:
             auto ap = id(wifi_comp).get_ap();
             ap.set_ssid(ssid);
             id(wifi_comp).set_ap(ap);
+    - priority: -100           # widgets exist by now (7.1.2: entities own the
+      then:                    # values, the widgets are one view of them)
+        - lambda: |-
+            f1::ui::Widgets w;
+            w.map_box = id(card_map);
+            w.line    = id(trace_line)->obj;
+            w.tick    = id(trace_tick)->obj;
+            w.north   = id(trace_north)->obj;
+            w.badge   = id(card_badge);
+            w.title   = id(card_title);
+            w.body    = id(card_body);
+            w.font_small = id(mono12)->get_lv_font();
+            f1::ui::setup(w, id(carousel_secs).state, id(carousel_content).active_index().value_or(0));
 
 esp32:
   board: esp32-s3-devkitc-1
@@ -693,6 +711,8 @@ lvgl:
       scrollable: false
       on_click:
         - lvgl.page.next: {animation: FADE_IN, time: 200ms}
+      on_long_press:            # UI-20: hold to pause on the current card
+        - lambda: f1::ui::toggle_pause();
       widgets:
         - label:
             id: card_badge      # UI-20b: CIRCUIT / DRIVER / LEGEND
@@ -708,17 +728,54 @@ lvgl:
             text: ""
             text_font: mono18
             text_color: 0xC9D3F2
-        - obj:
-            id: card_body
-            x: 6
-            y: 52
-            width: 468
-            height: 400
-            bg_opa: TRANSP
+        - obj:                  # MAP-5a: the trace lives in its own container and
+            id: card_map        # nothing moving may sit inside its bounds
+            x: 40
+            y: 56
+            width: 400
+            height: 320
+            bg_color: 0x0B1220
+            bg_opa: COVER
             border_width: 0
+            radius: 8
             pad_all: 0
             scrollable: false
             clickable: false
+            widgets:
+              # MAP-5: the trace, its start/finish tick and the north arrow are
+              # declared here so LVGL's line widget is compiled in at all; C++
+              # only replaces their point arrays (f1_ui.h).
+              - line:
+                  id: trace_line
+                  points: [{x: 0, y: 0}, {x: 1, y: 0}]
+                  line_width: 3
+                  line_color: 0xE8EDF7
+                  line_rounded: true
+              - line:
+                  id: trace_tick
+                  points: [{x: 0, y: 0}, {x: 1, y: 0}]
+                  line_width: 3
+                  line_color: 0xFF8A1F
+              - line:
+                  id: trace_north
+                  points: [{x: 0, y: 0}, {x: 1, y: 0}]
+                  line_width: 2
+                  line_color: 0x7E8BB3
+        - label:
+            id: card_body
+            x: 12
+            y: 386
+            width: 456
+            text: ""
+            text_font: mono14
+            text_color: 0x7E8BB3
+        - label:                # 3.7.3 / decision 54: attribution, every page
+            align: BOTTOM_RIGHT
+            x: -10
+            y: -6
+            text: "Data: jolpi.ca \u00b7 openf1.org"
+            text_font: mono12
+            text_color: 0x5A6687
 
     - id: standings_page        # 8.1: free, no live window
       bg_color: 0x000000
@@ -829,6 +886,9 @@ lvgl:
               - lvgl.page.show: race_page
 
 interval:
+  - interval: 1s                # UI-20: carousel advance. The tick is cheap; the
+    then:                       # interval check lives in f1::ui::advance.
+      - lambda: f1::ui::advance(esphome::millis());
   - interval: 1s                # UI-27: debug page, only while it is showing
     then:
       - lambda: |-

@@ -3,8 +3,8 @@
 **Target hardware:** Guition ESP32-4848S040 (ESP32-S3, 4.0" 480×480 IPS)
 **Framework:** ESPHome (ESP-IDF)
 **Status:** Draft rev 2 — living document, updated as decisions are made
-**Last updated:** 2026-10-01 (rev 9: **M0 built** — config validates, firmware
-compiles clean, and §9's estimates are replaced with measured figures)
+**Last updated:** 2026-10-01 (rev 10: **M1 built** — circuit and calendar
+generators, carousel, 1823 host tests, and all 40 traces verified by render)
 
 ---
 
@@ -1034,9 +1034,17 @@ The set even carries **`es-2026` (Circuito de Madring)**, the new 2026 venue.
       runtime would mean carrying lat/lon for 40 circuits and a nearest-
       neighbour search for no benefit. The build-time match is already
       measured at ≤1.1 km (§5.2).
-- [ ] **Fail the build on an unmatched calendar circuit**, listing it. A
+- [x] **Fail the build on an unmatched calendar circuit**, listing it. A
       silently missing map is the failure mode to prevent, and this is the only
-      place it can be caught.
+      place it can be caught. Built at M1; all 23 rounds match.
+- [x] **MAP-2a: a distance threshold alone cannot separate a true match from a
+      false one, so known-distinct neighbours are named explicitly.** Found at
+      M1: `zeltweg` matched `at-1969` at **2.4 km** — Zeltweg Airfield hosted
+      the 1964 Austrian GP and the Red Bull Ring was built beside it in 1969;
+      they are different circuits. Kyalami is a **true** match at 1.3 km, so no
+      threshold separates the two cases. The generator carries a small
+      `EXCLUDE` set with the reason recorded per row. Worst match is now
+      **1.3 km**.
 - [ ] Assert **non-degenerate geometry** per circuit — at least 60 points, a
       bounding box over 200 m on both axes, and a closed loop (first and last
       point within ~100 m) for everything except the one-off street layouts.
@@ -1053,8 +1061,13 @@ The set even carries **`es-2026` (Circuito de Madring)**, the new 2026 venue.
 - [ ] Compute the **minimum-area bounding rectangle** offline and bake a
       per-circuit **rotation** so each map fills its box. North-up wastes most
       of the box on long thin layouts (Spa, Jeddah, Baku, Las Vegas).
-- [ ] **Draw a small north arrow** whenever the baked rotation is non-zero. A
-      rotated map with no orientation cue is a quietly wrong map.
+- [x] **Draw a small north arrow** whenever the baked rotation is non-zero.
+      **Measured at M1: no circuit is north-up.** The closest is Istanbul at
+      **4.75°**, and the spread runs to **168.5°** (Monaco). So the arrow is
+      **permanent furniture, not an occasional cue** — design it as part of the
+      card rather than as an exception. A 2° snap tolerance is applied anyway so
+      a future trace that genuinely wants no rotation suppresses the arrow
+      instead of pointing almost-straight-up.
 - [ ] Normalise to a fixed `int16` range at generation time so the device only
       scales and translates — no per-circuit float work at draw time.
 - [ ] Preserve **aspect ratio**. A circuit squeezed to fill a square box is
