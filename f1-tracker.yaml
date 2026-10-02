@@ -49,6 +49,7 @@ esphome:
     - f1-tracker/f1_birthday.h
     - f1-tracker/f1_display.h
     - f1-tracker/f1_champ.h
+    - f1-tracker/f1_team.h
     - f1-tracker/f1_map.h
     - f1-tracker/f1_state.h
     - f1-tracker/f1_watch.h
@@ -115,6 +116,17 @@ esphome:
             f1::app::g.obs_lat = id(obs_lat).state;
             f1::app::g.obs_lon = id(obs_lon).state;
             f1::app::setup(aw);
+            {  // 8.2: the favourite team. This TemplateSelect exposes an index
+               // rather than a string, so the names live beside the options.
+              static const char *const TEAMS[] = {
+                  "", "Red Bull Racing", "McLaren", "Ferrari", "Mercedes",
+                  "Aston Martin", "Alpine", "Williams", "Racing Bulls", "Audi",
+                  "Haas F1 Team", "Cadillac"};
+              const int i = (int) id(favourite_team).active_index().value_or(0);
+              if (i > 0 && i < (int) (sizeof(TEAMS) / sizeof(TEAMS[0])))
+                snprintf(f1::app::g.favourite.name, sizeof(f1::app::g.favourite.name),
+                         "%s", TEAMS[i]);
+            }
             f1::detail::setup(id(detail_panel), id(detail_title), id(detail_body),
                               id(detail_flag));
             f1::net::start();                 // the data task, pinned to core 1
@@ -583,6 +595,17 @@ select:
     optimistic: true
     restore_value: true
     web_server: {sorting_group_id: grp_race, sorting_weight: 1}
+  - platform: template        # 8.2: tint both rows and show the constructors'
+    id: favourite_team        # position. ESPHome select options are compile-time
+    name: Favourite Team      # (decision 109), so this list is the current grid.
+    icon: mdi:shield-star
+    options: ["(none)", "Red Bull Racing", "McLaren", "Ferrari", "Mercedes",
+              "Aston Martin", "Alpine", "Williams", "Racing Bulls", "Audi",
+              "Haas F1 Team", "Cadillac"]
+    initial_option: "(none)"
+    optimistic: true
+    restore_value: true
+    web_server: {sorting_group_id: grp_race, sorting_weight: 9}
   - platform: template        # decision 92: loud ships as the default
     id: alert_style
     name: Alert Style

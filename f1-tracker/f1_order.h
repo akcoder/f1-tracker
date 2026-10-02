@@ -35,6 +35,7 @@ inline constexpr uint32_t COL_MUTED = 0x7E8BB3;
 inline constexpr uint32_t COL_WATCH_BG = 0x1A2547;
 inline constexpr uint32_t COL_WATCH_TX = 0xFFFFFF;
 inline constexpr uint32_t COL_OUT = 0x5A6687;   // retired: greyed, never removed
+inline constexpr uint32_t COL_FAV_BG = 0x14203A;  // 8.2: the favourite team's rows
 
 using store::Entry;
 
@@ -165,6 +166,11 @@ inline void render(const Entry *e, int n, state::OrderMode mode) {
     // feature most of the time, and the part worth polishing.
     if (x.watched) {
       lv_obj_set_style_bg_color(r.bg, lv_color_hex(COL_WATCH_BG), 0);
+      lv_obj_set_style_bg_opa(r.bg, LV_OPA_COVER, 0);
+    } else if (x.favourite) {
+      // 8.2: a quieter tint than the watched driver's, so the two can both be
+      // on screen and still be told apart.
+      lv_obj_set_style_bg_color(r.bg, lv_color_hex(COL_FAV_BG), 0);
       lv_obj_set_style_bg_opa(r.bg, LV_OPA_COVER, 0);
     } else {
       lv_obj_set_style_bg_opa(r.bg, LV_OPA_TRANSP, 0);

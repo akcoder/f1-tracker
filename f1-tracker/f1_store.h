@@ -27,6 +27,7 @@ struct Entry {
   uint32_t colour = 0x888888;  // team_colour, cached (6.10)
   bool out = false;            // retired: keeps its row, greyed (6.3)
   bool watched = false;
+  bool favourite = false;      // 8.2: a row of the favourite team
 };
 
 inline constexpr int MAX_ROUNDS = 26;

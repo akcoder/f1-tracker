@@ -12,6 +12,7 @@
 
 #include "f1_calendar.h"
 #include "f1_champ.h"
+#include "f1_team.h"
 #include "f1_detail.h"
 #include "f1_net.h"
 #include "f1_order.h"
@@ -47,6 +48,7 @@ struct App {
   state::Calendar cal;
   state::Status st;
   watch::Config watch_cfg;
+  team::Favourite favourite;
   watch::Latch latch;
   watch::Alert alert;
   uint32_t last_eval_ms = 0;
@@ -367,6 +369,7 @@ inline void refresh_data() {
     for (int i = 0; i < g.data.n_entries; i++) {
       auto &e = g.data.entries[i];
       e.watched = g.watch_cfg.code[0] && std::strcmp(e.code, g.watch_cfg.code) == 0;
+      e.favourite = team::is_favourite(g.favourite, e);
       // The flag comes from the compiled driver table, keyed on the acronym -
       // the feed's qualifying rows carry no nationality.
       if (!e.iso3[0])

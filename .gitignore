@@ -9,6 +9,7 @@ test_champ
 test_display
 test_json
 test_state
+test_team
 test_watch
 tests/test_m1
 tools/.cache/
