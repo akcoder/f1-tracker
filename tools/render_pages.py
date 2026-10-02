@@ -400,22 +400,27 @@ def overlay_detail(ctx):
 def overlay_alert(ctx):
     img, _ = page_race(ctx)
     d = ImageDraw.Draw(img)
-    d.rectangle([0, 60, W, 156], fill=WATCH)
+    # 316-416: the lower band, over the top-5 strip. The trace (70-310) stays
+    # fully visible - the map is the thing a reader is looking at.
+    d.rectangle([0, 316, W, 416], fill=WATCH)
     p = next(x for x in ctx["drivers"] if x["id"] == "max_verstappen")
     if p["iso3"] in ctx["flags"]:
-        img.paste(ctx["flags"][p["iso3"]].resize((48, 36), Image.NEAREST), (24, 90))
-    d.text((240, 108), "MAX IS RACING TODAY", font=FONT[24], fill=WHITE, anchor="mm")
+        img.paste(ctx["flags"][p["iso3"]].resize((48, 36), Image.NEAREST), (24, 348))
+    d.text((264, 366), "MAX IS RACING TODAY", font=FONT[24], fill=WHITE, anchor="mm")
     return img, "overlay-alert-event"
 
 
 def overlay_milestone(ctx):
-    img = Image.new("RGB", (W, H), BG); d = ImageDraw.Draw(img)
-    d.rectangle([0, 130, W, 330], fill=WATCH)
+    img, _ = page_race(ctx)
+    d = ImageDraw.Draw(img)
+    # Taller than an event banner, still below the trace (70-310), and still
+    # above the gear (432) so settings stay reachable.
+    d.rectangle([0, 312, W, 430], fill=WATCH)
     p = next(x for x in ctx["drivers"] if x["id"] == "max_verstappen")
     if p["iso3"] in ctx["flags"]:
-        img.paste(ctx["flags"][p["iso3"]].resize((64, 48), Image.NEAREST), (208, 152))
-    d.text((240, 232), "MAX WINS", font=FONT[34], fill=WHITE, anchor="mm")
-    d.text((240, 280), f"{p['wins']+1}TH CAREER WIN", font=FONT[18], fill=ORANGE, anchor="mm")
+        img.paste(ctx["flags"][p["iso3"]].resize((40, 30), Image.NEAREST), (220, 320))
+    d.text((240, 376), "MAX WINS", font=FONT[34], fill=WHITE, anchor="mm")
+    d.text((240, 412), f"{p['wins'] + 1}TH CAREER WIN", font=FONT[18], fill=ORANGE, anchor="mm")
     return img, "overlay-alert-milestone"
 
 

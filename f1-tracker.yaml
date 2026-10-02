@@ -692,10 +692,11 @@ lvgl:
             - lambda: f1::detail::close();
       - obj:                     # 6.14.3: the watched-driver alert. A STRIP, never
           id: watch_banner       # a modal, and nothing ever requires dismissing.
-          align: TOP_MID
-          y: 60
-          width: 480
-          height: 96
+          align: TOP_MID         # It sits in the LOWER band, over the top-5 strip
+          y: 316                 # and never over the circuit trace (70-310): the
+          width: 480             # map is the thing a reader is looking at, and
+          height: 100            # covering it is what decision 92's licence to be
+                                 # loud does NOT extend to.
           hidden: true
           bg_color: 0x1A2547
           bg_opa: COVER
@@ -811,7 +812,8 @@ lvgl:
             x: 90
             y: 70
             width: 300
-            height: 300
+            height: 240         # 70-310, clear of the top-5 strip at 318. At 300
+                                # it ran 52 px into it.
             bg_opa: TRANSP      # the trace sits on the page's own black - a panel
             border_width: 0     # behind it adds an edge and no information
             radius: 0

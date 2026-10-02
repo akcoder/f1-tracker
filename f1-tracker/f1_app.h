@@ -232,10 +232,15 @@ inline void update_banner(uint32_t now_ms) {
   if (g.w.banner == nullptr) return;
   if (g.alert.active) {
     if (g.w.banner_text) lv_label_set_text(g.w.banner_text, g.alert.line);
-    // decision 92: loud. A milestone is a brief takeover, an event is a
-    // full-width banner. Safe here because nothing underneath is changing.
+    // decision 92: loud. A milestone gets a taller strip, an event a shorter
+    // one - but NEITHER covers the circuit trace. The map is the thing a reader
+    // is actually looking at; the licence to be loud was about there being no
+    // live data underneath, not about covering the subject.
+    // Both end above y=432, where the gear sits, so settings stay reachable
+    // without waiting the banner out. The track (70-310) is never covered.
     const bool big = (g.alert.tier == watch::MILESTONE);
-    lv_obj_set_height(g.w.banner, big ? 200 : 96);
+    lv_obj_set_height(g.w.banner, big ? 118 : 100);
+    lv_obj_set_y(g.w.banner, big ? 312 : 316);
     lv_obj_remove_flag(g.w.banner, LV_OBJ_FLAG_HIDDEN);
   } else {
     lv_obj_add_flag(g.w.banner, LV_OBJ_FLAG_HIDDEN);
