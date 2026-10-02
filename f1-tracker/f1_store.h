@@ -48,6 +48,14 @@ struct Standing {
 // carries BOTH the fastest lap and the pit stops, so this page needs no OpenF1
 // at all - which means no live window to wait out and nothing gated. Only tyre
 // compounds, flags and weather would need OpenF1, and those are optional.
+struct Constructor {
+  int pos = 0;
+  int points = 0;
+  int wins = 0;
+  char name[20] = {0};
+  char iso3[4] = {0};
+};
+
 struct Summary {
   char fl_driver[20] = {0};
   char fl_time[12] = {0};
@@ -76,6 +84,9 @@ struct Store {
   Standing standings[MAX_STANDINGS];
   int n_standings = 0;
 
+  Constructor constructors[12];
+  int n_constructors = 0;
+  uint8_t standings_round = 0;    // which round the table is up to date through
   Summary summary;
   uint32_t generation = 0;      // bumped on every successful parse, so the UI
                                 // thread can tell "unchanged" from "stale"
@@ -292,6 +303,62 @@ inline bool parse_standings(const char *s, size_t n, Store &out) {
   }
   if (kept == 0) return false;
   out.n_standings = kept;
+  out.generation++;
+  return true;
+}
+
+// Constructor nationality is a demonym, like a driver's. The table is small
+// enough to live here rather than in a generator.
+inline const char *team_iso3(const char *nat) {
+  struct Row { const char *demonym, *iso3; };
+  static const Row R[] = {
+      {"British", "GBR"}, {"Italian", "ITA"}, {"Austrian", "AUT"}, {"German", "DEU"},
+      {"French", "FRA"}, {"Swiss", "CHE"}, {"American", "USA"}, {"Indian", "IND"},
+      {"Irish", "IRL"}, {"Japanese", "JPN"}, {"Dutch", "NLD"}, {"Spanish", "ESP"},
+      {"Malaysian", "MYS"}, {"Russian", "RUS"}, {"Canadian", "CAN"},
+      {"New Zealander", "NZL"}, {"Belgian", "BEL"}, {"Swedish", "SWE"},
+      {"South African", "ZAF"}, {"Mexican", "MEX"}, {"Brazilian", "BRA"},
+      {"Australian", "AUS"}, {"Hong Kong", "HKG"}, {"Rhodesian", "ZWE"},
+      {"East German", "DEU"},
+  };
+  if (nat == nullptr || !*nat) return "";
+  for (const auto &r : R)
+    if (std::strcmp(nat, r.demonym) == 0) return r.iso3;
+  return "";   // decision 20: no flag beats a wrong flag
+}
+
+inline bool parse_constructors(const char *s, size_t n, Store &out) {
+  const size_t lists = json::path(s, n, "MRData.StandingsTable.StandingsLists");
+  if (lists == json::NPOS || json::array_len(s, lists, n) == 0) return false;
+  const size_t l0 = json::array_at(s, lists, n, 0);
+  const size_t cs = json::find_key(s, l0, n, "ConstructorStandings");
+  if (cs == json::NPOS) return false;
+  const int nc = json::array_len(s, cs, n);
+  if (nc <= 0) return false;
+
+  char rnd[8];
+  if (json::get_str(s, l0, n, "round", rnd, sizeof(rnd)))
+    out.standings_round = (uint8_t) atoi(rnd);
+
+  int kept = 0;
+  const int cap = (int) (sizeof(out.constructors) / sizeof(out.constructors[0]));
+  for (int i = 0; i < nc && kept < cap; i++) {
+    const size_t q = json::array_at(s, cs, n, i);
+    Constructor &c = out.constructors[kept];
+    c = Constructor();
+    long v = 0;
+    json::get_int(s, q, n, "position", v); c.pos = (int) v;
+    json::get_int(s, q, n, "points", v);   c.points = (int) v;
+    json::get_int(s, q, n, "wins", v);     c.wins = (int) v;
+    const size_t ct = json::find_key(s, q, n, "Constructor");
+    json::get_str(s, ct, n, "name", c.name, sizeof(c.name));
+    char nat[24];
+    if (json::get_str(s, ct, n, "nationality", nat, sizeof(nat)))
+      std::snprintf(c.iso3, sizeof(c.iso3), "%s", team_iso3(nat));
+    kept++;
+  }
+  if (kept == 0) return false;
+  out.n_constructors = kept;
   out.generation++;
   return true;
 }

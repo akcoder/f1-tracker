@@ -11,6 +11,7 @@
 #include <cstring>
 
 #include "f1_calendar.h"
+#include "f1_champ.h"
 #include "f1_detail.h"
 #include "f1_net.h"
 #include "f1_order.h"
@@ -25,6 +26,9 @@ namespace app {
 struct Widgets {
   lv_obj_t *standings = nullptr;     // label on the championship page
   lv_obj_t *summary = nullptr;       // label on the post-session summary
+  lv_obj_t *constructors = nullptr;  // 8.1: the teams' table
+  lv_obj_t *champ_line = nullptr;    // 8.1: "X can clinch it this weekend"
+  lv_obj_t *progress = nullptr;      // 8.2: round N of M
   lv_obj_t *race_flag = nullptr;     // circuit country flag (6.6)
   lv_obj_t *top5 = nullptr;          // decision 49: a summary strip, not a list
   lv_obj_t *race_facts = nullptr;
@@ -193,6 +197,22 @@ inline void update_header() {
     lv_label_set_text(g.w.race_title, t);
   }
   if (g.w.order_title) lv_label_set_text(g.w.order_title, state::order_name(g.st.order));
+
+  // 8.2: season progress. One line, and it answers "how far through are we".
+  if (g.w.progress && g.cal.n > 0) {
+    int done = 0;
+    for (int i = 0; i < g.cal.n; i++) {
+      const uint32_t race = g.cal.rounds[i].start[calendar::RACE];
+      if (race && race < g.now_utc) done++;
+    }
+    // 64, not 48: the compiler reasons about the widest %d an int can produce,
+    // and it is right to - this is the -Wformat-truncation the build gate
+    // exists for, caught for the fourth time.
+    char b[64];
+    std::snprintf(b, sizeof(b), "Round %d of %d \u00b7 %d to go",
+                  done + (done < g.cal.n ? 1 : 0), g.cal.n, g.cal.n - done);
+    lv_label_set_text(g.w.progress, b);
+  }
 
   // The circuit's country flag (6.6). Keyed on Circuit.Location.country via the
   // calendar's iso3, NEVER on the race name (decision 18).
@@ -388,6 +408,39 @@ inline void refresh_data() {
     }
   }
 
+  // 8.1: the constructors' table, beside the drivers'.
+  if (g.data.n_constructors > 0 && g.w.constructors) {
+    char b[420];
+    int k = 0;
+    for (int i = 0; i < g.data.n_constructors && k < (int) sizeof(b) - 40; i++) {
+      const auto &c = g.data.constructors[i];
+      k += std::snprintf(b + k, sizeof(b) - k, "%2d  %-16s %4d\n",
+                         c.pos, c.name, c.points);
+    }
+    lv_label_set_text(g.w.constructors, b);
+  }
+
+  // 8.1: the permutation line. It stays BLANK for most of a season on purpose -
+  // a sentence about arithmetic in April is noise, not news.
+  if (g.w.champ_line) {
+    char b[96];
+    b[0] = '\0';
+    if (g.data.n_standings > 0 && g.cal.n > 0) {
+      int rounds_left = 0, sprints_left = 0;
+      for (int i = 0; i < g.cal.n; i++) {
+        const uint32_t race = g.cal.rounds[i].start[calendar::RACE];
+        if (race && race > g.now_utc) {
+          rounds_left++;
+          if (g.cal.rounds[i].start[calendar::SPRINT]) sprints_left++;
+        }
+      }
+      const auto o = champ::evaluate(g.data.standings, g.data.n_standings,
+                                     rounds_left, sprints_left);
+      if (!champ::line(o, b, sizeof(b))) b[0] = '\0';
+    }
+    lv_label_set_text(g.w.champ_line, b);
+  }
+
   if (g.data.n_standings > 0 && g.w.standings) {
     char b[900];
     int k = 0;
@@ -423,6 +476,22 @@ inline void tick(uint32_t now_ms) {
     }
   watch::step(g.watch_cfg, g.st, g.latch, g.alert, now_ms, g.cal.season, round,
               grid_pos, finish_pos, status);
+
+  // UI-20e: narrow the carousel during a race week.
+  {
+    const bool want = (g.st.weekend == state::RACE_WEEK ||
+                       g.st.weekend == state::SESSION_SOON ||
+                       g.st.weekend == state::SESSION_LIVE ||
+                       g.st.weekend == state::RACE_LIVE ||
+                       g.st.weekend == state::POST_SESSION);
+    int ci = -1;
+    if (want && ridx >= 0 && ridx < g.cal.n) {
+      const auto *c = map::by_circuit_id(g.cal.rounds[ridx].circuit_id);
+      for (int i = 0; c && i < circuits::N; i++)
+        if (&circuits::C[i] == c) { ci = i; break; }
+    }
+    ui::set_focus(want && ci >= 0, ci);
+  }
 
   update_header();
   update_top5();

@@ -71,6 +71,11 @@ struct State {
   int bday_driver = -1;        // index into drivers::P, or -1
   int bday_age = 0;
   int bday_mmdd = 0;           // so the check runs once a day, not every tick
+  // UI-20e: race-week focus. During a race week the carousel narrows to this
+  // weekend's circuit and the entered drivers, instead of wandering off to
+  // Kyalami and Fangio. The device should feel like it knows what is coming up.
+  bool focus = false;
+  int focus_circuit = -1;
 };
 
 inline State g;
@@ -239,6 +244,9 @@ inline bool prepare(const carousel::Card &c) {
   switch (c.type) {
     case carousel::CIRCUIT: {
       if (c.index < 0 || c.index >= circuits::N) return false;
+      // UI-20e: in focus mode only this weekend's circuit is admissible, so the
+      // rotation walks past the other 39 rather than showing them.
+      if (g.focus && g.focus_circuit >= 0 && c.index != g.focus_circuit) return false;
       const auto &ct = circuits::C[c.index];
       g.staged_circuit = &ct;
       snprintf(g.staged_badge, sizeof(g.staged_badge), "Circuit");
@@ -435,6 +443,19 @@ inline void set_content(int idx) {
 
 // Re-evaluated once a day rather than every tick: a birthday does not change
 // between seconds, and drivers::N is small but the rotation is hot.
+// UI-20e. `circuit_idx` is the index into circuits::C for this weekend, or -1.
+inline void set_focus(bool on, int circuit_idx) {
+  if (on == g.focus && circuit_idx == g.focus_circuit) return;
+  g.focus = on;
+  g.focus_circuit = circuit_idx;
+  // Legends are dropped in focus mode; circuits and the current drivers stay.
+  g.rot.configure(circuits::N, drivers::N, g.focus ? 0 : legends::N,
+                  g.focus ? carousel::CIRCUITS_AND_DRIVERS : carousel::ALL);
+  if (g.focus && circuit_idx >= 0) g.rot.set_circuit_cursor(circuit_idx);
+  g.staged_ready = false;      // whatever was staged may no longer be admissible
+  prepare_next();
+}
+
 inline void update_birthday(int year, int month, int day) {
   const int mmdd = month * 100 + day;
   if (mmdd == g.bday_mmdd) return;

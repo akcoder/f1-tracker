@@ -92,6 +92,24 @@ def facts():
         r'"([^"]*)", (\d+), "([^"]*)", (\d+)\}', s)}
 
 
+def _champ_line(standings):
+    """Mirrors f1::champ::line - 8 rounds left at the fixture's round 15."""
+    if len(standings) < 2:
+        return ""
+    rounds_left, sprints_left = 8, 2
+    avail = rounds_left * 26 + sprints_left * 8
+    gap = standings[0]["points"] - standings[1]["points"]
+    alive = 1 + sum(1 for s in standings[1:] if s["points"] + avail >= standings[0]["points"])
+    if alive == 1:
+        return f"{standings[0]['name']} has won the championship"
+    if gap > (rounds_left - 1) * 26 + sprints_left * 8:
+        return f"{standings[0]['name']} can clinch it this weekend"
+    if alive == 2 and 0 < gap <= avail:
+        return (f"{standings[0]['name']} leads {standings[1]['name']} by {gap}, "
+                f"{avail} still available")
+    return ""
+
+
 def geometry():
     """Widget x/y/width/height, read from the YAML itself.
 
@@ -381,15 +399,25 @@ def page_legend(ctx):
 
 
 def page_standings(ctx):
-    require(ctx["geo"], "page-7-standings", "standings_hdr", "standings_body")
+    require(ctx["geo"], "page-7-standings", "standings_hdr", "standings_body",
+            "constructors_hdr", "constructors_body", "champ_line")
     img = Image.new("RGB", (W, H), BG); d = ImageDraw.Draw(img)
     d.text((10, 4), "Championship", font=FONT[16], fill=ORANGE)
-    d.text((12, 32), "Pos Driver     Team             Pts", font=FONT[12], fill=MUTED)
+    d.text((12, 32), "Pos Driver    Pts", font=FONT[12], fill=MUTED)
     y = 52
-    for s in ctx["standings"][:19]:
-        d.text((12, y), f"{s['pos']:>2}  {s['name']:<10} {s['team'][:14]:<14} {s['points']:>4}"
-               + ("  W" if s["wins"] else ""), font=FONT[14], fill=TEXT)
+    for s in ctx["standings"][:17]:
+        d.text((12, y), f"{s['pos']:>2}  {s['name'][:10]:<10} {s['points']:>4}"
+               + ("  W" if s["wins"] else ""), font=FONT[12], fill=TEXT)
         y += 21
+    d.text((278, 32), "Constructors", font=FONT[12], fill=MUTED)
+    y = 52
+    for c in ctx["constructors"][:11]:
+        d.text((278, y), f"{c['pos']:>2}  {c['name'][:12]:<12} {c['points']:>4}",
+               font=FONT[12], fill=TEXT)
+        y += 21
+    # 8.1: blank for most of a season on purpose
+    if ctx.get("champ_line"):
+        d.text((12, 430), ctx["champ_line"], font=FONT[14], fill=(0xFF, 0xD5, 0x4A))
     footer(d); gear(d)
     return img, "page-7-standings"
 
@@ -581,6 +609,11 @@ def main():
                          colour=tuple(int((o.get("team_colour") or "888888")[i:i+2], 16)
                                       for i in (0, 2, 4))))
 
+    cj = json.load(open(os.path.join(SAMP, "jolpica-constructor-standings.json")))
+    cl = cj["MRData"]["StandingsTable"]["StandingsLists"][0]["ConstructorStandings"]
+    constructors = [dict(pos=int(x["position"]), points=int(float(x["points"])),
+                         name=x["Constructor"]["name"]) for x in cl]
+
     sj = json.load(open(os.path.join(SAMP, "jolpica-driver-standings.json")))
     sl = sj["MRData"]["StandingsTable"]["StandingsLists"][0]["DriverStandings"]
     standings = [dict(pos=int(x["position"]), points=int(float(x["points"])),
@@ -602,7 +635,10 @@ def main():
     G = geometry()
     ctx = dict(circ=(pts, cs, idmap), flags=fl, drivers=drv, legends=leg,
                por=portraits(), facts=facts(), cal=calendar(), grid=grid,
-               standings=standings, summary=summary, geo=G)
+               standings=standings, summary=summary, geo=G,
+               constructors=constructors,
+               # the real arithmetic, not a made-up sentence
+               champ_line=_champ_line(standings))
 
     # The check the renderer exists for: assert the firmware's own geometry does
     # not collide, before drawing anything from it.

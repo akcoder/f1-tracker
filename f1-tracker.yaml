@@ -48,6 +48,7 @@ esphome:
     - f1-tracker/f1_facts.h        # generated: tools/gen_facts.py
     - f1-tracker/f1_birthday.h
     - f1-tracker/f1_display.h
+    - f1-tracker/f1_champ.h
     - f1-tracker/f1_map.h
     - f1-tracker/f1_state.h
     - f1-tracker/f1_watch.h
@@ -101,7 +102,10 @@ esphome:
             aw.race_clock  = id(race_clock);
             aw.order_title = id(order_title);
             aw.standings   = id(standings_body);
-            aw.summary     = id(summary_body);
+            aw.summary      = id(summary_body);
+            aw.constructors = id(constructors_body);
+            aw.champ_line   = id(champ_line);
+            aw.progress     = id(progress);
             aw.race_flag   = id(race_flag);
             aw.top5        = id(top5);
             aw.race_facts  = id(race_facts);
@@ -607,6 +611,20 @@ select:
     entity_category: config
     web_server: {sorting_group_id: grp_system, sorting_weight: 1}
 
+binary_sensor:
+  # 8.2: so Home Assistant can act on a session without any code here - dim the
+  # lights, turn the TV on, announce it. The device already knows the schedule
+  # to the second; exposing it costs nothing.
+  - platform: template
+    id: session_live
+    name: Session Live
+    icon: mdi:flag-checkered
+    device_class: running
+  - platform: template
+    id: race_day
+    name: Race Day
+    icon: mdi:car-sports
+
 text_sensor:
   - platform: template        # 7.1.3: the single most explanatory value
     id: weekend_state
@@ -646,6 +664,14 @@ text_sensor:
     web_server: {sorting_group_id: grp_system, sorting_weight: 7}
 
 sensor:
+  - platform: template        # 8.2: how long until the next session starts, so
+    id: next_session_in       # Home Assistant can count down without any code here
+    name: Next Session In
+    icon: mdi:calendar-clock
+    unit_of_measurement: min
+    accuracy_decimals: 0
+    update_interval: never
+    web_server: {sorting_group_id: grp_race, sorting_weight: 8}
   - platform: wifi_signal
     name: WiFi Signal
     update_interval: 60s
@@ -981,6 +1007,14 @@ lvgl:
       on_long_press:            # UI-20: hold to pause on the current card
         - lambda: f1::ui::toggle_pause();
       widgets:
+        - label:                # 8.2: how far through the season we are
+            id: progress
+            align: TOP_RIGHT
+            x: -10
+            y: 8
+            text: ""
+            text_font: mono12
+            text_color: 0x5A6687
         - label:
             id: card_badge      # UI-20b: CIRCUIT / DRIVER / LEGEND
             x: 10
@@ -1095,10 +1129,33 @@ lvgl:
             id: standings_body
             x: 12
             y: 52
-            width: 456
+            width: 250
             text: "waiting for data"
-            text_font: mono14
+            text_font: mono12
             text_color: 0xC9D3F2
+        - label:                # 8.1: the teams, beside the drivers
+            id: constructors_hdr
+            x: 278
+            y: 32
+            text: "Constructors"
+            text_font: mono12
+            text_color: 0x7E8BB3
+        - label:
+            id: constructors_body
+            x: 278
+            y: 52
+            width: 196
+            text: ""
+            text_font: mono12
+            text_color: 0xC9D3F2
+        - label:                # 8.1: blank for most of a season, on purpose
+            id: champ_line
+            x: 12
+            y: 430
+            width: 456
+            text: ""
+            text_font: mono14
+            text_color: 0xFFD54A
 
     - id: summary_page          # 8.1: what HAPPENED. Jolpica carries the fastest
       bg_color: 0x000000        # lap and the pit stops, so no OpenF1 window applies.
@@ -1319,6 +1376,17 @@ interval:
           const auto t = id(sntp_time).now();
           f1::app::set_clock(t.is_valid() ? (uint32_t) t.timestamp : 0, t.is_valid());
           f1::app::tick(esphome::millis());
+          {  // 8.2: Home Assistant triggers
+            const auto &st = f1::app::g.st;
+            const bool live = st.weekend == f1::state::SESSION_LIVE ||
+                              st.weekend == f1::state::RACE_LIVE;
+            if (id(session_live).state != live) id(session_live).publish_state(live);
+            const bool rday = st.weekend == f1::state::RACE_LIVE ||
+                              (st.weekend == f1::state::SESSION_SOON && st.next.valid() &&
+                               f1::state::is_race(st.next.session));
+            if (id(race_day).state != rday) id(race_day).publish_state(rday);
+            if (st.to_next > 0) id(next_session_in).publish_state(st.to_next / 60.0f);
+          }
           if (t.is_valid()) f1::ui::update_birthday(t.year, t.month, t.day_of_month);
           if (t.is_valid()) {
             char b[12];
