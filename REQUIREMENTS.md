@@ -3,8 +3,8 @@
 **Target hardware:** Guition ESP32-4848S040 (ESP32-S3, 4.0" 480×480 IPS)
 **Framework:** ESPHome (ESP-IDF)
 **Status:** Draft rev 2 — living document, updated as decisions are made
-**Last updated:** 2026-10-01 (rev 20: **M0–M7 built**; renders are derived from
-the firmware and drift now fails the build — §14.1 is all that remains)
+**Last updated:** 2026-10-01 (rev 21: Auto Off, setting icons, and the feature
+round — §14.1 is all that remains)
 
 ---
 
@@ -1920,6 +1920,8 @@ and `on_long_press` opens the debug page. Ported from `sky-tracker` exactly.
 |---|---|---|
 | Latitude / Longitude | entry | decimal degrees only (§6.8) |
 | Auto-dim display | checkbox | on/off — sunset-based dimming (§6.8) |
+| Auto off overnight | checkbox | blank the panel between two hours (UI-44c) |
+| Auto off from / until | entry | local hours, default 23 → 07 |
 | Brightness | slider | 1–100 % (the **daytime** level while auto is on) |
 | Clock format | dropdown | 24 h local / 12 h local / UTC-Zulu |
 | Carousel interval | slider | 15–120 s, step 15, default **45** |
@@ -2442,6 +2444,9 @@ exists.
 | 157 | **Both render checks run in `deploy.sh`.** Geometry collisions and invented widgets now fail the build, alongside the glyph check and the warnings gate. A render that is not derived from the firmware is decoration, not verification | 2026-10-01 | active |
 | 158 | **The alert banner's flag is padded**: 24 px from the edge, 24 px of clear space before the text, and the text beside it rather than beneath. It had been drawn directly above the words and the two collided | 2026-10-01 | **corrected by owner** |
 | 159 | **`72th` is not a word.** The milestone ordinal special-cases 11/12/13 before looking at the last digit | 2026-10-01 | active |
+| 160 | **UI-44c: Auto Off blanks the panel overnight**, as a checkbox with a from/until hour. Deliberately **separate from auto-dim**: dim is about the ambient light, off is about the household being asleep, and someone may want either, both or neither. At 61.58 N dimming alone still leaves the panel lit through nineteen hours of December darkness | 2026-10-01 | **asked for by owner** |
+| 161 | **The off window wraps midnight**, because 23:00–07:00 is the normal case and is not a range on a number line. A zero-length window never fires, and a touch wakes the panel for 60 s so somebody up at 3 a.m. need not change a setting. Leaving the window clears the override, so a touch cannot keep it awake into the next night | 2026-10-01 | active |
+| 162 | **Every setting carries an icon**, the same glyph on the device, the web UI and Home Assistant. The codepoints are **generated from MDI's own metadata by name** (`tools/gen_icons.py`) and the generator fails on a name that does not exist — guessing a codepoint gives a blank glyph that compiles, flashes, and only shows up on a screen, which is the same silent class as a missing font glyph | 2026-10-01 | **asked for by owner** |
 | 143 | **Birthdays are scoped to CURRENT DRIVERS.** Legends carry a date of birth but **no date of death**, so the device cannot tell a living driver's birthday from the anniversary of someone long dead — `BIRTHDAY` over Ayrton Senna would be the worst thing it could display. `LEGENDS_INCLUDED` is named so the reasoning is in the code, not only here | 2026-10-01 | active |
 | 144 | **A 29 February birthday falls back to the 28th** in a non-leap year, rather than being skipped three years in four | 2026-10-01 | active |
 | 90 | **A Sprint is a first-class race day** (RACE-14) — its own grid, result and race page, labelled `SPRINT`. A sprint weekend has two race days. Sprint wins must **not** count toward career win milestones; Jolpica keeps them in a separate endpoint | 2026-10-01 | **decided by owner**, closes open question 6 |

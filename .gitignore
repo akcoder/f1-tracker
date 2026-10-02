@@ -5,6 +5,7 @@ __pycache__/
 *.pyc
 secrets.yaml
 test_birthday
+test_display
 test_json
 test_state
 test_watch

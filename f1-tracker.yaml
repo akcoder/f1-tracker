@@ -47,6 +47,7 @@ esphome:
     - f1-tracker/f1_portraits.h    # generated: tools/gen_portraits.py
     - f1-tracker/f1_facts.h        # generated: tools/gen_facts.py
     - f1-tracker/f1_birthday.h
+    - f1-tracker/f1_display.h
     - f1-tracker/f1_map.h
     - f1-tracker/f1_state.h
     - f1-tracker/f1_watch.h
@@ -107,6 +108,8 @@ esphome:
             aw.banner      = id(watch_banner);
             aw.banner_text = id(watch_text);
             aw.banner_flag = id(watch_flag);
+            f1::app::g.obs_lat = id(obs_lat).state;
+            f1::app::g.obs_lon = id(obs_lon).state;
             f1::app::setup(aw);
             f1::detail::setup(id(detail_panel), id(detail_title), id(detail_body),
                               id(detail_flag));
@@ -286,6 +289,14 @@ touchscreen:
   - platform: gt911           # HW-2: no transform
     id: touch
     i2c_id: bus_a
+    on_touch:                 # UI-44c: a touch wakes the panel for a minute, so
+      - lambda: |-            # somebody up at 3 a.m. need not change a setting
+          f1::display::touch(f1::display::g_state, esphome::millis());
+          if (!id(backlight).current_values.is_on()) {
+            auto on = id(backlight).turn_on();
+            on.set_brightness(id(bright_day));
+            on.perform();
+          }
 
 output:
   - platform: ledc
@@ -370,6 +381,14 @@ font:
   - file:
       type: web
       url: https://cdn.jsdelivr.net/npm/@mdi/font@7.4.47/fonts/materialdesignicons-webfont.ttf
+    id: mdi18                 # settings-page row icons. The codepoint list is
+    size: 18                  # GENERATED from MDI's own metadata by
+    bpp: 4                    # tools/gen_icons.py - guessing one gives a blank
+                              # glyph that compiles and only shows on a screen.
+    glyphs: ["\U000F0017", "\U000F009E", "\U000F00DF", "\U000F00E1", "\U000F0150", "\U000F0241", "\U000F04BA", "\U000F051B", "\U000F051F", "\U000F053A", "\U000F056C", "\U000F0594", "\U000F0835", "\U000F0904", "\U000F0BB1", "\U000F0F57", "\U000F0F5A", "\U000F113B"]
+  - file:
+      type: web
+      url: https://cdn.jsdelivr.net/npm/@mdi/font@7.4.47/fonts/materialdesignicons-webfont.ttf
     id: mdi_setup
     size: 44
     bpp: 4
@@ -436,6 +455,34 @@ number:
           auto call = id(backlight).turn_on();
           call.set_brightness(v);
           call.perform();
+  - platform: template        # UI-44c: the Auto Off window, local hours
+    id: off_from
+    name: Auto Off From
+    icon: mdi:weather-night
+    min_value: 0
+    max_value: 23
+    step: 1
+    unit_of_measurement: h
+    mode: box
+    optimistic: true
+    restore_value: true
+    initial_value: 23
+    entity_category: config
+    web_server: {sorting_group_id: grp_display, sorting_weight: 8}
+  - platform: template
+    id: off_to
+    name: Auto Off Until
+    icon: mdi:weather-sunny
+    min_value: 0
+    max_value: 23
+    step: 1
+    unit_of_measurement: h
+    mode: box
+    optimistic: true
+    restore_value: true
+    initial_value: 7
+    entity_category: config
+    web_server: {sorting_group_id: grp_display, sorting_weight: 9}
   - platform: template        # UI-20: brief asked 30 s - 1 min; range brackets it
     id: carousel_secs
     name: Carousel Interval
@@ -451,6 +498,13 @@ number:
     web_server: {sorting_group_id: grp_display, sorting_weight: 3}
 
 switch:
+  - platform: template        # UI-44c: blank the panel overnight. Separate from
+    id: auto_off              # auto-dim: dim is about light, off is about the
+    name: Auto Off            # household being asleep.
+    icon: mdi:power-sleep
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_OFF
+    web_server: {sorting_group_id: grp_display, sorting_weight: 7}
   - platform: template        # UI-44: the only reason a position is stored
     id: auto_dim
     name: Auto-dim Display
@@ -1096,6 +1150,7 @@ lvgl:
               else lv_obj_remove_state(o, LV_STATE_CHECKED);
             };
             set(id(sw_autodim), id(auto_dim).state);
+            set(id(sw_autooff), id(auto_off).state);
             set(id(sw_alerts), id(watched_alerts).state);
             set(id(sw_milestone), id(milestone_only).state);
             lv_slider_set_value(id(sl_carousel), (int) id(carousel_secs).state, LV_ANIM_OFF);
@@ -1145,13 +1200,15 @@ lvgl:
                     if (lv_obj_has_state(o, LV_STATE_CHECKED)) e->turn_on(); else e->turn_off();
                   };
                   sw(id(sw_autodim), id(auto_dim));
+                  sw(id(sw_autooff), id(auto_off));
                   sw(id(sw_alerts), id(watched_alerts));
                   sw(id(sw_milestone), id(milestone_only));
                   id(carousel_secs).make_call()
                       .set_value(lv_slider_get_value(id(sl_carousel))).perform();
               - lvgl.page.show: race_page
 
-        - label: {x: 16, y: 66, text: "Auto-dim display", text_font: mono14, text_color: 0xC9D3F2}
+        - label: {x: 16, y: 66, text: "\U000F00E1", text_font: mdi18, text_color: 0x7E8BB3}
+        - label: {x: 44, y: 66, text: "Auto-dim display", text_font: mono14, text_color: 0xC9D3F2}
         - switch: {id: sw_autodim, x: 380, y: 60, width: 72, height: 32}
         - label:
             x: 16
@@ -1161,11 +1218,15 @@ lvgl:
             text_font: mono12
             text_color: 0x7E8BB3
 
-        - label: {x: 16, y: 136, text: "Brightness", text_font: mono14, text_color: 0xC9D3F2}
+        - label: {x: 16, y: 136, text: "\U000F0904", text_font: mdi18, text_color: 0x7E8BB3}
+        - label: {x: 44, y: 136, text: "Auto off overnight", text_font: mono14, text_color: 0xC9D3F2}
+        - switch: {id: sw_autooff, x: 380, y: 130, width: 72, height: 32}
+        - label: {x: 16, y: 174, text: "\U000F00DF", text_font: mdi18, text_color: 0x7E8BB3}
+        - label: {x: 44, y: 174, text: "Brightness", text_font: mono14, text_color: 0xC9D3F2}
         - slider:
             id: sl_bright
             x: 150
-            y: 138
+            y: 176
             width: 300
             height: 18
             min_value: 1
@@ -1182,28 +1243,31 @@ lvgl:
                   call.set_brightness(v);
                   call.perform();
 
-        - label: {x: 16, y: 180, text: "Carousel", text_font: mono14, text_color: 0xC9D3F2}
-        - label: {id: lbl_carousel, x: 150, y: 180, text: "45 s", text_font: mono14, text_color: 0x7E8BB3}
+        - label: {x: 16, y: 216, text: "\U000F051B", text_font: mdi18, text_color: 0x7E8BB3}
+        - label: {x: 44, y: 216, text: "Carousel", text_font: mono14, text_color: 0xC9D3F2}
+        - label: {id: lbl_carousel, x: 160, y: 216, text: "45 s", text_font: mono14, text_color: 0x7E8BB3}
         - slider:
             id: sl_carousel
-            x: 230
-            y: 182
-            width: 220
+            x: 236
+            y: 218
+            width: 214
             height: 18
             min_value: 15
             max_value: 120
             on_value:
               - lambda: f1::ui::settings_labels(id(lbl_carousel), (int) x);
 
-        - label: {x: 16, y: 224, text: "Watched driver alerts", text_font: mono14, text_color: 0xC9D3F2}
-        - switch: {id: sw_alerts, x: 380, y: 218, width: 72, height: 32}
-        - label: {x: 16, y: 262, text: "Milestones only", text_font: mono14, text_color: 0xC9D3F2}
-        - switch: {id: sw_milestone, x: 380, y: 256, width: 72, height: 32}
+        - label: {x: 16, y: 258, text: "\U000F009E", text_font: mdi18, text_color: 0x7E8BB3}
+        - label: {x: 44, y: 258, text: "Watched driver alerts", text_font: mono14, text_color: 0xC9D3F2}
+        - switch: {id: sw_alerts, x: 380, y: 252, width: 72, height: 32}
+        - label: {x: 16, y: 300, text: "\U000F053A", text_font: mdi18, text_color: 0x7E8BB3}
+        - label: {x: 44, y: 300, text: "Milestones only", text_font: mono14, text_color: 0xC9D3F2}
+        - switch: {id: sw_milestone, x: 380, y: 294, width: 72, height: 32}
 
         - label:
             id: settings_note
             x: 16
-            y: 310
+            y: 340
             width: 448
             text: ""
             text_font: mono12
@@ -1262,6 +1326,34 @@ interval:
             snprintf(b, sizeof(b), "%02d:%02d", t.hour, t.minute);
             lv_label_set_text(id(race_clock), b);
           }
+  - interval: 30s               # UI-44 / UI-44c: auto-dim follows the Sun, and
+    then:                       # Auto Off blanks the panel overnight.
+      - lambda: |-
+          const auto t = id(sntp_time).now();
+          if (!t.is_valid()) return;
+          f1::display::g_state.window.enabled = id(auto_off).state;
+          f1::display::g_state.window.from_hour = (uint8_t) id(off_from).state;
+          f1::display::g_state.window.to_hour = (uint8_t) id(off_to).state;
+          const bool off = f1::display::should_be_off(f1::display::g_state, t.hour,
+                                                      esphome::millis());
+          if (off) {
+            if (id(backlight).current_values.is_on()) id(backlight).turn_off().perform();
+            return;
+          }
+          if (!id(backlight).current_values.is_on()) {
+            auto on = id(backlight).turn_on();
+            on.set_brightness(id(bright_day));
+            on.perform();
+            return;
+          }
+          // UI-44: skip while settings is open, so it does not fight the slider
+          if (!id(auto_dim).state || id(settings_page)->is_showing()) return;
+          const float want = std::max(0.01f, id(bright_day) * f1::app::sun_factor());
+          if (fabsf(id(backlight).current_values.get_brightness() - want) < 0.01f) return;
+          auto call = id(backlight).turn_on();
+          call.set_brightness(want);
+          call.set_transition_length(3000);   // ramp: a jump reads as a fault
+          call.perform();
   - interval: 1s                # UI-27: debug page, only while it is showing
     then:
       - lambda: |-

@@ -7,6 +7,7 @@
 // it in one place is what stops the header, the top-5 strip and the order page
 // disagreeing - plane-tracker decisions 47 and 57 are both that bug.
 #include <cstdio>
+#include <cmath>
 #include <cstring>
 
 #include "f1_calendar.h"
@@ -47,6 +48,7 @@ struct App {
   uint32_t last_eval_ms = 0;
   bool clock_valid = false;
   uint32_t now_utc = 0;
+  float obs_lat = 61.581f, obs_lon = -149.439f;   // UI-44: for the Sun only
   store::Store data;            // the last published snapshot
   uint32_t data_gen = 0;        // generation we have rendered
   lv_obj_t *standings_rows = nullptr;
@@ -426,6 +428,23 @@ inline void tick(uint32_t now_ms) {
   update_top5();
   update_banner(now_ms);
   ui::advance(now_ms);
+}
+
+// UI-44: the Sun's elevation drives auto-dim. Computed from the stored lat/lon
+// and the clock - decision 7, the only thing the position is for.
+inline float sun_factor() {
+  // Cheap solar elevation: declination from the day of year, hour angle from
+  // UTC. Good to a degree or so, which is far finer than a brightness curve
+  // with a 13-degree ramp needs.
+  if (!g.clock_valid) return 1.0f;
+  const double days = (double) g.now_utc / 86400.0;
+  const double doy = fmod(days, 365.2422);
+  const double decl = -23.44 * cos(2.0 * M_PI * (doy + 10.0) / 365.2422) * M_PI / 180.0;
+  const double hours = fmod((double) g.now_utc / 3600.0, 24.0);
+  const double ha = (hours - 12.0) * 15.0 * M_PI / 180.0 + g.obs_lon * M_PI / 180.0;
+  const double lat = g.obs_lat * M_PI / 180.0;
+  const double el = asin(sin(lat) * sin(decl) + cos(lat) * cos(decl) * cos(ha));
+  return display::dim_factor((float) (el * 180.0 / M_PI), true);
 }
 
 inline void setup(const Widgets &w) {
