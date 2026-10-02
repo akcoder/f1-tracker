@@ -3,8 +3,8 @@
 **Target hardware:** Guition ESP32-4848S040 (ESP32-S3, 4.0" 480×480 IPS)
 **Framework:** ESPHome (ESP-IDF)
 **Status:** Draft rev 2 — living document, updated as decisions are made
-**Last updated:** 2026-10-01 (rev 17: **M0–M7 built**, with the project mark on
-the boot screen and in the web UI — §14.1 is all that remains)
+**Last updated:** 2026-10-01 (rev 18: **M0–M7 built**, mark in place, card
+layouts corrected against the renders — §14.1 is all that remains)
 
 ---
 
@@ -2431,6 +2431,8 @@ exists.
 | 148 | **The mark's canvas is pure black**, so the square is invisible against the device's black page and the disc is the whole mark. An alpha variant exists for any other ground | 2026-10-01 | active |
 | 149 | **NET-10: `f1_web.h` replaces the web page's tab icon and header badge**, ported from `sky-tracker` 4.5.34. ESPHome's bundled v3 page ships an empty icon and offers no option to change it, so `/` is answered first: `INDEX_GZ` is inflated into PSRAM, both marks are swapped in, and the result is served uncompressed. The page is otherwise untouched, so an ESPHome update brings its new UI along, and **anything unexpected leaves ESPHome's own handler to serve as before** — a missing tab icon is not worth a failed boot | 2026-10-01 | active |
 | 150 | **The web marks are SVG, the boot mark is RGB565.** Vector for the browser, where it scales to any tab or bookmark size; a 200×200 bitmap for the panel, which costs 80 kB of flash and needs no rasteriser | 2026-10-01 | active |
+| 151 | **No panel behind the circuit trace.** The map container is transparent on both the race page and the circuit card, so the trace sits on the page's own black. The filled panel added a visible edge and no information — it was inherited from `sky-tracker`'s sky disc, where the fill *is* the subject | 2026-10-01 | **corrected by owner** |
+| 152 | **The photo credit and the attribution are STACKED, not sharing a line.** Both belong bottom-left and the gear owns bottom-right, so one line cannot hold both: they overlapped on every profile card. Credit above, attribution on the bottom line | 2026-10-01 | **corrected by owner** |
 | 143 | **Birthdays are scoped to CURRENT DRIVERS.** Legends carry a date of birth but **no date of death**, so the device cannot tell a living driver's birthday from the anniversary of someone long dead — `BIRTHDAY` over Ayrton Senna would be the worst thing it could display. `LEGENDS_INCLUDED` is named so the reasoning is in the code, not only here | 2026-10-01 | active |
 | 144 | **A 29 February birthday falls back to the 28th** in a non-leap year, rather than being skipped three years in four | 2026-10-01 | active |
 | 90 | **A Sprint is a first-class race day** (RACE-14) — its own grid, result and race page, labelled `SPRINT`. A sprint weekend has two race days. Sprint wins must **not** count toward career win milestones; Jolpica keeps them in a separate endpoint | 2026-10-01 | **decided by owner**, closes open question 6 |

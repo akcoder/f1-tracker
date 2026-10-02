@@ -116,7 +116,7 @@ def trace_points(c, pts, s, cx, cy):
 
 
 def draw_map(d, c, pts, ox, oy, w, h, lw=3):
-    d.rectangle([ox, oy, ox + w, oy + h], fill=MAPBG)
+    # no panel behind the trace: it sits on the page's own black
     s, cx, cy = fit_box(c, w, h)
     p = [(ox + x, oy + y) for x, y in trace_points(c, pts, s, cx, cy)]
     d.line(p, fill=(0xE8, 0xED, 0xF7), width=lw, joint="curve")
@@ -133,10 +133,13 @@ def draw_map(d, c, pts, ox, oy, w, h, lw=3):
         d.text((nx - 3, ny + 9), "N", font=FONT[10], fill=MUTED)
 
 
-def footer(d, extra=None):
-    d.text((10, 462), "Data: jolpi.ca · openf1.org", font=FONT[12], fill=DIM)
-    if extra:
-        d.text((300, 462), extra, font=FONT[12], fill=DIM)
+def footer(d, credit=None):
+    """The attribution always sits on the bottom line. A photo credit, where one
+    is needed, STACKS above it rather than sharing the line - they are both
+    bottom-left, and the gear owns the bottom-right corner."""
+    if credit:
+        d.text((12, 448), credit, font=FONT[12], fill=DIM)
+    d.text((12, 464), "Data: jolpi.ca · openf1.org", font=FONT[12], fill=DIM)
 
 
 def gear(d):
@@ -259,9 +262,10 @@ def _profile_card(ctx, p, badge, name):
     img = Image.new("RGB", (W, H), BG); d = ImageDraw.Draw(img)
     _card_head(img, d, ctx, badge, f"{p['given']} {p['family']}", p["iso3"])
     blob = ctx["por"][0].get(p["id"])
+    credit = None
     if blob:
         img.paste(Image.open(io.BytesIO(blob)), (24, 56))
-        d.text((16, 452), f"photo: {ctx['por'][1].get(p['id'],'')[:38]}", font=FONT[12], fill=DIM)
+        credit = f"photo: {ctx['por'][1].get(p['id'], '')}"[:58]
     tx, y = 290, 60
     if p["number"] and p["code"]:
         d.text((tx, y), f"#{p['number']}  {p['code']}", font=FONT[14], fill=MUTED); y += 24
@@ -276,9 +280,9 @@ def _profile_card(ctx, p, badge, name):
         d.text((tx, y), f"{p['titles']} world title" + ("s" if p["titles"] > 1 else ""),
                font=FONT[14], fill=ORANGE)
     if p["line"]:
-        d.multiline_text((16, 390), "\n".join(textwrap.wrap(p["line"], 62)),
+        d.multiline_text((16, 386), "\n".join(textwrap.wrap(p["line"], 62)),
                          font=FONT[12], fill=TEXT, spacing=4)
-    footer(d, " "); gear(d)
+    footer(d, credit); gear(d)
     return img, name
 
 
