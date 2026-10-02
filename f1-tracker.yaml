@@ -709,15 +709,15 @@ lvgl:
           widgets:
             - image:              # the watched driver's flag, LEFT with real
                 id: watch_flag    # padding either side - 24 px in from the edge
-                align: LEFT_MID   # and 32 px of clear space before the text
+                align: LEFT_MID   # and 48 px of clear space before the text
                 x: 24
                 src: pixel_img
                 hidden: true
             - label:
-                id: watch_text    # starts at 96: flag ends at 72, so 24 px clear
-                align: LEFT_MID
-                x: 96
-                width: 360
+                id: watch_text    # the flag ends at 72, so 48 px of clear space
+                align: LEFT_MID   # before the text - 24 read as crowded
+                x: 120
+                width: 340
                 text: ""
                 text_font: mono24
                 text_color: 0xFFFFFF

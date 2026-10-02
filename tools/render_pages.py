@@ -497,11 +497,11 @@ def overlay_alert(ctx):
     _, by, _, bh = box(ctx["geo"], "watch_banner")
     d.rectangle([0, by, W, by + bh], fill=WATCH)
     p = next(x for x in ctx["drivers"] if x["id"] == "max_verstappen")
-    # flag 24-72, text from 96: 24 px of clear space between them
+    # flag 24-72, text from 120: 48 px of clear space between them
     if p["iso3"] in ctx["flags"]:
         img.paste(ctx["flags"][p["iso3"]].resize((48, 36), Image.NEAREST),
                   (24, by + bh // 2 - 18))
-    d.text((96, by + bh // 2), "Max is racing today", font=FONT[24], fill=WHITE,
+    d.text((120, by + bh // 2), "Max is racing today", font=FONT[24], fill=WHITE,
            anchor="lm")
     return img, "overlay-alert-event"
 
@@ -520,10 +520,10 @@ def overlay_milestone(ctx):
     if p["iso3"] in ctx["flags"]:
         img.paste(ctx["flags"][p["iso3"]].resize((48, 36), Image.NEAREST),
                   (24, by + bh // 2 - 18))
-    d.text((96, by + 38), "Max wins", font=FONT[24], fill=WHITE, anchor="lm")
+    d.text((120, by + 38), "Max wins", font=FONT[24], fill=WHITE, anchor="lm")
     n = p["wins"] + 1
     suf = "th" if 11 <= n % 100 <= 13 else {1: "st", 2: "nd", 3: "rd"}.get(n % 10, "th")
-    d.text((96, by + 70), f"{n}{suf} career win", font=FONT[16], fill=ORANGE, anchor="lm")
+    d.text((120, by + 70), f"{n}{suf} career win", font=FONT[16], fill=ORANGE, anchor="lm")
     return img, "overlay-alert-milestone"
 
 
