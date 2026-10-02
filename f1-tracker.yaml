@@ -279,7 +279,11 @@ update:
     id: fw_update
     name: Firmware Update
     icon: mdi:cloud-download
-    source: https://akcoder.github.io/f1-tracker/manifest.json
+    # The manifest lives WITH the binaries, as a release asset: ESPHome's
+    # updater merges builds[].ota.path with this URL and has no absolute-URL
+    # branch, so a manifest on Pages could not point at a release.
+    # /releases/latest/download/ is a stable 302 to the newest release.
+    source: https://github.com/akcoder/f1-tracker/releases/latest/download/manifest.json
     update_interval: never    # driven by our own hourly interval, so the check
                               # can also be triggered from the settings screen
     web_server: {sorting_group_id: grp_system, sorting_weight: 0}

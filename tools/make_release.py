@@ -1,24 +1,41 @@
 #!/usr/bin/env python3
-"""Build the release artefacts: the update manifest and the web installer.
+"""Publish a release. The two consumers need different things, and testing
+showed they cannot share one home.
 
-"Made for ESPHome" asks for updates over the internet from a publicly reachable
-JSON manifest, and for a web installer so the device can be flashed from a
-browser. One manifest serves both, because ESP Web Tools reads `builds[].parts`
-and ESPHome's own updater reads `builds[].ota` from the same file.
+THE DEVICE UPDATER -> GitHub Release assets.
+  ESPHome's updater does NOT accept an absolute URL in `builds[].ota.path`: it
+  always merges the path with the MANIFEST's own URL
+  (http_request_update.cpp). So the manifest has to sit BESIDE the binary, not
+  on Pages pointing at it. GitHub's `/releases/latest/download/<asset>` is a
+  stable 302 to the newest release, which gives a fixed `source:` that always
+  resolves to the current version - provided asset names carry NO version, or
+  the relative path would change every release.
 
-The `md5` is NOT optional: the updater refuses a manifest without one, and it is
-what stops a half-downloaded image being written to flash.
+THE BROWSER INSTALLER -> GitHub Pages.
+  MEASURED: GitHub Releases send no `access-control-allow-origin` on any hop of
+  the download redirect chain, so a page on akcoder.github.io CANNOT fetch a
+  release asset. ESP Web Tools runs in the browser, so the factory image has to
+  stay same-origin on Pages.
 
-  python3 tools/make_release.py            # from the last esphome compile
+Net effect: the OTA image and the manifest leave the repo entirely, and only the
+factory image remains - halving what a release costs in history, rather than
+eliminating it. Dropping the web installer would eliminate it.
+
+  python3 tools/make_release.py              # build the manifests only
+  python3 tools/make_release.py --publish    # ... and create the GitHub release
 """
-import argparse, hashlib, json, os, shutil, sys, re
+import argparse, hashlib, json, os, re, shutil, subprocess, sys, tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
 BUILD = os.path.join(ROOT, ".esphome", "build", "f1-tracker", "build")
 DOCS = os.path.join(ROOT, "docs")
-
 CHIP = "ESP32-S3"
+
+# Versionless, so /releases/latest/download/<name> is stable and the manifest's
+# relative paths keep resolving.
+FACTORY = "f1-tracker.factory.bin"
+OTA = "f1-tracker.ota.bin"
 
 
 def version():
@@ -38,21 +55,19 @@ def md5(path):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--repo", default="akcoder/f1-tracker")
+    ap.add_argument("--publish", action="store_true")
     a = ap.parse_args()
 
     factory = os.path.join(BUILD, "firmware.factory.bin")
     ota = os.path.join(BUILD, "firmware.ota.bin")
     for p in (factory, ota):
         if not os.path.exists(p):
-            print(f"missing {p} - run `esphome compile f1-tracker.yaml` first",
-                  file=sys.stderr)
+            print(f"missing {p} - run ./deploy.sh first", file=sys.stderr)
             sys.exit(1)
 
-    os.makedirs(DOCS, exist_ok=True)
     v = version()
-    fac_name, ota_name = f"f1-tracker-{v}.factory.bin", f"f1-tracker-{v}.ota.bin"
-    shutil.copy2(factory, os.path.join(DOCS, fac_name))
-    shutil.copy2(ota, os.path.join(DOCS, ota_name))
+    tag = f"v{v}"
+    base = f"https://github.com/{a.repo}/releases/latest/download"
 
     manifest = {
         "name": "F1 Tracker",
@@ -61,28 +76,67 @@ def main():
         "new_install_prompt_erase": True,
         "builds": [{
             "chipFamily": CHIP,
-            # ESP Web Tools reads this, for flashing from a browser
-            "parts": [{"path": fac_name, "offset": 0}],
-            # ESPHome's own updater reads this. md5 is required - it is what
-            # stops a half-downloaded image reaching flash.
+            # Relative, so ESPHome's updater resolves them against this
+            # manifest's own URL - which is the release, beside the binaries.
+            "parts": [{"path": FACTORY, "offset": 0}],
             "ota": {
-                "path": ota_name,
-                "md5": md5(ota),
-                "summary": "Formula 1 season tracker for the Guition "
-                           "ESP32-4848S040",
-                "release_url": f"https://github.com/{a.repo}/releases",
+                "path": OTA,
+                "md5": md5(ota),      # required; the updater refuses without it
+                "summary": "Formula 1 season tracker for the Guition ESP32-4848S040",
+                "release_url": f"https://github.com/{a.repo}/releases/tag/{tag}",
             },
         }],
     }
-    with open(os.path.join(DOCS, "manifest.json"), "w") as f:
+
+    work = tempfile.mkdtemp(prefix="f1rel-")
+    shutil.copy2(factory, os.path.join(work, FACTORY))
+    shutil.copy2(ota, os.path.join(work, OTA))
+    with open(os.path.join(work, "manifest.json"), "w") as f:
         json.dump(manifest, f, indent=2)
         f.write("\n")
 
-    print(f"version {v}")
-    print(f"  {fac_name}  {os.path.getsize(factory)/1024/1024:.2f} MB")
-    print(f"  {ota_name}  {os.path.getsize(ota)/1024/1024:.2f} MB")
+    # The installer's manifest and factory image stay on Pages, same-origin,
+    # because release assets send no CORS headers (see the module docstring).
+    web = json.loads(json.dumps(manifest))
+    web["builds"][0].pop("ota", None)
+    os.makedirs(DOCS, exist_ok=True)
+    shutil.copy2(factory, os.path.join(DOCS, FACTORY))
+    with open(os.path.join(DOCS, "manifest.json"), "w") as f:
+        json.dump(web, f, indent=2)
+        f.write("\n")
+
+    print(f"version {v}  tag {tag}")
+    print(f"  {FACTORY}  {os.path.getsize(factory)/1024/1024:.2f} MB")
+    print(f"  {OTA}      {os.path.getsize(ota)/1024/1024:.2f} MB")
     print(f"  md5 {manifest['builds'][0]['ota']['md5']}")
-    print(f"  manifest -> docs/manifest.json")
+    print(f"  device updater  -> {base}/manifest.json  (release asset)")
+    print(f"  web installer   -> docs/manifest.json + docs/{FACTORY}  (Pages, "
+          f"same-origin: releases send no CORS)")
+
+    if not a.publish:
+        print(f"\nnot published. Assets staged in {work}")
+        return
+
+    notes = (f"Firmware {v} for the Guition ESP32-4848S040.\n\n"
+             f"- Install from a browser: https://akcoder.github.io/f1-tracker/\n"
+             f"- Devices already running F1 Tracker pick this up on their hourly "
+             f"update check, or from the *Check for updates* button on the "
+             f"settings screen.\n")
+    subprocess.run(["gh", "release", "view", tag, "--repo", a.repo],
+                   capture_output=True)
+    exists = subprocess.run(["gh", "release", "view", tag, "--repo", a.repo],
+                            capture_output=True).returncode == 0
+    if exists:
+        print(f"\nrelease {tag} exists - replacing its assets")
+        subprocess.run(["gh", "release", "upload", tag, "--repo", a.repo, "--clobber",
+                        os.path.join(work, OTA),
+                        os.path.join(work, "manifest.json")], check=True)
+    else:
+        subprocess.run(["gh", "release", "create", tag, "--repo", a.repo,
+                        "--title", f"F1 Tracker {v}", "--notes", notes,
+                        os.path.join(work, OTA),
+                        os.path.join(work, "manifest.json")], check=True)
+    print(f"\npublished https://github.com/{a.repo}/releases/tag/{tag}")
 
 
 if __name__ == "__main__":

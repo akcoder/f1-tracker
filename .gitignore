@@ -1,8 +1,9 @@
-__pycache__/
+*.pyc
 .DS_Store
 .esphome/
 .venv/
-*.pyc
+__pycache__/
+docs/f1-tracker.ota.bin
 secrets.yaml
 test_birthday
 test_champ
