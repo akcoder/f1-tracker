@@ -219,6 +219,29 @@ static void test_real_calendar() {
   okf(seen[IDLE] > 0, "the season contains quiet weeks");
 }
 
+// Sentence case (decision 153). The order list and the standings upper-case
+// surnames on purpose; nothing else should shout.
+static void test_case_style() {
+  std::printf("sentence case\n");
+  for (int m = 0; m < 4; m++) {
+    const char *s = order_name((OrderMode) m);
+    int upper = 0, lower = 0;
+    for (const char *q = s; *q; q++) {
+      if (*q >= 'A' && *q <= 'Z') upper++;
+      if (*q >= 'a' && *q <= 'z') lower++;
+    }
+    okf(upper <= 1, "order mode '%s' has %d capitals - sentence case takes one", s, upper);
+    okf(lower > 0, "order mode '%s' has no lower case at all", s);
+  }
+  for (int i = 0; i < calendar::N_SESSIONS; i++) {
+    const char *s = session_label(i);
+    const bool abbrev = (std::strlen(s) <= 3);   // FP1/FP2/FP3 are abbreviations
+    int upper = 0;
+    for (const char *q = s; *q; q++) if (*q >= 'A' && *q <= 'Z') upper++;
+    okf(abbrev || upper <= 1, "session label '%s' is shouting", s);
+  }
+}
+
 int main() {
   std::printf("\nF1 Tracker - state machine tests\n\n");
   test_alaska();
@@ -227,6 +250,7 @@ int main() {
   test_windows();
   test_sprint_and_edges();
   test_real_calendar();
+  test_case_style();
   std::printf("\n%d checks, %d failures\n\n", checks, failures);
   return failures ? 1 : 0;
 }

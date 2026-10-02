@@ -170,7 +170,7 @@ ota:
       - lambda: f1::net::ota_begin();     # 2.4.6: pause the data task
       - lvgl.page.show: race_page
       - lambda: |-
-          lv_label_set_text(id(ota_title), "UPLOADING");
+          lv_label_set_text(id(ota_title), "Uploading");
           lv_label_set_text(id(ota_pct), "starting");
           lv_obj_remove_flag(id(ota_panel), LV_OBJ_FLAG_HIDDEN);
           lv_refr_now(NULL);              // the OTA write blocks the loop
@@ -182,17 +182,17 @@ ota:
           last = p;
           char b[16];
           snprintf(b, sizeof(b), "%d%%", p);
-          lv_label_set_text(id(ota_title), p >= 100 ? "UPGRADING" : "UPLOADING");
+          lv_label_set_text(id(ota_title), p >= 100 ? "Upgrading" : "Uploading");
           lv_label_set_text(id(ota_pct), b);
           lv_refr_now(NULL);
     on_end:
       - lambda: |-
-          lv_label_set_text(id(ota_title), "UPGRADING");
+          lv_label_set_text(id(ota_title), "Upgrading");
           lv_label_set_text(id(ota_pct), "rebooting");
           lv_refr_now(NULL);
     on_error:
       - lambda: |-
-          lv_label_set_text(id(ota_title), "UPLOAD FAILED");
+          lv_label_set_text(id(ota_title), "Upload failed");
           lv_label_set_text(id(ota_pct), "resuming");
           lv_refr_now(NULL);
           f1::net::ota_error();            // resume if the upgrade failed
@@ -636,7 +636,7 @@ lvgl:
                 id: ota_title
                 align: CENTER
                 y: -14
-                text: "UPLOADING"
+                text: "Uploading"
                 text_font: mono24
                 text_color: 0xFF8A1F
             - label:
@@ -692,11 +692,12 @@ lvgl:
             - lambda: f1::detail::close();
       - obj:                     # 6.14.3: the watched-driver alert. A STRIP, never
           id: watch_banner       # a modal, and nothing ever requires dismissing.
-          align: TOP_MID         # It sits in the LOWER band, over the top-5 strip
-          y: 316                 # and never over the circuit trace (70-310): the
-          width: 480             # map is the thing a reader is looking at, and
-          height: 100            # covering it is what decision 92's licence to be
-                                 # loud does NOT extend to.
+          align: TOP_MID         # It REPLACES the top-5 strip, which hides while
+          y: 330                 # it shows - so there is nothing left to crowd -
+          width: 480             # and leaves 20 px of clear black below the trace
+          height: 92             # (70-310). The map is the thing a reader is
+                                 # looking at; decision 92's licence to be loud
+                                 # never extended to covering it.
           hidden: true
           bg_color: 0x1A2547
           bg_opa: COVER
@@ -775,14 +776,14 @@ lvgl:
             id: race_title
             x: 10
             y: 4
-            text: "F1 TRACKER"
+            text: "F1 Tracker"
             text_font: mono16
             text_color: 0xFF8A1F
         - label:                # UI-3: the page's most important element.
             id: race_state      # Clock-driven, NEVER lap-driven (decision 62).
             x: 10
             y: 24
-            text: "WAITING FOR DATA"
+            text: "Waiting for data"
             text_font: mono16
             text_color: 0xC9D3F2
         - label:
@@ -883,14 +884,14 @@ lvgl:
             id: order_title
             x: 10
             y: 4
-            text: "GRID"
+            text: "Grid"
             text_font: mono16
             text_color: 0xFF8A1F
         - label:
             id: order_hdr
             x: 12
             y: 58
-            text: "POS  #   NAT DRIVER     TEAM              GAP"
+            text: "Pos  #   Nat Driver     Team               Gap"
             text_font: mono12
             text_color: 0x7E8BB3
         - obj:                  # UI-10a: rows are built in C++ (M4) - each needs a
@@ -922,7 +923,7 @@ lvgl:
             id: card_badge      # UI-20b: CIRCUIT / DRIVER / LEGEND
             x: 10
             y: 6
-            text: "CIRCUIT"
+            text: "Circuit"
             text_font: mono12
             text_color: 0xFF8A1F
         - label:
@@ -1018,14 +1019,14 @@ lvgl:
         - label:
             x: 10
             y: 4
-            text: "CHAMPIONSHIP"
+            text: "Championship"
             text_font: mono16
             text_color: 0xFF8A1F
         - label:
             id: standings_hdr
             x: 12
             y: 32
-            text: "POS DRIVER     TEAM            PTS"
+            text: "Pos Driver     Team             Pts"
             text_font: mono12
             text_color: 0x7E8BB3
         - label:
@@ -1051,7 +1052,7 @@ lvgl:
         - label:
             x: 10
             y: 4
-            text: "RACE SUMMARY"
+            text: "Race summary"
             text_font: mono16
             text_color: 0xFF8A1F
         - label:
@@ -1098,7 +1099,7 @@ lvgl:
         - label:
             x: 16
             y: 14
-            text: "SETTINGS"
+            text: "Settings"
             text_font: mono16
             text_color: 0xFF8A1F
         - button:
@@ -1215,7 +1216,7 @@ lvgl:
         - label:
             x: 8
             y: 8
-            text: "DEBUG"
+            text: "Debug"
             text_font: mono16
             text_color: 0xFF8A1F
         - label:
@@ -1261,9 +1262,9 @@ interval:
           const uint32_t s = esphome::millis() / 1000;
           const std::string ip = id(ip_addr).state, ss = id(wifi_ssid_info).state;
           snprintf(b, sizeof(b),
-                   "SYSTEM\n  IP %s\n  Wi-Fi %s  %d dBm\n  Firmware %s  ESPHome %s\n"
+                   "System\n  IP %s\n  Wi-Fi %s  %d dBm\n  Firmware %s  ESPHome %s\n"
                    "  Up %ud %02uh %02um\n  RAM %u kB  PSRAM %u kB free\n\n"
-                   "DATA\n  Calendar: %s\n  State: %s\n  Order: %s\n",
+                   "Data\n  Calendar: %s\n  State: %s\n  Order: %s\n",
                    ip.empty() ? "-" : ip.c_str(), ss.empty() ? "-" : ss.c_str(),
                    (int) id(wifi_comp).wifi_rssi(), "${fw_version}", ESPHOME_VERSION,
                    (unsigned) (s / 86400), (unsigned) ((s % 86400) / 3600),

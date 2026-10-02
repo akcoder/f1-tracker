@@ -75,7 +75,7 @@ inline void format_state(char *out, size_t n, char *sub, size_t subn) {
   out[0] = sub[0] = '\0';
 
   if (!st.clock_valid) {
-    std::snprintf(out, n, "CLOCK NOT SYNCED");
+    std::snprintf(out, n, "Clock not synced");
     std::snprintf(sub, subn, "waiting for time");
     return;
   }
@@ -85,16 +85,16 @@ inline void format_state(char *out, size_t n, char *sub, size_t subn) {
     case state::SESSION_LIVE: {
       const char *lbl = st.current.valid()
                             ? state::session_label(st.current.session) : "SESSION";
-      std::snprintf(out, n, "%s UNDER WAY", lbl);
+      std::snprintf(out, n, "%s under way", lbl);
       if (st.to_results > 0)
-        std::snprintf(sub, subn, "RESULTS IN ~%02d:%02d",
+        std::snprintf(sub, subn, "Results in ~%d h %02d min",
                       (int) (st.to_results / 3600), (int) ((st.to_results % 3600) / 60));
       break;
     }
     case state::POST_SESSION:
       std::snprintf(out, n, "%s", state::order_name(st.order));
       if (st.next.valid() && st.to_next > 0)
-        std::snprintf(sub, subn, "NEXT: %s IN %dd %02dh",
+        std::snprintf(sub, subn, "Next: %s in %dd %02dh",
                       state::session_label(st.next.session),
                       (int) (st.to_next / 86400), (int) ((st.to_next % 86400) / 3600));
       break;
@@ -102,31 +102,31 @@ inline void format_state(char *out, size_t n, char *sub, size_t subn) {
       if (st.next.valid()) {
         const char *lbl = state::session_label(st.next.session);
         if (state::is_race(st.next.session))
-          std::snprintf(out, n, "LIGHTS OUT IN %02d:%02d:%02d",
+          std::snprintf(out, n, "Lights out in %d:%02d:%02d",
                         (int) (st.to_next / 3600), (int) ((st.to_next % 3600) / 60),
                         (int) (st.to_next % 60));
         else
-          std::snprintf(out, n, "%s IN %02d:%02d", lbl,
+          std::snprintf(out, n, "%s in %d:%02d", lbl,
                         (int) (st.to_next / 3600), (int) ((st.to_next % 3600) / 60));
         std::snprintf(sub, subn, "%s", state::order_name(st.order));
       }
       break;
     case state::RACE_WEEK:
       if (st.next.valid())
-        std::snprintf(out, n, "%s IN %dd %02dh",
+        std::snprintf(out, n, "%s in %dd %02dh",
                       state::session_label(st.next.session),
                       (int) (st.to_next / 86400), (int) ((st.to_next % 86400) / 3600));
       std::snprintf(sub, subn, "%s", state::order_name(st.order));
       break;
     case state::IDLE:
       if (st.next.valid())
-        std::snprintf(out, n, "NEXT SESSION IN %d DAYS", (int) (st.to_next / 86400));
+        std::snprintf(out, n, "Next session in %d days", (int) (st.to_next / 86400));
       break;
     case state::OFF_SEASON:
     default:
       // RACE-13c: the months-long gap before the next calendar is published is
       // NORMAL, not a fault. It must never read as broken.
-      std::snprintf(out, n, "%u SEASON COMPLETE", (unsigned) g.cal.season);
+      std::snprintf(out, n, "%u season complete", (unsigned) g.cal.season);
       std::snprintf(sub, subn, "next calendar not yet published");
       break;
   }
@@ -182,10 +182,10 @@ inline void update_header() {
     const int ridx = g.st.current.valid() ? g.st.current.round_idx
                                           : (g.st.next.valid() ? g.st.next.round_idx : -1);
     if (ridx >= 0 && ridx < g.cal.n)
-      std::snprintf(t, sizeof(t), "R%u %s", g.cal.rounds[ridx].round,
+      std::snprintf(t, sizeof(t), "R%u \u00b7 %s", g.cal.rounds[ridx].round,
                     g.cal.rounds[ridx].name);
     else
-      std::snprintf(t, sizeof(t), "F1 TRACKER");
+      std::snprintf(t, sizeof(t), "F1 Tracker");
     lv_label_set_text(g.w.race_title, t);
   }
   if (g.w.order_title) lv_label_set_text(g.w.order_title, state::order_name(g.st.order));
@@ -236,14 +236,20 @@ inline void update_banner(uint32_t now_ms) {
     // one - but NEITHER covers the circuit trace. The map is the thing a reader
     // is actually looking at; the licence to be loud was about there being no
     // live data underneath, not about covering the subject.
-    // Both end above y=432, where the gear sits, so settings stay reachable
-    // without waiting the banner out. The track (70-310) is never covered.
+    // Both sit below the trace (70-310) with clear black between, and both end
+    // above the gear at 432 so settings stay reachable without waiting it out.
     const bool big = (g.alert.tier == watch::MILESTONE);
-    lv_obj_set_height(g.w.banner, big ? 118 : 100);
-    lv_obj_set_y(g.w.banner, big ? 312 : 316);
+    lv_obj_set_height(g.w.banner, big ? 100 : 92);
+    lv_obj_set_y(g.w.banner, big ? 326 : 330);
+    // The strip would otherwise sit half-hidden behind it. A banner that
+    // REPLACES the summary has nothing to crowd.
+    if (g.w.top5) lv_obj_add_flag(g.w.top5, LV_OBJ_FLAG_HIDDEN);
+    if (g.w.race_facts) lv_obj_add_flag(g.w.race_facts, LV_OBJ_FLAG_HIDDEN);
     lv_obj_remove_flag(g.w.banner, LV_OBJ_FLAG_HIDDEN);
   } else {
     lv_obj_add_flag(g.w.banner, LV_OBJ_FLAG_HIDDEN);
+    if (g.w.top5) lv_obj_remove_flag(g.w.top5, LV_OBJ_FLAG_HIDDEN);
+    if (g.w.race_facts) lv_obj_remove_flag(g.w.race_facts, LV_OBJ_FLAG_HIDDEN);
   }
 }
 
@@ -428,7 +434,7 @@ inline void setup(const Widgets &w) {
   std::snprintf(g.watch_cfg.driver_id, sizeof(g.watch_cfg.driver_id), "%s",
                 watch::DEFAULT_DRIVER_ID);
   std::snprintf(g.watch_cfg.code, sizeof(g.watch_cfg.code), "VER");
-  std::snprintf(g.watch_cfg.given, sizeof(g.watch_cfg.given), "MAX");
+  std::snprintf(g.watch_cfg.given, sizeof(g.watch_cfg.given), "Max");
   std::snprintf(g.watch_cfg.iso3, sizeof(g.watch_cfg.iso3), "NLD");
   g.watch_cfg.entered = true;
 }

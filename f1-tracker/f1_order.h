@@ -130,8 +130,8 @@ inline void set_mode(state::OrderMode m) {
   // UI-10d: the GAP column carries the gap to POLE in grid modes and the race
   // gap in FINAL - it is only empty in ENTRY LIST (decision 93).
   const char *gaphdr = (m == state::ENTRY_LIST) ? "" :
-                       (m == state::FINAL) ? "GAP" : "TO POLE";
-  std::snprintf(b, sizeof(b), "POS  #   NAT DRIVER     TEAM              %s", gaphdr);
+                       (m == state::FINAL) ? "Gap" : "To pole";
+  std::snprintf(b, sizeof(b), "Pos  #   Nat Driver     Team               %s", gaphdr);
   lv_label_set_text(g.header, b);
 }
 

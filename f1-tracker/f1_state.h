@@ -47,12 +47,17 @@ inline const char *weekend_name(Weekend w) {
 // (decision 61).
 enum OrderMode : uint8_t { ENTRY_LIST, GRID_PROVISIONAL, GRID, FINAL };
 
+// Sentence case. Shouting every label is a habit, not a design: when EVERYTHING
+// is capitalised nothing is emphasised, and long runs of capitals are measurably
+// slower to read because the word-shape cue disappears. Capitals are kept for
+// the two places they earn it - driver surnames, which is the timing-screen
+// convention and aids scanning down a monospace column, and short tag labels.
 inline const char *order_name(OrderMode m) {
   switch (m) {
-    case ENTRY_LIST:       return "ENTRY LIST";
-    case GRID_PROVISIONAL: return "GRID (PROVISIONAL)";
-    case GRID:             return "GRID";
-    case FINAL:            return "FINAL";
+    case ENTRY_LIST:       return "Entry list";
+    case GRID_PROVISIONAL: return "Grid (provisional)";
+    case GRID:             return "Grid";
+    case FINAL:            return "Final";
     default:               return "?";
   }
 }
@@ -92,14 +97,14 @@ struct Session {
 
 inline const char *session_label(int s) {
   switch (s) {
-    case calendar::FP1:    return "FP1";
+    case calendar::FP1:    return "FP1";       // an abbreviation, not shouting
     case calendar::FP2:    return "FP2";
     case calendar::FP3:    return "FP3";
-    case calendar::SQ:     return "SPRINT QUALIFYING";
-    case calendar::SPRINT: return "SPRINT";
-    case calendar::QUALI:  return "QUALIFYING";
-    case calendar::RACE:   return "RACE";
-    default:               return "SESSION";
+    case calendar::SQ:     return "Sprint qualifying";
+    case calendar::SPRINT: return "Sprint";
+    case calendar::QUALI:  return "Qualifying";
+    case calendar::RACE:   return "Race";
+    default:               return "Session";
   }
 }
 

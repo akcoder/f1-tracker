@@ -32,7 +32,7 @@ static Config cfg_default() {
   Config c;
   std::strcpy(c.driver_id, DEFAULT_DRIVER_ID);
   std::strcpy(c.code, "VER");
-  std::strcpy(c.given, "MAX");
+  std::strcpy(c.given, "Max");
   std::strcpy(c.iso3, "NLD");
   c.entered = true;
   c.career_wins = 71;     // measured 2026-10-01
@@ -136,11 +136,14 @@ int main() {
     state::Status st = state::evaluate(cal, race + 600, true);
     char b[64];
     compose(c, EV_GRID_SET, st, 1, 0, "", b, sizeof(b));
-    okf(std::strstr(b, "POLE") != nullptr, "P1 on the grid should read as pole, got '%s'", b);
+    okf(std::strstr(b, "takes pole") != nullptr,
+        "P1 on the grid should read as pole, got '%s'", b);
+    // Sentence case, not shouting: the name is proper case inside a sentence.
+    okf(std::strncmp(b, "Max ", 4) == 0, "the name should be proper case, got '%s'", b);
     compose(c, EV_GRID_SET, st, 3, 0, "", b, sizeof(b));
     okf(std::strstr(b, "P3") != nullptr, "grid slot should appear, got '%s'", b);
     compose(c, EV_RESULT, st, 3, 1, "", b, sizeof(b));
-    okf(std::strstr(b, "WINS") != nullptr, "a win should read as a win, got '%s'", b);
+    okf(std::strstr(b, "wins") != nullptr, "a win should read as a win, got '%s'", b);
     compose(c, EV_RESULT, st, 3, 4, "", b, sizeof(b));
     okf(std::strstr(b, "P4") != nullptr, "a finish should carry the position, got '%s'", b);
     // A withdrawal is not a result: no finish and no status means say nothing.
@@ -174,13 +177,22 @@ int main() {
   {
     char b[64];
     okf(is_milestone(1, 72, 249, false, b, sizeof(b)), "a win is a milestone");
-    okf(is_milestone(1, 80, 249, false, b, sizeof(b)) && std::strstr(b, "80TH WIN"),
+    okf(is_milestone(1, 80, 249, false, b, sizeof(b)) && std::strstr(b, "80th win"),
         "a round-number win names the number, got '%s'", b);
-    okf(is_milestone(0, 71, 250, false, b, sizeof(b)) && std::strstr(b, "250TH START"),
+    okf(is_milestone(0, 71, 250, false, b, sizeof(b)) && std::strstr(b, "250th start"),
         "a round-number start, got '%s'", b);
     okf(!is_milestone(4, 71, 249, false, b, sizeof(b)), "an ordinary P4 is not a milestone");
-    okf(is_milestone(0, 71, 248, true, b, sizeof(b)) && std::strstr(b, "CHAMPION"),
+    okf(is_milestone(0, 71, 248, true, b, sizeof(b)) && std::strstr(b, "champion"),
         "a title is a milestone");
+    // Nothing the device draws outside the order list should be ALL CAPS.
+    for (const char *s2 : {"Max is racing today", "Max takes pole", "Max wins"}) {
+      int upper = 0, lower = 0;
+      for (const char *q = s2; *q; q++) {
+        if (*q >= 'A' && *q <= 'Z') upper++;
+        if (*q >= 'a' && *q <= 'z') lower++;
+      }
+      okf(lower > upper, "'%s' is shouting", s2);
+    }
   }
 
   std::printf("\n%d checks, %d failures\n\n", checks, failures);

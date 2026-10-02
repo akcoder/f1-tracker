@@ -94,7 +94,7 @@ struct Alert {
 struct Config {
   char driver_id[32] = {0};
   char code[8] = {0};        // 3-letter acronym for the ambient marker
-  char given[24] = {0};
+  char given[24] = {0};      // as given, NOT upper-cased: it appears in a sentence
   char iso3[4] = {0};
   bool enabled = true;
   bool milestones_only = false;
@@ -108,14 +108,14 @@ struct Config {
 // title. If this fires twice in a weekend the latch is broken.
 inline bool is_milestone(int finish_pos, uint16_t wins_after, uint16_t starts_after,
                          bool title, char *out, size_t n) {
-  if (title) { std::snprintf(out, n, "WORLD CHAMPION"); return true; }
+  if (title) { std::snprintf(out, n, "World champion"); return true; }
   if (finish_pos == 1) {
-    if (wins_after % 10 == 0) std::snprintf(out, n, "%uTH WIN", wins_after);
-    else std::snprintf(out, n, "WINS");
+    if (wins_after % 10 == 0) std::snprintf(out, n, "%uth win", wins_after);
+    else std::snprintf(out, n, "Wins");
     return true;
   }
   if (starts_after > 0 && starts_after % 50 == 0) {
-    std::snprintf(out, n, "%uTH START", starts_after);
+    std::snprintf(out, n, "%uth start", starts_after);
     return true;
   }
   return false;
@@ -174,24 +174,24 @@ inline void compose(const Config &cfg, Event e, const state::Status &st,
   const char *who = cfg.given[0] ? cfg.given : cfg.code;
   switch (e) {
     case EV_RACING_TODAY:
-      std::snprintf(out, n, "%s IS RACING TODAY", who);
+      std::snprintf(out, n, "%s is racing today", who);
       break;
     case EV_ON_TRACK:
-      std::snprintf(out, n, "%s IS ON TRACK - %s", who,
+      std::snprintf(out, n, "%s is on track \u00b7 %s", who,
                     st.current.valid() ? state::session_label(st.current.session)
-                                       : "SESSION");
+                                       : "session");
       break;
     case EV_GRID_SET:
-      if (grid_pos == 1) std::snprintf(out, n, "%s TAKES POLE", who);
-      else if (grid_pos > 0) std::snprintf(out, n, "%s STARTS P%d", who, grid_pos);
-      else std::snprintf(out, n, "%s - GRID SET", who);
+      if (grid_pos == 1) std::snprintf(out, n, "%s takes pole", who);
+      else if (grid_pos > 0) std::snprintf(out, n, "%s starts P%d", who, grid_pos);
+      else std::snprintf(out, n, "%s \u00b7 grid set", who);
       break;
     case EV_RESULT:
       // 6.14.2: a withdrawal is NOT a result. Say nothing rather than
       // inventing a DNF.
-      if (finish_pos == 1) std::snprintf(out, n, "%s WINS", who);
-      else if (finish_pos > 0) std::snprintf(out, n, "%s FINISHES P%d", who, finish_pos);
-      else if (status && *status) std::snprintf(out, n, "%s - %s", who, status);
+      if (finish_pos == 1) std::snprintf(out, n, "%s wins", who);
+      else if (finish_pos > 0) std::snprintf(out, n, "%s finishes P%d", who, finish_pos);
+      else if (status && *status) std::snprintf(out, n, "%s \u00b7 %s", who, status);
       else out[0] = '\0';
       break;
     default:

@@ -181,7 +181,7 @@ inline int age_from_dob(const char *dob, uint16_t season) {
 template <typename P>
 inline void compose_profile(const P &p, bool legend_badge, uint16_t season) {
   snprintf(g.staged_badge, sizeof(g.staged_badge), "%s",
-           legend_badge ? "LEGEND" : "DRIVER");
+           legend_badge ? "Legend" : "Driver");
   snprintf(g.staged_title, sizeof(g.staged_title), "%s %s", p.given, p.family);
 
   char line2[64] = {0};
@@ -241,7 +241,7 @@ inline bool prepare(const carousel::Card &c) {
       if (c.index < 0 || c.index >= circuits::N) return false;
       const auto &ct = circuits::C[c.index];
       g.staged_circuit = &ct;
-      snprintf(g.staged_badge, sizeof(g.staged_badge), "CIRCUIT");
+      snprintf(g.staged_badge, sizeof(g.staged_badge), "Circuit");
       snprintf(g.staged_title, sizeof(g.staged_title), "%s", ct.name);
       int round = 0;
       for (int i = 0; i < calendar::N_ROUNDS && !round; i++)
@@ -301,7 +301,7 @@ inline bool prepare(const carousel::Card &c) {
       // interesting thing true about them today.
       g.staged_birthday = (c.index == g.bday_driver);
       if (g.staged_birthday) {
-        snprintf(g.staged_badge, sizeof(g.staged_badge), "BIRTHDAY");
+        snprintf(g.staged_badge, sizeof(g.staged_badge), "Birthday");
         const size_t k = strlen(g.staged_body);
         snprintf(g.staged_body + k, sizeof(g.staged_body) - k,
                  "\n\n%s is %d today.", p.given, g.bday_age);

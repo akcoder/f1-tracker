@@ -82,6 +82,11 @@ struct Store {
 };
 
 // ---- helpers -------------------------------------------------------------
+// Surnames are upper-cased for the order list and the standings, and ONLY
+// there. That is the timing-screen convention, and in a monospace column it
+// genuinely helps the eye find a name. Everywhere else - cards, banners, the
+// state line - text is sentence case, because shouting everything emphasises
+// nothing and is slower to read.
 inline void upper_copy(char *dst, size_t n, const char *src) {
   size_t i = 0;
   for (; src && src[i] && i + 1 < n; i++)

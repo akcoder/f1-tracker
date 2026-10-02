@@ -12,7 +12,7 @@ without a board (section 14.1).
 
   python3 tools/render_pages.py --font /path/to/RobotoMono.ttf
 """
-import argparse, io, json, math, os, re, textwrap
+import argparse, io, json, math, os, re, sys, textwrap
 from PIL import Image, ImageDraw, ImageFont
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -92,6 +92,39 @@ def facts():
         r'"([^"]*)", (\d+), "([^"]*)", (\d+)\}', s)}
 
 
+def geometry():
+    """Widget x/y/width/height, read from the YAML itself.
+
+    The renderer used to carry these as literals, and twice they drifted from
+    the firmware - once hiding a 52 px collision between the map and the top-5
+    strip, because the render drew the map shorter than the device does. A
+    render is only a check while it is derived from what the firmware actually
+    does, so the geometry comes from one place: the YAML.
+    """
+    s = open(os.path.join(ROOT, "f1-tracker.yaml"), encoding="utf-8").read()
+    out, cur = {}, None
+    for line in s.split("\n"):
+        m = re.match(r"\s+id:\s*(\w+)\s*(?:#.*)?$", line)
+        if m:
+            cur = m.group(1)
+            out.setdefault(cur, {})
+            continue
+        if cur is None:
+            continue
+        for k in ("x", "y", "width", "height"):
+            mm = re.match(r"\s+" + k + r":\s*(-?\d+)\s*(?:#.*)?$", line)
+            if mm and k not in out[cur]:
+                out[cur][k] = int(mm.group(1))
+    return out
+
+
+def box(G, wid, dx=0, dy=0):
+    """(x, y, w, h) for a widget, with the page offsets the YAML implies."""
+    g = G.get(wid, {})
+    return (g.get("x", 0) + dx, g.get("y", 0) + dy,
+            g.get("width", 0), g.get("height", 0))
+
+
 def calendar():
     s = _txt("f1_calendar.h")
     season = int(re.search(r"SEASON = (\d+)", s).group(1))
@@ -163,50 +196,53 @@ def page_wifi(ctx):
     return img, "page-1-wifi"
 
 
-def page_race(ctx):
+def page_race(ctx, hide_strip=False):
     pts, cs, idmap = ctx["circ"]
     season, cal = ctx["cal"]
     rnd = cal[13]
     c = cs[idmap[rnd["cid"]]]
     img = Image.new("RGB", (W, H), BG); d = ImageDraw.Draw(img)
-    d.text((10, 4), f"R{rnd['round']} {rnd['name'].upper()}"[:34], font=FONT[16], fill=ORANGE)
+    d.text((10, 4), f"R{rnd['round']} \u00b7 {rnd['name']}"[:34], font=FONT[16], fill=ORANGE)
     # the flag sits BELOW the clock, which owns the top-right corner - a
     # collision this renderer caught before any board existed
     if rnd["iso3"] in ctx["flags"]:
         img.paste(ctx["flags"][rnd["iso3"]].resize((24, 18), Image.NEAREST), (W - 36, 34))
-    d.text((10, 26), "LIGHTS OUT IN 02:14:30", font=FONT[16], fill=TEXT)
-    d.text((10, 46), "GRID (PROVISIONAL)", font=FONT[12], fill=MUTED)
+    d.text((10, 26), "Lights out in 2:14:30", font=FONT[16], fill=TEXT)
+    d.text((10, 46), "Grid (provisional)", font=FONT[12], fill=MUTED)
     d.text((W - 12, 2), "14:35", font=FONT[24], fill=TEXT, anchor="ra")
-    draw_map(d, c, pts, 90, 70, 300, 240)
+    G = ctx["geo"]
+    mx, my, mw, mh = box(G, "map_box")
+    draw_map(d, c, pts, mx, my, mw, mh)
     # top-5 strip
-    st = ctx["grid"][:5]
-    y = 320
+    st = [] if hide_strip else ctx["grid"][:5]
+    tx0, y, _, _ = box(G, "top5")
     for i, e in enumerate(st):
-        d.rectangle([6, y + 3, 10, y + 17], fill=e["colour"])
+        d.rectangle([tx0, y + 3, tx0 + 4, y + 17], fill=e["colour"])
         if e["iso3"] in ctx["flags"]:
-            img.paste(ctx["flags"][e["iso3"]], (54, y + 4))
-        d.text((18, y + 2), f"P{i+1:<3}", font=FONT[12],
+            img.paste(ctx["flags"][e["iso3"]], (tx0 + 48, y + 4))
+        d.text((tx0 + 12, y + 2), f"P{i+1:<3}", font=FONT[12],
                fill=WHITE if e["code"] == "VER" else TEXT)
-        d.text((76, y + 2), f"{e['code']:<4} {e['team']}"[:26], font=FONT[12],
+        d.text((tx0 + 70, y + 2), f"{e['code']:<4} {e['team']}"[:26], font=FONT[12],
                fill=WHITE if e["code"] == "VER" else TEXT)
         y += 20
     f = ctx["facts"].get(rnd["cid"])
-    rx = 288
-    d.text((rx, 320), f"{c['length']/1000:.3f} km", font=FONT[12], fill=MUTED)
-    if f and f[2]:
-        d.text((rx, 338), f"FL {f[2]}", font=FONT[12], fill=MUTED)
-    if f and f[8] != "0":
-        d.text((rx, 356), f"last {f[6]}", font=FONT[12], fill=MUTED)
+    rx, ry, _, _ = box(G, "race_facts")
+    if not hide_strip:
+        d.text((rx, ry), f"{c['length']/1000:.3f} km", font=FONT[12], fill=MUTED)
+        if f and f[2]:
+            d.text((rx, ry + 18), f"FL {f[2]}", font=FONT[12], fill=MUTED)
+        if f and f[8] != "0":
+            d.text((rx, ry + 36), f"last {f[6]}", font=FONT[12], fill=MUTED)
     footer(d); gear(d)
     return img, "page-2-race"
 
 
 def page_order(ctx):
     img = Image.new("RGB", (W, H), BG); d = ImageDraw.Draw(img)
-    d.text((10, 4), "R14 SPANISH GRAND PRIX", font=FONT[16], fill=ORANGE)
-    d.text((10, 23), "GRID (PROVISIONAL)", font=FONT[15], fill=TEXT)
-    d.text((10, 41), "LIGHTS OUT IN 02:14:30", font=FONT[12], fill=MUTED)
-    d.text((12, 58), "POS  #   NAT DRIVER     TEAM              TO POLE", font=FONT[12], fill=MUTED)
+    d.text((10, 4), "R14 \u00b7 Spanish Grand Prix", font=FONT[16], fill=ORANGE)
+    d.text((10, 23), "Grid (provisional)", font=FONT[15], fill=TEXT)
+    d.text((10, 41), "Lights out in 2:14:30", font=FONT[12], fill=MUTED)
+    d.text((12, 58), "Pos  #   Nat Driver     Team               To pole", font=FONT[12], fill=MUTED)
     d.line([(8, 74), (W - 8, 74)], fill=ROW_BRD)
     y = 78
     for i, e in enumerate(ctx["grid"]):
@@ -241,8 +277,9 @@ def page_circuit(ctx):
     rnd = next(r for r in cal if r["cid"] == "monaco")
     c = cs[idmap["monaco"]]
     img = Image.new("RGB", (W, H), BG); d = ImageDraw.Draw(img)
-    _card_head(img, d, ctx, "CIRCUIT", c["name"], rnd["iso3"])
-    draw_map(d, c, pts, 90, 52, 300, 240)
+    _card_head(img, d, ctx, "Circuit", c["name"], rnd["iso3"])
+    cx, cy, cw, ch = box(ctx["geo"], "card_map")
+    draw_map(d, c, pts, cx, cy, cw, ch)
     f = ctx["facts"].get("monaco")
     body = f"{c['loc']}   {c['length']/1000:.3f} km   first GP {c['firstgp']}   Round {rnd['round']}, {season}"
     if f:
@@ -253,7 +290,8 @@ def page_circuit(ctx):
             body += f"\nLast winner  {drv}, {team}\n             {ly} {ev}"
         if int(topn) > 1:
             body += f"\nMost wins    {top} ({topn})   {races} races held"
-    d.multiline_text((12, 300), body, font=FONT[12], fill=MUTED, spacing=4)
+    bx, by, _, _ = box(ctx["geo"], "card_body")
+    d.multiline_text((bx, by), body, font=FONT[12], fill=MUTED, spacing=4)
     footer(d); gear(d)
     return img, "page-4-circuit"
 
@@ -293,13 +331,13 @@ def page_driver(ctx):
 
 def page_legend(ctx):
     p = next(x for x in ctx["legends"] if x["id"] == "senna")
-    return _profile_card(ctx, p, "LEGEND", "page-6-legend")
+    return _profile_card(ctx, p, "Legend", "page-6-legend")
 
 
 def page_standings(ctx):
     img = Image.new("RGB", (W, H), BG); d = ImageDraw.Draw(img)
-    d.text((10, 4), "CHAMPIONSHIP", font=FONT[16], fill=ORANGE)
-    d.text((12, 32), "POS DRIVER     TEAM            PTS", font=FONT[12], fill=MUTED)
+    d.text((10, 4), "Championship", font=FONT[16], fill=ORANGE)
+    d.text((12, 32), "Pos Driver     Team             Pts", font=FONT[12], fill=MUTED)
     y = 52
     for s in ctx["standings"][:19]:
         d.text((12, y), f"{s['pos']:>2}  {s['name']:<10} {s['team'][:14]:<14} {s['points']:>4}"
@@ -311,7 +349,7 @@ def page_standings(ctx):
 
 def page_summary(ctx):
     img = Image.new("RGB", (W, H), BG); d = ImageDraw.Draw(img)
-    d.text((10, 4), "RACE SUMMARY", font=FONT[16], fill=ORANGE)
+    d.text((10, 4), "Race summary", font=FONT[16], fill=ORANGE)
     s = ctx["summary"]
     body = (f"{s['season']} {s['event']}\n\n"
             f"{'Fastest lap':<16} {s['fl_time']}\n{'':<16} {s['fl_driver']}, lap {s['fl_lap']}\n\n"
@@ -325,7 +363,7 @@ def page_summary(ctx):
 
 def page_settings(ctx):
     img = Image.new("RGB", (W, H), BG); d = ImageDraw.Draw(img)
-    d.text((16, 14), "SETTINGS", font=FONT[16], fill=ORANGE)
+    d.text((16, 14), "Settings", font=FONT[16], fill=ORANGE)
     for x, w, col, lab in ((238, 110, (0x1A, 0x25, 0x47), "Cancel"), (356, 110, BORDER, "Save")):
         d.rounded_rectangle([x, 8, x + w, 46], 6, fill=col)
         d.text((x + w // 2, 27), lab, font=FONT[16], fill=TEXT, anchor="mm")
@@ -355,16 +393,16 @@ def page_settings(ctx):
 
 def page_debug(ctx):
     img = Image.new("RGB", (W, H), BG); d = ImageDraw.Draw(img)
-    d.text((8, 8), "DEBUG", font=FONT[16], fill=ORANGE)
+    d.text((8, 8), "Debug", font=FONT[16], fill=ORANGE)
     d.rounded_rectangle([W - 104, 4, W - 8, 38], 6, fill=(0x1A, 0x25, 0x47))
     d.text((W - 56, 21), "Close", font=FONT[16], fill=TEXT, anchor="mm")
-    body = ("SYSTEM\n"
+    body = ("System\n"
             "  IP 192.168.1.47\n"
             "  Wi-Fi home-ssid  -58 dBm\n"
             "  Firmware 0.1.0  ESPHome 2026.9.1\n"
             "  Up 2d 06h 14m\n"
             "  RAM 196 kB  PSRAM 7944 kB free\n\n"
-            "DATA\n"
+            "Data\n"
             "  Calendar: fetched, 3 h\n"
             "  State: RACE_WEEK\n"
             "  Order: GRID (PROVISIONAL)\n"
@@ -398,29 +436,32 @@ def overlay_detail(ctx):
 
 
 def overlay_alert(ctx):
-    img, _ = page_race(ctx)
+    img, _ = page_race(ctx, hide_strip=True)
     d = ImageDraw.Draw(img)
-    # 316-416: the lower band, over the top-5 strip. The trace (70-310) stays
-    # fully visible - the map is the thing a reader is looking at.
-    d.rectangle([0, 316, W, 416], fill=WATCH)
+    # The lower band, over the top-5 strip. The trace stays fully visible: the
+    # map is the thing a reader is looking at. Geometry from the YAML.
+    _, by, _, bh = box(ctx["geo"], "watch_banner")
+    d.rectangle([0, by, W, by + bh], fill=WATCH)
     p = next(x for x in ctx["drivers"] if x["id"] == "max_verstappen")
     if p["iso3"] in ctx["flags"]:
-        img.paste(ctx["flags"][p["iso3"]].resize((48, 36), Image.NEAREST), (24, 348))
-    d.text((264, 366), "MAX IS RACING TODAY", font=FONT[24], fill=WHITE, anchor="mm")
+        img.paste(ctx["flags"][p["iso3"]].resize((48, 36), Image.NEAREST),
+                  (24, by + bh // 2 - 18))
+    d.text((252, by + bh // 2), "Max is racing today", font=FONT[24], fill=WHITE,
+           anchor="mm")
     return img, "overlay-alert-event"
 
 
 def overlay_milestone(ctx):
-    img, _ = page_race(ctx)
+    img, _ = page_race(ctx, hide_strip=True)
     d = ImageDraw.Draw(img)
     # Taller than an event banner, still below the trace (70-310), and still
     # above the gear (432) so settings stay reachable.
-    d.rectangle([0, 312, W, 430], fill=WATCH)
+    d.rectangle([0, 326, W, 426], fill=WATCH)
     p = next(x for x in ctx["drivers"] if x["id"] == "max_verstappen")
     if p["iso3"] in ctx["flags"]:
-        img.paste(ctx["flags"][p["iso3"]].resize((40, 30), Image.NEAREST), (220, 320))
-    d.text((240, 376), "MAX WINS", font=FONT[34], fill=WHITE, anchor="mm")
-    d.text((240, 412), f"{p['wins'] + 1}TH CAREER WIN", font=FONT[18], fill=ORANGE, anchor="mm")
+        img.paste(ctx["flags"][p["iso3"]].resize((40, 30), Image.NEAREST), (220, 334))
+    d.text((240, 372), "Max wins", font=FONT[34], fill=WHITE, anchor="mm")
+    d.text((240, 408), f"{p['wins'] + 1}th career win", font=FONT[18], fill=ORANGE, anchor="mm")
     return img, "overlay-alert-milestone"
 
 
@@ -429,8 +470,8 @@ def page_offseason(ctx):
     season, _ = ctx["cal"]
     c = cs[idmap["suzuka"]]
     img = Image.new("RGB", (W, H), BG); d = ImageDraw.Draw(img)
-    d.text((10, 4), "F1 TRACKER", font=FONT[16], fill=ORANGE)
-    d.text((10, 26), f"{season} SEASON COMPLETE", font=FONT[16], fill=TEXT)
+    d.text((10, 4), "F1 Tracker", font=FONT[16], fill=ORANGE)
+    d.text((10, 26), f"{season} season complete", font=FONT[16], fill=TEXT)
     d.text((10, 46), "next calendar not yet published", font=FONT[12], fill=MUTED)
     d.text((W - 12, 2), "14:35", font=FONT[24], fill=TEXT, anchor="ra")
     draw_map(d, c, pts, 90, 70, 300, 240)
@@ -495,9 +536,30 @@ def main():
                    best_driver=best["driverId"].split("_")[-1].upper(),
                    podium=[r["Driver"]["familyName"].upper() for r in rs[:3]])
 
+    G = geometry()
     ctx = dict(circ=(pts, cs, idmap), flags=fl, drivers=drv, legends=leg,
                por=portraits(), facts=facts(), cal=calendar(), grid=grid,
-               standings=standings, summary=summary)
+               standings=standings, summary=summary, geo=G)
+
+    # The check the renderer exists for: assert the firmware's own geometry does
+    # not collide, before drawing anything from it.
+    mx, my, mw, mh = box(G, "map_box")
+    tx, ty, tw, th = box(G, "top5")
+    bx, by, bw, bh = box(G, "watch_banner")
+    probs = []
+    if my + mh > ty:
+        probs.append(f"map_box {my}-{my+mh} runs into top5 at {ty}")
+    if by < my + mh:
+        probs.append(f"watch_banner {by}-{by+bh} covers the trace {my}-{my+mh}")
+    if by + bh > 432:
+        probs.append(f"watch_banner {by}-{by+bh} covers the gear at 432")
+    if probs:
+        print("GEOMETRY PROBLEMS:", file=sys.stderr)
+        for x in probs:
+            print("  " + x, file=sys.stderr)
+        sys.exit(1)
+    print(f"geometry OK: map {my}-{my+mh}, top5 {ty}-{ty+th}, "
+          f"banner {by}-{by+bh}, gear 432+")
 
     pages = [page_wifi, page_race, page_order, page_circuit, page_driver, page_legend,
              page_standings, page_summary, page_settings, page_debug, page_offseason,
