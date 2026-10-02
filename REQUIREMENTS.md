@@ -3,8 +3,8 @@
 **Target hardware:** Guition ESP32-4848S040 (ESP32-S3, 4.0" 480×480 IPS)
 **Framework:** ESPHome (ESP-IDF)
 **Status:** Draft rev 2 — living document, updated as decisions are made
-**Last updated:** 2026-10-01 (rev 19: **M0–M7 built**, sentence case throughout,
-layout verified against YAML-derived renders — §14.1 is all that remains)
+**Last updated:** 2026-10-01 (rev 20: **M0–M7 built**; renders are derived from
+the firmware and drift now fails the build — §14.1 is all that remains)
 
 ---
 
@@ -2438,6 +2438,10 @@ exists.
 | 153 | **Sentence case, not capitals.** Shouting every label was a habit rather than a design: when everything is capitalised nothing is emphasised, and long runs of capitals read measurably slower because the word-shape cue disappears. Capitals are kept in exactly two places that earn them — **driver surnames** in the order list and standings, which is the timing-screen convention and aids scanning a monospace column, and **abbreviations** like FP1. Asserted in the host tests so it cannot drift back | 2026-10-01 | **corrected by owner** |
 | 154 | **The watched-driver banner REPLACES the top-5 strip** rather than sitting over it, and the strip hides while it shows. At 316 it cleared the trace by 6 px, which reads as touching; at 330 there are 20 px of clear black and nothing half-hidden behind it | 2026-10-01 | **corrected by owner** |
 | 155 | **`render_pages.py` reads widget geometry from the YAML** and asserts three collisions before drawing: map into strip, banner over trace, banner over gear. It had carried its own copy of the geometry and drifted twice — once hiding a real 52 px collision, because it drew the map shorter than the firmware does. A render is only a check while it is derived from what the firmware actually does | 2026-10-01 | active |
+| 156 | **The renderer fails hard if it draws a widget the YAML does not define.** Each page declares the widget ids it draws and `require()` checks them, so inventing one is an error rather than a nicer-looking picture. This is the structural fix for three separate drifts — a footer fix that landed in the YAML and not here, a map drawn 240 tall against the firmware's 300 (hiding a 52 px collision), and a flag drawn in the alert banner that the firmware never had | 2026-10-01 | **corrected by owner** |
+| 157 | **Both render checks run in `deploy.sh`.** Geometry collisions and invented widgets now fail the build, alongside the glyph check and the warnings gate. A render that is not derived from the firmware is decoration, not verification | 2026-10-01 | active |
+| 158 | **The alert banner's flag is padded**: 24 px from the edge, 24 px of clear space before the text, and the text beside it rather than beneath. It had been drawn directly above the words and the two collided | 2026-10-01 | **corrected by owner** |
+| 159 | **`72th` is not a word.** The milestone ordinal special-cases 11/12/13 before looking at the last digit | 2026-10-01 | active |
 | 143 | **Birthdays are scoped to CURRENT DRIVERS.** Legends carry a date of birth but **no date of death**, so the device cannot tell a living driver's birthday from the anniversary of someone long dead — `BIRTHDAY` over Ayrton Senna would be the worst thing it could display. `LEGENDS_INCLUDED` is named so the reasoning is in the code, not only here | 2026-10-01 | active |
 | 144 | **A 29 February birthday falls back to the 28th** in a non-leap year, rather than being skipped three years in four | 2026-10-01 | active |
 | 90 | **A Sprint is a first-class race day** (RACE-14) — its own grid, result and race page, labelled `SPRINT`. A sprint weekend has two race days. Sprint wins must **not** count toward career win milestones; Jolpica keeps them in a separate endpoint | 2026-10-01 | **decided by owner**, closes open question 6 |

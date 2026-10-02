@@ -34,6 +34,7 @@ struct Widgets {
   lv_obj_t *order_title = nullptr;
   lv_obj_t *banner = nullptr;        // 6.14.3: the watched-driver strip
   lv_obj_t *banner_text = nullptr;
+  lv_obj_t *banner_flag = nullptr;
 };
 
 struct App {
@@ -56,6 +57,7 @@ struct App {
   lv_obj_t *t5_text[5] = {nullptr};
   lv_image_dsc_t t5_dsc[5]{};
   lv_image_dsc_t flag_dsc{};
+  lv_image_dsc_t banner_dsc{};
 };
 
 inline App g;
@@ -232,6 +234,24 @@ inline void update_banner(uint32_t now_ms) {
   if (g.w.banner == nullptr) return;
   if (g.alert.active) {
     if (g.w.banner_text) lv_label_set_text(g.w.banner_text, g.alert.line);
+    // The watched driver's flag, at double card size so it reads at a glance.
+    if (g.w.banner_flag) {
+      const flags::Flag *f = flags::find(g.watch_cfg.iso3);
+      if (f) {
+        g.banner_dsc.header.magic = LV_IMAGE_HEADER_MAGIC;
+        g.banner_dsc.header.cf = LV_COLOR_FORMAT_RGB565;
+        g.banner_dsc.header.w = flags::CARD_W;
+        g.banner_dsc.header.h = flags::CARD_H;
+        g.banner_dsc.header.stride = flags::CARD_W * 2;
+        g.banner_dsc.data_size = flags::CARD_W * flags::CARD_H * 2;
+        g.banner_dsc.data = (const uint8_t *) f->card;
+        lv_image_set_src(g.w.banner_flag, &g.banner_dsc);
+        lv_image_set_scale(g.w.banner_flag, 768);   // 3x, so 48x36
+        lv_obj_remove_flag(g.w.banner_flag, LV_OBJ_FLAG_HIDDEN);
+      } else {
+        lv_obj_add_flag(g.w.banner_flag, LV_OBJ_FLAG_HIDDEN);   // decision 20
+      }
+    }
     // decision 92: loud. A milestone gets a taller strip, an event a shorter
     // one - but NEITHER covers the circuit trace. The map is the thing a reader
     // is actually looking at; the licence to be loud was about there being no

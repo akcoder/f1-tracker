@@ -106,6 +106,7 @@ esphome:
             aw.race_facts  = id(race_facts);
             aw.banner      = id(watch_banner);
             aw.banner_text = id(watch_text);
+            aw.banner_flag = id(watch_flag);
             f1::app::setup(aw);
             f1::detail::setup(id(detail_panel), id(detail_title), id(detail_body),
                               id(detail_flag));
@@ -706,14 +707,21 @@ lvgl:
           pad_all: 0
           scrollable: false
           widgets:
+            - image:              # the watched driver's flag, LEFT with real
+                id: watch_flag    # padding either side - 24 px in from the edge
+                align: LEFT_MID   # and 32 px of clear space before the text
+                x: 24
+                src: pixel_img
+                hidden: true
             - label:
-                id: watch_text
-                align: CENTER
-                width: 460
+                id: watch_text    # starts at 96: flag ends at 72, so 24 px clear
+                align: LEFT_MID
+                x: 96
+                width: 360
                 text: ""
                 text_font: mono24
                 text_color: 0xFFFFFF
-                text_align: CENTER
+                text_align: LEFT
           on_click:              # a tap dismisses EARLY; never the only way out
             - lambda: f1::app::dismiss_banner();
   pages:

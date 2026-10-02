@@ -104,6 +104,19 @@ def geometry():
     s = open(os.path.join(ROOT, "f1-tracker.yaml"), encoding="utf-8").read()
     out, cur = {}, None
     for line in s.split("\n"):
+        # Inline flow form: "- switch: {id: sw_autodim, x: 380, y: 60, ...}".
+        # The settings page is written this way, and a line-based parser that
+        # only understands the block form silently returns nothing for it -
+        # which the drift guard caught the moment it was added.
+        fm = re.search(r"\{[^}]*\bid:\s*(\w+)[^}]*\}", line)
+        if fm:
+            wid = fm.group(1)
+            out.setdefault(wid, {})
+            for k in ("x", "y", "width", "height"):
+                kv = re.search(r"\b" + k + r":\s*(-?\d+)", fm.group(0))
+                if kv:
+                    out[wid].setdefault(k, int(kv.group(1)))
+            continue
         m = re.match(r"\s+id:\s*(\w+)\s*(?:#.*)?$", line)
         if m:
             cur = m.group(1)
@@ -120,9 +133,36 @@ def geometry():
 
 def box(G, wid, dx=0, dy=0):
     """(x, y, w, h) for a widget, with the page offsets the YAML implies."""
-    g = G.get(wid, {})
+    if wid not in G:
+        raise DriftError(f"box('{wid}') - no such widget in the YAML")
+    g = G[wid]
     return (g.get("x", 0) + dx, g.get("y", 0) + dy,
             g.get("width", 0), g.get("height", 0))
+
+
+class DriftError(Exception):
+    """The renderer drew something the firmware does not have."""
+
+
+def require(G, page, *ids):
+    """Every widget a page draws must EXIST in the YAML.
+
+    This renderer has drifted from the firmware three times, and each time it
+    made the renders worse than useless - they looked fine while the device
+    would not have been:
+
+      1. a footer fix landed in the YAML and silently not here;
+      2. the map was drawn 240 tall while the firmware had 300, hiding a 52 px
+         collision with the top-5 strip;
+      3. a flag was drawn in the alert banner that the firmware never had.
+
+    Geometry now comes from the YAML (see geometry()), which fixes 1 and 2.
+    This fixes 3: a page declares the widgets it draws, and inventing one is a
+    hard failure rather than a nicer-looking picture.
+    """
+    missing = [i for i in ids if i not in G]
+    if missing:
+        raise DriftError(f"{page} draws {missing}, which the YAML does not define")
 
 
 def calendar():
@@ -185,6 +225,7 @@ FONT = {}
 
 # ---------------------------------------------------------------- pages
 def page_wifi(ctx):
+    require(ctx["geo"], "page-1-wifi", "boot_mark")
     img = Image.new("RGB", (W, H), BG); d = ImageDraw.Draw(img)
     # the real generated mark, not a placeholder
     mark = os.path.join(ROOT, "reference", "logo", "boot-200.png")
@@ -197,6 +238,8 @@ def page_wifi(ctx):
 
 
 def page_race(ctx, hide_strip=False):
+    require(ctx["geo"], "page-2-race", "race_title", "race_state", "race_sub",
+            "race_clock", "race_flag", "map_box", "top5", "race_facts", "gear_btn")
     pts, cs, idmap = ctx["circ"]
     season, cal = ctx["cal"]
     rnd = cal[13]
@@ -238,6 +281,7 @@ def page_race(ctx, hide_strip=False):
 
 
 def page_order(ctx):
+    require(ctx["geo"], "page-3-order", "order_title", "order_hdr", "order_rows")
     img = Image.new("RGB", (W, H), BG); d = ImageDraw.Draw(img)
     d.text((10, 4), "R14 \u00b7 Spanish Grand Prix", font=FONT[16], fill=ORANGE)
     d.text((10, 23), "Grid (provisional)", font=FONT[15], fill=TEXT)
@@ -272,6 +316,8 @@ def _card_head(img, d, ctx, badge, title, iso3):
 
 
 def page_circuit(ctx):
+    require(ctx["geo"], "page-4-circuit", "card_badge", "card_title", "card_map",
+            "card_body", "card_flag", "card_credit")
     pts, cs, idmap = ctx["circ"]
     season, cal = ctx["cal"]
     rnd = next(r for r in cal if r["cid"] == "monaco")
@@ -335,6 +381,7 @@ def page_legend(ctx):
 
 
 def page_standings(ctx):
+    require(ctx["geo"], "page-7-standings", "standings_hdr", "standings_body")
     img = Image.new("RGB", (W, H), BG); d = ImageDraw.Draw(img)
     d.text((10, 4), "Championship", font=FONT[16], fill=ORANGE)
     d.text((12, 32), "Pos Driver     Team             Pts", font=FONT[12], fill=MUTED)
@@ -348,6 +395,7 @@ def page_standings(ctx):
 
 
 def page_summary(ctx):
+    require(ctx["geo"], "page-8-summary", "summary_body")
     img = Image.new("RGB", (W, H), BG); d = ImageDraw.Draw(img)
     d.text((10, 4), "Race summary", font=FONT[16], fill=ORANGE)
     s = ctx["summary"]
@@ -362,6 +410,8 @@ def page_summary(ctx):
 
 
 def page_settings(ctx):
+    require(ctx["geo"], "page-9-settings", "sw_autodim", "sl_bright", "sl_carousel",
+            "lbl_carousel", "sw_alerts", "sw_milestone")
     img = Image.new("RGB", (W, H), BG); d = ImageDraw.Draw(img)
     d.text((16, 14), "Settings", font=FONT[16], fill=ORANGE)
     for x, w, col, lab in ((238, 110, (0x1A, 0x25, 0x47), "Cancel"), (356, 110, BORDER, "Save")):
@@ -392,6 +442,7 @@ def page_settings(ctx):
 
 
 def page_debug(ctx):
+    require(ctx["geo"], "page-10-debug", "debug_label")
     img = Image.new("RGB", (W, H), BG); d = ImageDraw.Draw(img)
     d.text((8, 8), "Debug", font=FONT[16], fill=ORANGE)
     d.rounded_rectangle([W - 104, 4, W - 8, 38], 6, fill=(0x1A, 0x25, 0x47))
@@ -415,6 +466,8 @@ def page_debug(ctx):
 
 
 def overlay_detail(ctx):
+    require(ctx["geo"], "overlay-detail-card", "detail_panel", "detail_title",
+            "detail_body", "detail_flag")
     img, _ = page_order(ctx)
     d = ImageDraw.Draw(img, "RGBA")
     d.rectangle([0, 0, W, H], fill=(0, 0, 0, 150))
@@ -436,6 +489,7 @@ def overlay_detail(ctx):
 
 
 def overlay_alert(ctx):
+    require(ctx["geo"], "overlay-alert-event", "watch_banner", "watch_text", "watch_flag")
     img, _ = page_race(ctx, hide_strip=True)
     d = ImageDraw.Draw(img)
     # The lower band, over the top-5 strip. The trace stays fully visible: the
@@ -443,29 +497,38 @@ def overlay_alert(ctx):
     _, by, _, bh = box(ctx["geo"], "watch_banner")
     d.rectangle([0, by, W, by + bh], fill=WATCH)
     p = next(x for x in ctx["drivers"] if x["id"] == "max_verstappen")
+    # flag 24-72, text from 96: 24 px of clear space between them
     if p["iso3"] in ctx["flags"]:
         img.paste(ctx["flags"][p["iso3"]].resize((48, 36), Image.NEAREST),
                   (24, by + bh // 2 - 18))
-    d.text((252, by + bh // 2), "Max is racing today", font=FONT[24], fill=WHITE,
-           anchor="mm")
+    d.text((96, by + bh // 2), "Max is racing today", font=FONT[24], fill=WHITE,
+           anchor="lm")
     return img, "overlay-alert-event"
 
 
 def overlay_milestone(ctx):
+    require(ctx["geo"], "overlay-alert-milestone", "watch_banner", "watch_text",
+            "watch_flag")
     img, _ = page_race(ctx, hide_strip=True)
     d = ImageDraw.Draw(img)
-    # Taller than an event banner, still below the trace (70-310), and still
-    # above the gear (432) so settings stay reachable.
-    d.rectangle([0, 326, W, 426], fill=WATCH)
+    # Same layout as an event banner - flag left with real padding, text beside
+    # it - with a second line beneath. The flag previously sat directly above
+    # the text and the two collided.
+    by, bh = 326, 100
+    d.rectangle([0, by, W, by + bh], fill=WATCH)
     p = next(x for x in ctx["drivers"] if x["id"] == "max_verstappen")
     if p["iso3"] in ctx["flags"]:
-        img.paste(ctx["flags"][p["iso3"]].resize((40, 30), Image.NEAREST), (220, 334))
-    d.text((240, 372), "Max wins", font=FONT[34], fill=WHITE, anchor="mm")
-    d.text((240, 408), f"{p['wins'] + 1}th career win", font=FONT[18], fill=ORANGE, anchor="mm")
+        img.paste(ctx["flags"][p["iso3"]].resize((48, 36), Image.NEAREST),
+                  (24, by + bh // 2 - 18))
+    d.text((96, by + 38), "Max wins", font=FONT[24], fill=WHITE, anchor="lm")
+    n = p["wins"] + 1
+    suf = "th" if 11 <= n % 100 <= 13 else {1: "st", 2: "nd", 3: "rd"}.get(n % 10, "th")
+    d.text((96, by + 70), f"{n}{suf} career win", font=FONT[16], fill=ORANGE, anchor="lm")
     return img, "overlay-alert-milestone"
 
 
 def page_offseason(ctx):
+    require(ctx["geo"], "page-11-offseason", "race_title", "race_state", "map_box")
     pts, cs, idmap = ctx["circ"]
     season, _ = ctx["cal"]
     c = cs[idmap["suzuka"]]
@@ -566,7 +629,11 @@ def main():
              overlay_detail, overlay_alert, overlay_milestone]
     made = []
     for fn in pages:
-        img, name = fn(ctx)
+        try:
+            img, name = fn(ctx)
+        except DriftError as e:
+            print(f"DRIFT: {e}", file=sys.stderr)
+            sys.exit(1)
         p = os.path.join(OUT, f"{name}.png")
         img.save(p)
         made.append(name)

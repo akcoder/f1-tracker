@@ -106,16 +106,30 @@ struct Config {
 
 // A milestone is rare by construction: a win, a round-number win or start, or a
 // title. If this fires twice in a weekend the latch is broken.
+// 72th is not a word. 11th/12th/13th are, which is why the teens are special
+// cased before the last digit is looked at.
+inline const char *ordinal(unsigned v) {
+  const unsigned teen = v % 100;
+  if (teen >= 11 && teen <= 13) return "th";
+  switch (v % 10) {
+    case 1:  return "st";
+    case 2:  return "nd";
+    case 3:  return "rd";
+    default: return "th";
+  }
+}
+
 inline bool is_milestone(int finish_pos, uint16_t wins_after, uint16_t starts_after,
                          bool title, char *out, size_t n) {
   if (title) { std::snprintf(out, n, "World champion"); return true; }
   if (finish_pos == 1) {
-    if (wins_after % 10 == 0) std::snprintf(out, n, "%uth win", wins_after);
+    if (wins_after % 10 == 0)
+      std::snprintf(out, n, "%u%s win", wins_after, ordinal(wins_after));
     else std::snprintf(out, n, "Wins");
     return true;
   }
   if (starts_after > 0 && starts_after % 50 == 0) {
-    std::snprintf(out, n, "%uth start", starts_after);
+    std::snprintf(out, n, "%u%s start", starts_after, ordinal(starts_after));
     return true;
   }
   return false;

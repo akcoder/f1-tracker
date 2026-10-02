@@ -28,6 +28,14 @@ echo "==> validating"
 echo "==> checking glyphs"
 .venv/bin/python tools/check_glyphs.py | tail -3
 
+# The renders are only a check while they are derived from what the firmware
+# actually does. This fails if the renderer draws a widget the YAML does not
+# define, or if the YAML's own geometry collides.
+if [ -f /tmp/RobotoMono.ttf ]; then
+  echo "==> checking render drift"
+  .venv/bin/python tools/render_pages.py --font /tmp/RobotoMono.ttf | head -1
+fi
+
 if [ "${1:-}" = "--config" ]; then echo "config OK"; exit 0; fi
 
 echo "==> compiling"
