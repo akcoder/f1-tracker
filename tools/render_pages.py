@@ -150,9 +150,12 @@ FONT = {}
 # ---------------------------------------------------------------- pages
 def page_wifi(ctx):
     img = Image.new("RGB", (W, H), BG); d = ImageDraw.Draw(img)
-    d.ellipse([214, 96, 266, 148], outline=WHITE, width=3)
-    d.text((240, 180), "Connecting to Wi-Fi", font=FONT[34], fill=WHITE, anchor="mm")
-    d.text((240, 220), "home-ssid", font=FONT[22], fill=(0xB0, 0xB0, 0xB0), anchor="mm")
+    # the real generated mark, not a placeholder
+    mark = os.path.join(ROOT, "reference", "logo", "boot-200.png")
+    if os.path.exists(mark):
+        img.paste(Image.open(mark), ((W - 200) // 2, 56))
+    d.text((240, 300), "Connecting to Wi-Fi", font=FONT[34], fill=WHITE, anchor="mm")
+    d.text((240, 348), "home-ssid", font=FONT[22], fill=(0xB0, 0xB0, 0xB0), anchor="mm")
     d.text((W - 60, 464), "v0.1.0", font=FONT[12], fill=DIM)
     return img, "page-1-wifi"
 

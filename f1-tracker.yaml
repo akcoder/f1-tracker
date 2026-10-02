@@ -37,6 +37,8 @@ esphome:
     - "-DLV_USE_IMAGE=1"
   includes:
     - f1-tracker/f1_panel.h
+    - f1-tracker/f1_logo.h         # generated: tools/gen_logo.py
+    - f1-tracker/f1_web.h
     - f1-tracker/f1_circuits.h     # generated: tools/gen_circuits.py
     - f1-tracker/f1_calendar.h     # generated: tools/gen_calendar.py
     - f1-tracker/f1_flags.h        # generated: tools/gen_flags.py
@@ -70,6 +72,9 @@ esphome:
             auto ap = id(wifi_comp).get_ap();
             ap.set_ssid(ssid);
             id(wifi_comp).set_ap(ap);
+    - priority: 600            # NET-10: before web_server's own setup (249), so
+      then:                    # our handler for "/" is asked first
+        - lambda: f1::web::install();
     - priority: -100           # widgets exist by now (7.1.2: entities own the
       then:                    # values, the widgets are one view of them)
         - lambda: |-
@@ -318,6 +323,12 @@ image:
   - file: reference/pixel.png
     id: pixel_img
     type: RGB565
+  # The mark, made from the Monza trace in f1_circuits.h (tools/gen_logo.py).
+  # Shown large on the boot screen; the web UI gets the SVG form (NET-10).
+  - file: reference/logo/boot-200.png
+    id: boot_logo
+    type: RGB565
+    resize: 200x200
 
 font:
   - file: "gfonts://Roboto Mono"
@@ -723,12 +734,11 @@ lvgl:
               flex_flow: COLUMN
               flex_align_main: CENTER
               flex_align_cross: CENTER
-              pad_row: 36
+              pad_row: 22
             widgets:
-              - label:
-                  text: "\U000F05A9"       # mdi:wifi
-                  text_font: mdi_setup
-                  text_color: 0xFFFFFF
+              - image:
+                  id: boot_mark
+                  src: boot_logo
               - label:
                   text: "Connecting to Wi-Fi"
                   text_font: setup_title
