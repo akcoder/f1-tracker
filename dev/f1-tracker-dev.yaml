@@ -1,0 +1,27 @@
+# Local development build.
+#
+# The published f1-tracker.yaml must contain no !secret and must build
+# unmodified - that is a "Made for ESPHome" requirement, and it is also what
+# lets anyone adopt the project from the ESPHome dashboard.
+#
+# So credentials live HERE, in a file that is never published, and the public
+# config is pulled in as a package. This is the same shape the dashboard's own
+# adoption flow produces.
+#
+#   esphome run dev/f1-tracker-dev.yaml
+packages:
+  f1_tracker: !include ../f1-tracker.yaml
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+
+api:
+  encryption:
+    key: !secret api_encryption_key
+
+web_server:
+  auth:
+    type: digest
+    username: !secret web_username
+    password: !secret web_password

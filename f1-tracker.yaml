@@ -14,7 +14,6 @@ substitutions:
   backlight_min: "0.10"       # HW-6: lowest duty still visible; raise if the panel
                               # goes dark at the bottom of the brightness slider
   carousel_default: "45"      # UI-20: seconds per card (brief asked 30 s - 1 min)
-  wifi_name: !secret wifi_ssid
 
 esphome:
   name: ${name}
@@ -178,14 +177,13 @@ logger:
   hardware_uart: UART0
 
 api:
+  id: api_server              # every component carries an id, for customisation
   reboot_timeout: 0s          # NET-2: the default 15 min "no HA client" reboot kills the AP
   max_connections: 8          # at the default 5 an extra log viewer is dropped
-  encryption:
-    key: !secret api_encryption_key
 
 ota:
   - platform: esphome
-    encryption:               # BUILD-1: reuses the API encryption key
+    id: ota_esphome
     on_begin:
       - lambda: f1::net::ota_begin();     # 2.4.6: pause the data task
       - lvgl.page.show: race_page
@@ -218,15 +216,16 @@ ota:
           f1::net::ota_error();            // resume if the upgrade failed
       - delay: 5s
       - lambda: lv_obj_add_flag(id(ota_panel), LV_OBJ_FLAG_HIDDEN);
-  - platform: web_server      # 7.1: firmware upload from the device's own page.
-                              # Declared EXPLICITLY so its plaintext /update
-                              # endpoint is a deliberate choice, not an implicit
-                              # default - it is gated by web_server auth below.
+  - platform: web_server      # 7.1: firmware upload from the device's own page
+    id: ota_web
+  - platform: http_request    # "Made for ESPHome": updates over the internet
+    id: ota_http
 
 wifi:
+  # "Made for ESPHome": no credentials here. They arrive over Improv - BLE or
+  # USB serial - or from the local wrapper in dev/f1-tracker-dev.yaml. A
+  # published config must contain no !secret and must build unmodified.
   id: wifi_comp
-  ssid: !secret wifi_ssid
-  password: !secret wifi_password
   on_connect:
     - lambda: f1::net::wifi_up(true);
   on_disconnect:              # NET-8: no network calls while Wi-Fi is down
@@ -242,11 +241,6 @@ web_server:                   # NET-1
   port: 80
   version: 3
   local: true                 # bundle the UI so it also works on the AP with no internet
-  auth:                       # 7.1: the page controls every setting
-    type: digest              # basic sends the password reversibly; the ESPHome
-                              # default flips to digest in 2027.1.0 anyway
-    username: !secret web_username
-    password: !secret web_password
   sorting_groups:
     - id: grp_race
       name: Race
@@ -273,8 +267,37 @@ time:
 # esp_http_client, esp-tls, the certificate bundle and ArduinoJson for the C++
 # data task (M3). NET-15's .buffer_size = 4096 is set there, not here.
 http_request:
+  id: http_client
   verify_ssl: true
-  timeout: 15s
+  timeout: 20s
+
+# "Made for ESPHome": updates are published as a JSON manifest and fetched over
+# the internet. The device checks hourly (see the interval below) and exposes an
+# update entity to Home Assistant and the web UI.
+update:
+  - platform: http_request
+    id: fw_update
+    name: Firmware Update
+    icon: mdi:cloud-download
+    source: https://akcoder.github.io/f1-tracker/manifest.json
+    update_interval: never    # driven by our own hourly interval, so the check
+                              # can also be triggered from the settings screen
+    web_server: {sorting_group_id: grp_system, sorting_weight: 0}
+
+dashboard_import:
+  package_import_url: github://akcoder/f1-tracker/f1-tracker.yaml@main
+  import_full_config: false
+
+# Improv is mandatory wherever wifi: appears: it lets someone set credentials
+# with no computer. BLE for a phone, serial for a USB cable.
+esp32_improv:
+  authorizer: none
+
+improv_serial:
+  id: improv_uart
+
+safe_mode:
+  id: safe_mode_main
 
 # ---------------------------------------------------------------- hardware
 spi:
@@ -401,7 +424,7 @@ font:
     size: 18                  # GENERATED from MDI's own metadata by
     bpp: 4                    # tools/gen_icons.py - guessing one gives a blank
                               # glyph that compiles and only shows on a screen.
-    glyphs: ["\U000F0017", "\U000F009E", "\U000F00DF", "\U000F00E1", "\U000F0150", "\U000F0241", "\U000F04BA", "\U000F051B", "\U000F051F", "\U000F053A", "\U000F056C", "\U000F0594", "\U000F0835", "\U000F0904", "\U000F0BB1", "\U000F0F57", "\U000F0F5A", "\U000F113B"]
+    glyphs: ["\U000F0017", "\U000F009E", "\U000F00DF", "\U000F00E1", "\U000F0150", "\U000F0241", "\U000F04BA", "\U000F051B", "\U000F051F", "\U000F053A", "\U000F056C", "\U000F0594", "\U000F0835", "\U000F0904", "\U000F0BB1", "\U000F0F57", "\U000F0F5A", "\U000F113B", "\U000F0162"]
   - file:
       type: web
       url: https://cdn.jsdelivr.net/npm/@mdi/font@7.4.47/fonts/materialdesignicons-webfont.ttf
@@ -859,7 +882,8 @@ lvgl:
                   width: 380
                   text_align: CENTER
               - label:
-                  text: "${wifi_name}"
+                  id: wifi_body   # the SSID is not known at compile time any
+                  text: "setting up"  # more - credentials arrive over Improv
                   text_font: setup_body
                   text_color: 0xB0B0B0
                   width: 380
@@ -1344,10 +1368,41 @@ lvgl:
         - label: {x: 44, y: 300, text: "Milestones only", text_font: mono14, text_color: 0xC9D3F2}
         - switch: {id: sw_milestone, x: 380, y: 294, width: 72, height: 32}
 
+        - button:               # "Made for ESPHome": check on demand, as well as
+            id: btn_update      # on the hourly timer
+            x: 16
+            y: 340
+            width: 210
+            height: 42
+            bg_color: 0x1A2547
+            shadow_width: 0
+            radius: 8
+            widgets:
+              - obj:
+                  align: CENTER
+                  width: SIZE_CONTENT
+                  height: SIZE_CONTENT
+                  bg_opa: TRANSP
+                  border_width: 0
+                  pad_all: 0
+                  clickable: false
+                  scrollable: false
+                  layout: {type: FLEX, flex_flow: ROW, flex_align_cross: CENTER, pad_column: 8}
+                  widgets:
+                    - label: {text: "\U000F0162", text_font: mdi18, text_color: 0x7E8BB3}
+                    - label: {text: "Check for updates", text_font: mono14, text_color: 0xC9D3F2}
+            on_click:
+              - lambda: |-
+                  if (!id(wifi_comp).is_connected()) {
+                    lv_label_set_text(id(settings_note), "No network - cannot check");
+                    return;
+                  }
+                  lv_label_set_text(id(settings_note), "Checking for updates...");
+                  id(fw_update).check();
         - label:
             id: settings_note
             x: 16
-            y: 340
+            y: 394
             width: 448
             text: ""
             text_font: mono12
@@ -1411,12 +1466,20 @@ interval:
             if (st.to_next > 0) id(next_session_in).publish_state(st.to_next / 60.0f);
           }
           if (t.is_valid()) f1::ui::update_birthday(t.year, t.month, t.day_of_month);
+          {  // the SSID is a runtime fact now, not a compile-time one
+            const std::string ss = id(wifi_ssid_info).state;
+            lv_label_set_text(id(wifi_body), ss.empty() ? "setting up" : ss.c_str());
+          }
           if (t.is_valid()) {
             char b[12];
             // 6.7: 24 h local by default; the three-state dropdown lands at M5.
             snprintf(b, sizeof(b), "%02d:%02d", t.hour, t.minute);
             lv_label_set_text(id(race_clock), b);
           }
+  - interval: 1h                # "Made for ESPHome": check for a published
+    then:                       # firmware update once an hour.
+      - lambda: |-
+          if (id(wifi_comp).is_connected()) id(fw_update).check();
   - interval: 30s               # UI-44 / UI-44c: auto-dim follows the Sun, and
     then:                       # Auto Off blanks the panel overnight.
       - lambda: |-

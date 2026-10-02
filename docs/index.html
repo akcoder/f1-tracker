@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>F1 Tracker</title>
+<link rel="icon" type="image/svg+xml" href="favicon.svg">
+<style>
+  :root { color-scheme: dark; }
+  body { margin: 0; background: #0a0d14; color: #c9d3f2;
+         font: 16px/1.6 ui-monospace, "Roboto Mono", SFMono-Regular, Menlo, monospace; }
+  main { max-width: 46rem; margin: 0 auto; padding: 3rem 1.25rem 5rem; }
+  header { display: flex; align-items: center; gap: 1.25rem; margin-bottom: 2rem; }
+  header img { width: 88px; height: 88px; }
+  h1 { font-size: 1.6rem; margin: 0; color: #f2f5fc; font-weight: 500; }
+  .sub { color: #7e8bb3; margin: .25rem 0 0; font-size: .95rem; }
+  h2 { font-size: 1.05rem; color: #ff8a1f; font-weight: 500;
+       margin: 2.5rem 0 .75rem; }
+  p, li { color: #a8b3cc; }
+  a { color: #6c98ff; }
+  code { background: #121a2b; padding: .1rem .35rem; border-radius: 3px; color: #c9d3f2; }
+  pre { background: #121a2b; padding: .9rem 1rem; border-radius: 8px; overflow-x: auto;
+        border: 1px solid #1e2a44; }
+  .install { background: #121a2b; border: 1px solid #2d5bd0; border-radius: 10px;
+             padding: 1.25rem; margin: 1.5rem 0; }
+  .muted { color: #5a6687; font-size: .85rem; }
+  table { border-collapse: collapse; width: 100%; font-size: .9rem; }
+  td, th { text-align: left; padding: .35rem .6rem .35rem 0;
+           border-bottom: 1px solid #1a2238; }
+  th { color: #7e8bb3; font-weight: 500; }
+  footer { margin-top: 3rem; color: #5a6687; font-size: .82rem; }
+</style>
+<script type="module"
+        src="https://unpkg.com/esp-web-tools@10/dist/web/install-button.js?module"></script>
+</head>
+<body>
+<main>
+  <header>
+    <img src="logo.png" alt="">
+    <div>
+      <h1>F1 Tracker</h1>
+      <p class="sub">A Formula 1 season on a 480&times;480 touchscreen.<br>
+         Made for ESPHome &middot; Guition ESP32-4848S040</p>
+    </div>
+  </header>
+
+  <div class="install">
+    <p><strong>Install it from this page.</strong> Plug the board in over USB and
+       press the button. Chrome or Edge on a desktop; Web Serial is not available
+       in Safari or on a phone.</p>
+    <esp-web-install-button manifest="manifest.json">
+      <button slot="activate">Install F1 Tracker</button>
+      <span slot="unsupported">This browser cannot flash over USB &mdash; use Chrome or Edge.</span>
+      <span slot="not-allowed">Serial access was blocked.</span>
+    </esp-web-install-button>
+    <p class="muted">Wi-Fi is set up afterwards over Bluetooth or USB &mdash; no
+       credentials are compiled in, and none are needed to install.</p>
+  </div>
+
+  <h2>What it does</h2>
+  <ul>
+    <li><strong>On a race weekend</strong> &mdash; the circuit map for the track,
+        the drivers in starting order, a flag for each driver and for the course.</li>
+    <li><strong>Otherwise</strong> &mdash; a carousel of every circuit with its
+        facts, every current driver, and the legends, with portraits.</li>
+    <li><strong>Watches one driver</strong> and tells you when they are racing,
+        where they start, and how they finished.</li>
+    <li>Championship tables, permutations, a post-race summary, and a birthday
+        card when it is one.</li>
+  </ul>
+
+  <h2>Adopt it in ESPHome</h2>
+  <p>The configuration is open and builds unmodified. Add it to your dashboard:</p>
+  <pre>github://akcoder/f1-tracker/f1-tracker.yaml@main</pre>
+
+  <h2>Updates</h2>
+  <p>The device checks this site once an hour and offers the update in Home
+     Assistant, on its own web page, and on its settings screen. Nothing is
+     installed without being asked.</p>
+
+  <h2>Data</h2>
+  <table>
+    <tr><th>Source</th><th>Used for</th><th>Licence</th></tr>
+    <tr><td><a href="https://jolpi.ca/">jolpi.ca</a></td>
+        <td>calendar, drivers, results, standings</td><td>CC BY-NC-SA 4.0</td></tr>
+    <tr><td><a href="https://openf1.org/">openf1.org</a></td>
+        <td>session data</td><td>CC BY-NC-SA 4.0</td></tr>
+    <tr><td><a href="https://github.com/bacinger/f1-circuits">f1-circuits</a></td>
+        <td>circuit geometry</td><td>MIT</td></tr>
+    <tr><td><a href="https://github.com/lipis/flag-icons">flag-icons</a></td>
+        <td>country flags</td><td>MIT</td></tr>
+    <tr><td><a href="https://commons.wikimedia.org/">Wikimedia Commons</a></td>
+        <td>portraits</td><td>per image, credited on the card</td></tr>
+  </table>
+
+  <footer>
+    <p>Not affiliated with, endorsed by, or connected to Formula 1.
+       <em>F1</em>, <em>FORMULA 1</em> and <em>FIA</em> are trademarks of their
+       respective owners. Personal, non-commercial use.</p>
+    <p><a href="https://github.com/akcoder/f1-tracker">Source on GitHub</a></p>
+  </footer>
+</main>
+</body>
+</html>

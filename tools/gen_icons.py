@@ -37,6 +37,7 @@ ICONS = {
     "force_page":    ("page-next-outline", "Force page"),
     "team":          ("shield-star",       "Favourite team"),
     "night":         ("weather-night",     "Night"),
+    "update":        ("cloud-download",    "Check for updates"),
 }
 
 

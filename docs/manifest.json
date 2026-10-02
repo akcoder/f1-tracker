@@ -1,0 +1,23 @@
+{
+  "name": "F1 Tracker",
+  "version": "0.1.0",
+  "home_assistant_domain": "esphome",
+  "new_install_prompt_erase": true,
+  "builds": [
+    {
+      "chipFamily": "ESP32-S3",
+      "parts": [
+        {
+          "path": "f1-tracker-0.1.0.factory.bin",
+          "offset": 0
+        }
+      ],
+      "ota": {
+        "path": "f1-tracker-0.1.0.ota.bin",
+        "md5": "297932f50769b1680a790c10c70f5d49",
+        "summary": "Formula 1 season tracker for the Guition ESP32-4848S040",
+        "release_url": "https://github.com/akcoder/f1-tracker/releases"
+      }
+    }
+  ]
+}
