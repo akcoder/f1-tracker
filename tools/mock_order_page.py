@@ -5,7 +5,7 @@ Answers open question 3: do 22 rows fit at mono12? Uses the real Roboto Mono
 metrics, the real 2026 entry list and the real OpenF1 team colours, so the
 measurement is of the actual layout rather than an estimate.
 
-  python3 tools/mock_order_page.py --font /path/RobotoMono.ttf --out reference/mockups
+  python3 tools/mock_order_page.py --font /path/RobotoMono.ttf --out docs/renders
 """
 import argparse, json, os, sys
 from PIL import Image, ImageDraw, ImageFont
@@ -137,7 +137,7 @@ def render(rows, font_path, with_team=True, row_h=18, label="a", watched="VER",
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--font", required=True)
-    ap.add_argument("--out", default=os.path.join(ROOT, "reference", "mockups"))
+    ap.add_argument("--out", default=os.path.join(ROOT, "docs", "renders"))
     a = ap.parse_args()
     os.makedirs(a.out, exist_ok=True)
     rows = load_grid()

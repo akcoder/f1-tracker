@@ -44,6 +44,24 @@ def version():
     return m.group(1) if m else "0.0.0"
 
 
+def release_notes(path):
+    """What the device's "Update available" card shows (UI-68c).
+
+    The manifest's ota.summary is the release text, and the panel shows ~1.5 KB of
+    it, so it is written for a small screen: short lines, no tables. Taken from a
+    file when given, otherwise the commit subjects since the previous tag - which
+    is what changed, in the author's own words, with nothing to forget to write.
+    """
+    if path:
+        return open(path, encoding="utf-8").read().strip()
+    last = subprocess.run(["git", "describe", "--tags", "--abbrev=0"], cwd=ROOT,
+                          capture_output=True, text=True)
+    rng = f"{last.stdout.strip()}..HEAD" if last.returncode == 0 else "HEAD"
+    log = subprocess.run(["git", "log", "--no-merges", "--pretty=- %s", rng], cwd=ROOT,
+                         capture_output=True, text=True).stdout.strip()
+    return log or "Formula 1 season tracker for the Guition ESP32-4848S040"
+
+
 def md5(path):
     h = hashlib.md5()
     with open(path, "rb") as f:
@@ -56,6 +74,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--repo", default="akcoder/f1-tracker")
     ap.add_argument("--publish", action="store_true")
+    ap.add_argument("--notes", help="file with the release notes (Markdown); default: the commit "
+                                    "subjects since the previous tag")
     a = ap.parse_args()
 
     factory = os.path.join(BUILD, "firmware.factory.bin")
@@ -67,6 +87,9 @@ def main():
 
     v = version()
     tag = f"v{v}"
+    summary = release_notes(a.notes)
+    if len(summary) > 1500:       # the card shows ~1.5 KB; say so rather than cut mid-word
+        print(f"  notes are {len(summary)} bytes; the device shows the first ~1500", file=sys.stderr)
     base = f"https://github.com/{a.repo}/releases/latest/download"
 
     manifest = {
@@ -82,7 +105,7 @@ def main():
             "ota": {
                 "path": OTA,
                 "md5": md5(ota),      # required; the updater refuses without it
-                "summary": "Formula 1 season tracker for the Guition ESP32-4848S040",
+                "summary": summary,
                 "release_url": f"https://github.com/{a.repo}/releases/tag/{tag}",
             },
         }],
@@ -117,7 +140,7 @@ def main():
         print(f"\nnot published. Assets staged in {work}")
         return
 
-    notes = (f"Firmware {v} for the Guition ESP32-4848S040.\n\n"
+    notes = (f"Firmware {v} for the Guition ESP32-4848S040.\n\n{summary}\n\n"
              f"- Install from a browser: https://akcoder.github.io/f1-tracker/\n"
              f"- Devices already running F1 Tracker pick this up on their hourly "
              f"update check, or from the *Check for updates* button on the "

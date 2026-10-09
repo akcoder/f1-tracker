@@ -18,6 +18,7 @@
 #include "f1_legends.h"
 #include "f1_map.h"
 #include "f1_portraits.h"
+#include "f1_roster.h"
 
 namespace f1 {
 namespace ui {
@@ -47,6 +48,7 @@ struct State {
   lv_point_precise_t tick_pts[2];
   lv_point_precise_t north_pts[2];
   carousel::Rotation rot;
+  roster::View roster;             // RACE-13d: who is racing THIS season, live
   int interval_s = 45;
   uint32_t last_advance_ms = 0;
   bool paused = false;
@@ -74,6 +76,7 @@ struct State {
   // UI-20e: race-week focus. During a race week the carousel narrows to this
   // weekend's circuit and the entered drivers, instead of wandering off to
   // Kyalami and Fangio. The device should feel like it knows what is coming up.
+  int content_idx = 0;             // the Carousel Content setting, kept for set_roster
   bool focus = false;
   int focus_circuit = -1;
 };
@@ -171,10 +174,12 @@ inline const legends::Profile *legend_row(const char *driver_id) {
   return nullptr;
 }
 
+// RACE-13d: answered by the LIVE roster, with the compiled table only as the
+// floor before one has been fetched. It used to read the compiled table alone,
+// which made a driver who retired over the winter look like they were still
+// racing - suppressing their legend card while the stale driver card stayed.
 inline bool currently_racing(const char *driver_id) {
-  for (int i = 0; i < drivers::N; i++)
-    if (strcmp(drivers::P[i].driver_id, driver_id) == 0) return true;
-  return false;
+  return roster::racing(g.roster, driver_id);
 }
 
 inline int age_from_dob(const char *dob, uint16_t season) {
@@ -301,7 +306,23 @@ inline bool prepare(const carousel::Card &c) {
       return true;
     }
     case carousel::DRIVER: {
-      if (c.index < 0 || c.index >= drivers::N) return false;
+      const roster::SlotKind kind = roster::slot_kind(g.roster, c.index);
+      if (kind == roster::SLOT_ROOKIE) {
+        // RACE-13e: a driver who joined after the build has no portrait and no
+        // career record. Show exactly what the roster knows rather than
+        // skipping them - which for a rookie is very nearly everything.
+        const auto *r = roster::live_only(g.roster, c.index - drivers::N);
+        snprintf(g.staged_badge, sizeof(g.staged_badge), "Driver");
+        snprintf(g.staged_title, sizeof(g.staged_title), "%s %s", r->given, r->family);
+        snprintf(g.staged_body, sizeof(g.staged_body), "#%d  %s\n\nNew this season", r->number, r->code);
+        g.staged_birthday = false;
+        g.staged_iso3 = r->iso3[0] ? r->iso3 : nullptr;
+        g.staged_photo = nullptr;
+        return true;
+      }
+      // SLOT_RETIRED: in the compiled table but not in this season's roster, so
+      // no driver card. If they are a legend, the legend card now covers them.
+      if (kind != roster::SLOT_COMPILED) return false;
       const auto &p = drivers::P[c.index];
       const auto *lg = legend_row(p.driver_id);
       compose_profile(p, lg != nullptr, drivers::SOURCE_SEASON);
@@ -431,12 +452,24 @@ inline void advance(uint32_t now_ms, bool force = false) {
   prepare_next();          // start resolving the one after, immediately
 }
 
+// RACE-13d/e: a new roster arrives (or the season rolls over). Re-count the
+// driver slots and drop whatever was staged, because it may now be a driver who
+// is no longer racing. The content filter is kept as it was.
+inline void set_roster(const roster::View &v) {
+  g.roster = v;
+  g.rot.configure(circuits::N, roster::driver_slots(g.roster), g.focus ? 0 : legends::N,
+                  g.focus ? carousel::CIRCUITS_AND_DRIVERS : (carousel::Content) g.content_idx);
+  g.staged_ready = false;
+  prepare_next();
+}
+
 inline void set_interval(float seconds) {
   g.interval_s = carousel::clamp_interval_s(seconds);
 }
 
 inline void set_content(int idx) {
-  g.rot.configure(circuits::N, drivers::N, legends::N, (carousel::Content) idx);
+  g.content_idx = idx;
+  g.rot.configure(circuits::N, roster::driver_slots(g.roster), legends::N, (carousel::Content) idx);
   g.staged_ready = false;     // whatever was staged may no longer be admissible
   prepare_next();
 }
@@ -449,7 +482,7 @@ inline void set_focus(bool on, int circuit_idx) {
   g.focus = on;
   g.focus_circuit = circuit_idx;
   // Legends are dropped in focus mode; circuits and the current drivers stay.
-  g.rot.configure(circuits::N, drivers::N, g.focus ? 0 : legends::N,
+  g.rot.configure(circuits::N, roster::driver_slots(g.roster), g.focus ? 0 : legends::N,
                   g.focus ? carousel::CIRCUITS_AND_DRIVERS : carousel::ALL);
   if (g.focus && circuit_idx >= 0) g.rot.set_circuit_cursor(circuit_idx);
   g.staged_ready = false;      // whatever was staged may no longer be admissible
@@ -482,10 +515,27 @@ inline void settings_labels(lv_obj_t *lbl, int seconds) {
   lv_label_set_text(lbl, b);
 }
 
+// Settings tabs (7 / UI-16a): one panel visible at a time. The selected tab's
+// button takes the accent colour so the current panel is never ambiguous.
+inline void settings_tab(lv_obj_t *const pnl[3], lv_obj_t *const btn[3], int sel) {
+  for (int i = 0; i < 3; i++) {
+    if (pnl[i] == nullptr || btn[i] == nullptr) continue;
+    if (i == sel) lv_obj_remove_flag(pnl[i], LV_OBJ_FLAG_HIDDEN);
+    else lv_obj_add_flag(pnl[i], LV_OBJ_FLAG_HIDDEN);
+    lv_obj_set_style_bg_color(btn[i], lv_color_hex(i == sel ? 0x2D5BD0 : 0x1A2547), 0);
+  }
+}
+
 inline void setup(const Widgets &w, float interval_s, int content_idx) {
   g.w = w;
+  g.content_idx = content_idx;
   set_interval(interval_s);
-  g.rot.configure(circuits::N, 0, 0, (carousel::Content) content_idx);
+  // The counts must be real from the first frame. They were 0, 0 ("M2 fills them
+  // in"), and set_focus() returns early when nothing changed - so in IDLE, the
+  // state the device spends most of the year in, the carousel showed circuits
+  // only until someone touched the Carousel Content setting.
+  g.rot.configure(circuits::N, roster::driver_slots(g.roster), legends::N,
+                  (carousel::Content) content_idx);
   // UI-20c: start at the next round so the carousel feels like it knows what
   // is coming up. Without a clock yet we start at round 1; M3 refines this.
   const auto *first = map::by_circuit_id(calendar::R[0].circuit_id);

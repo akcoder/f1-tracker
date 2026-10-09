@@ -16,6 +16,7 @@
 #include "f1_detail.h"
 #include "f1_net.h"
 #include "f1_order.h"
+#include "f1_roster.h"
 #include "f1_state.h"
 #include "f1_store.h"
 #include "f1_ui.h"
@@ -54,7 +55,6 @@ struct App {
   uint32_t last_eval_ms = 0;
   bool clock_valid = false;
   uint32_t now_utc = 0;
-  float obs_lat = 61.581f, obs_lon = -149.439f;   // UI-44: for the Sun only
   store::Store data;            // the last published snapshot
   uint32_t data_gen = 0;        // generation we have rendered
   lv_obj_t *standings_rows = nullptr;
@@ -346,6 +346,14 @@ inline void refresh_data() {
   if (gen == g.data_gen) return;
   g.data_gen = gen;
 
+  // RACE-13d/e: the carousel follows who is racing THIS season, so a
+  // retirement or a rookie needs no rebuild (decision 98).
+  {
+    static roster::View rv;
+    roster::build(g.data, rv);
+    if (!roster::same(rv, ui::g.roster)) ui::set_roster(rv);
+  }
+
   // DATA-3: a fetched calendar supersedes the compiled floor. The ISO3 for the
   // flag is resolved against the compiled table, because the feed gives a
   // country NAME and the flag is keyed on a code.
@@ -388,7 +396,7 @@ inline void refresh_data() {
   if (g.w.summary) {
     const auto &sm = g.data.summary;
     if (sm.have_fastest || sm.have_stops) {
-      char b[420];
+      char b[760];
       int k = 0;
       if (sm.event[0])
         k += std::snprintf(b + k, sizeof(b) - k, "%u %s\n\n", (unsigned) sm.season,
@@ -407,6 +415,17 @@ inline void refresh_data() {
         for (int i = 0; i < 3 && i < g.data.n_entries; i++)
           k += std::snprintf(b + k, sizeof(b) - k, " %s", g.data.entries[i].name);
       }
+      // Decision 134: OpenF1's half - tyres, weather, incidents - appended only
+      // when it describes the same race as the Jolpica half above.
+      store::PodiumRef pod[3];
+      if (g.data.entries_mode == state::FINAL)
+        for (int i = 0; i < 3 && i < g.data.n_entries; i++) {
+          pod[i].number = g.data.entries[i].number;
+          std::snprintf(pod[i].code, sizeof(pod[i].code), "%s", g.data.entries[i].code);
+        }
+      char ex[300];
+      if (store::format_extras(g.data, pod, ex, sizeof(ex)) > 0 && k < (int) sizeof(b) - 2)
+        std::snprintf(b + k, sizeof(b) - (size_t) k, "\n%s", ex);
       lv_label_set_text(g.w.summary, b);
     }
   }
@@ -470,6 +489,10 @@ inline void tick(uint32_t now_ms) {
   // The watched driver's grid slot and result, from whatever the store holds.
   int grid_pos = 0, finish_pos = 0;
   const char *status = "";
+  // DATA-6: entered follows the season's roster; the entry list below can only
+  // confirm it (a driver found on the grid is entered whatever the roster says).
+  g.watch_cfg.entered = roster::watched_entered(ui::g.roster, g.watch_cfg.driver_id,
+                                                g.watch_cfg.entered);
   for (int i = 0; i < g.data.n_entries; i++)
     if (g.data.entries[i].watched) {
       if (g.data.entries_mode == state::FINAL) finish_pos = g.data.entries[i].pos;
@@ -500,23 +523,6 @@ inline void tick(uint32_t now_ms) {
   update_top5();
   update_banner(now_ms);
   ui::advance(now_ms);
-}
-
-// UI-44: the Sun's elevation drives auto-dim. Computed from the stored lat/lon
-// and the clock - decision 7, the only thing the position is for.
-inline float sun_factor() {
-  // Cheap solar elevation: declination from the day of year, hour angle from
-  // UTC. Good to a degree or so, which is far finer than a brightness curve
-  // with a 13-degree ramp needs.
-  if (!g.clock_valid) return 1.0f;
-  const double days = (double) g.now_utc / 86400.0;
-  const double doy = fmod(days, 365.2422);
-  const double decl = -23.44 * cos(2.0 * M_PI * (doy + 10.0) / 365.2422) * M_PI / 180.0;
-  const double hours = fmod((double) g.now_utc / 3600.0, 24.0);
-  const double ha = (hours - 12.0) * 15.0 * M_PI / 180.0 + g.obs_lon * M_PI / 180.0;
-  const double lat = g.obs_lat * M_PI / 180.0;
-  const double el = asin(sin(lat) * sin(decl) + cos(lat) * cos(decl) * cos(ha));
-  return display::dim_factor((float) (el * 180.0 / M_PI), true);
 }
 
 inline void setup(const Widgets &w) {

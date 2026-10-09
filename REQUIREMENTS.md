@@ -2,9 +2,9 @@
 
 **Target hardware:** Guition ESP32-4848S040 (ESP32-S3, 4.0" 480×480 IPS)
 **Framework:** ESPHome (ESP-IDF)
-**Status:** Draft rev 2 — living document, updated as decisions are made
-**Last updated:** 2026-10-01 (rev 21: Auto Off, setting icons, and the feature
-round — §14.1 is all that remains)
+**Status:** Draft rev 26 — living document, updated as decisions are made
+**Last updated:** 2026-10-08 (rev 26: firmware updates and OTA modelled on
+`sky-tracker`'s UI-68 — the prompt, the notes, the icon, the install card)
 
 ---
 
@@ -143,9 +143,9 @@ overflowed the budget every tick, and the panel visibly jumped.
 | `CONFIG_LCD_RGB_RESTART_IN_VSYNC: y` | Re-syncs panel DMA each vblank, so a stall cannot leave the picture permanently shifted |
 | `CONFIG_SPIRAM_XIP_FROM_PSRAM: y` | Runs code and rodata from PSRAM. Flash and PSRAM share one bus on the S3: flash fetches starved the panel's refills (jitter) and flash writes stalled the cache entirely (picture shift during uploads) |
 | `CONFIG_ESP32S3_DATA_CACHE_LINE_64B: y` | Fewer, larger PSRAM bursts for bounce-buffer copies |
-| `CONFIG_LWIP_TCP_WND_DEFAULT: "65535"` | **Raised from `sky-tracker`'s 32768** so every response fits one window — §2.4.9 |
+| `CONFIG_LWIP_TCP_WND_DEFAULT: "65535"` | **Raised from `sky-tracker`'s 32768** so every response fits one window — §2.4.8 |
 | `CONFIG_LWIP_TCP_RECVMBOX_SIZE: "64"` | Must scale with the window: ≥ window/MSS = 65535/1440 = 46 |
-| `CONFIG_LWIP_TCP_SACK_OUT: y` | Selective ACK — recovers from a single lost segment without re-sending the window behind it (§2.4.9) |
+| `CONFIG_LWIP_TCP_SACK_OUT: y` | Selective ACK — recovers from a single lost segment without re-sending the window behind it (§2.4.8) |
 | `CONFIG_SPIRAM_TRY_ALLOCATE_WIFI_LWIP: y` | Keeps lwIP/Wi-Fi buffers out of the ~70 KB of free internal RAM |
 
 - [ ] **Do NOT add `CONFIG_LCD_RGB_ISR_IRAM_SAFE`.** `sky-tracker` explicitly
@@ -212,6 +212,44 @@ refreshable.
       whatever was last drawn and the upgrade reads as a crash.
 - [ ] The data task must be **paused for the duration** and resumed on error,
       as `plane-tracker` does.
+- [x] **UI-68: internet updates, modelled on `sky-tracker` 4.6.27** (decision 183).
+      `f1_updlogic.h` (pure, host-tested) and `f1_update.h` (the card):
+      - the manifest is the GitHub release's `manifest.json`; ESPHome's
+        `http_request` update entity reads it **3 min after boot, then hourly**,
+        and on demand; the entity's own polling is off so every check is logged
+        (NET-13a: `firmware: GET <url>` at DEBUG, the answer at INFO);
+      - **only a NEWER version is an update** (numeric compare: `0.10.0` >
+        `0.9.0`). ESPHome calls any difference "available", so without this an
+        *older* release is offered and installed over a newer one - which
+        `sky-tracker` 4.6.5 did;
+      - **Settings > Check for updates** opens a card on the top layer:
+        *Checking for updates* → *Up to date* / *Update available* (Not now,
+        Update) / *Couldn't check*;
+      - **the hourly check never opens anything by itself** (UI-68a): an amber
+        download icon appears beside the gear, **on the pages that have a gear**,
+        and tapping it shows the prompt;
+      - **UI-68c: the prompt shows the release notes** - the manifest's
+        `ota.summary`, Markdown marks dropped, blank runs squeezed, typographic
+        punctuation folded to the fonts, at most ~1.5 KB, in a box that scrolls.
+        `tools/make_release.py` writes it, from `--notes FILE` or the commit
+        subjects since the previous tag;
+      - **UI-68b: the install** is one blocking call on the main loop, so the
+        card is redrawn from the OTA component's own hooks: *Updating firmware*,
+        *Downloading*, **Keep the power on**, a bar, then *Installed, restarting*
+        or *Update failed*. If the entity is still "available" two minutes in,
+        the install did not happen and the prompt returns;
+      - the **Upgrade Check** button on the web UI and in HA (System group,
+        config category) runs the same check quietly - the Firmware row and the
+        icon show the result;
+      - all **three OTA sources now show on the panel and pause the data task**:
+        the IDE upload and the web page's upload on the existing OTA panel
+        (the web platform had no hooks at all, so a web upload froze the screen
+        on whatever was last drawn), the internet install on the update card;
+      - `CONFIG_MBEDTLS_EXTERNAL_MEM_ALLOC: y` - the check is a **third TLS
+        session** beside the two the data task keeps open (NET-12), and from
+        internal RAM it ran out of memory on `sky-tracker` (`-0x7F00`).
+        **Unmeasured here** (§14.1): it moves buffers to PSRAM, which is also what
+        the panel refills from.
 - [ ] Wi-Fi uses **ESPHome defaults** — `plane-tracker` decision 42 reversed
       `sky-tracker`'s `reboot_timeout: 0s` / `ap_timeout: 30s` overrides.
       Follow the newer decision.
@@ -518,6 +556,12 @@ Each of these was **observed in the live data on 2026-10-01** and will occur.
       totals for Fangio (24/51), Clark (25/72), Senna (41/162), Prost (51/202),
       Schumacher (91/308), Hamilton (106/395) and Verstappen (71/248). Results
       data runs from 1950, so only qualifying is affected by DATA-8.
+- [ ] **DATA-12: OpenF1's track temperature drops to exactly `0.0`.** Measured:
+      2 of 168 weather rows in session 11377, with the air at 26 °C. Ignore a
+      zero track reading beside warm air, or the summary says "Track 0–48".
+- [ ] **OpenF1 returns HTTP 404 for a filter with no matches** — `flag=RED` on
+      a race with no red flag gave `{"detail":"No results found."}`. That is an
+      empty result, not an error (decision 176).
 - [ ] Treat an empty or unparseable body as a **failed poll**: keep the
       existing state, do not clear it, retry on the next cycle.
 
@@ -662,7 +706,7 @@ Source: `github.com/jolpica/jolpica-f1/blob/main/TERMS.md` (last updated
 | Terms stability | *"We reserve the right to change these terms"* |
 
 **Our usage against the limits.** The §3.6 table peaks at a 10-minute Jolpica
-interval in `POST_RACE`, i.e. **6 requests/hour** against a 500/hour ceiling —
+interval in `POST_SESSION`, i.e. **6 requests/hour** against a 500/hour ceiling —
 0.2 % of the sustained budget. Nothing in this design comes near either limit.
 
 - [ ] **DATA-4: their published limits "will decrease in the future"** as token
@@ -806,7 +850,7 @@ calendar and the clock. This is the core abstraction; it replaces the ad-hoc
 ```
 OFF_SEASON ─> IDLE ─> RACE_WEEK ─> SESSION_SOON ─> SESSION_LIVE ─┐
                  ^                      ^                        │
-                 └──────── POST_RACE <──┴── RACE_LIVE <──────────┘
+                 └───── POST_SESSION <──┴── RACE_LIVE <──────────┘
 ```
 
 | State | Entered when | Primary page |
@@ -817,7 +861,7 @@ OFF_SEASON ─> IDLE ─> RACE_WEEK ─> SESSION_SOON ─> SESSION_LIVE ─┐
 | `SESSION_SOON` | a session starts in < 2 h | Race Day page with countdown (§6.2) |
 | `SESSION_LIVE` | now ∈ [start, end] of a non-race session | Race Day page, session order |
 | `RACE_LIVE` | now ∈ [start, start + 3 h] of the Race | Race Day page, running order |
-| `POST_RACE` | race ended < 12 h ago | Race Day page, final classification |
+| `POST_SESSION` | OpenF1's window closed (session end + 30 min) < 12 h ago — decision 60 | Race Day page, final classification |
 
 - [ ] **"Race day" is a state, not a date comparison.** The brief says "on race
       day"; the device is in Alaska and the races are in Melbourne, Suzuka and
@@ -843,10 +887,11 @@ OFF_SEASON ─> IDLE ─> RACE_WEEK ─> SESSION_SOON ─> SESSION_LIVE ─┐
       comes from `/results/` only, so a sprint victory must not fire a
       "nth win" milestone.
 - [ ] `RACE_LIVE` has no reliable end time in the Jolpica feed (no duration).
-      Bound it with **3 h** from the start, and leave it early if OpenF1
-      reports the session ended or the classification is final.
-- [ ] OpenF1's `date_end` for the Race session is a better bound when the
-      session exists. Prefer it; fall back to the 3 h window.
+      Bound it with **3 h** from the start, and leave it early if the
+      classification is final.
+- [ ] OpenF1's `date_end` for the Race session is a better bound when it is
+      known — it is in the `sessions` list, which is fetched outside the live
+      window (NET-14). Prefer it; fall back to the 3 h window.
 - [ ] Expose the current state as a **diagnostic text sensor** — it explains
       everything else the device is doing, and it is the first thing to look at
       when the wrong page is up.
@@ -1267,17 +1312,42 @@ takes its own taps via `on_short_click`.
 | Page | In rotation | Shown when |
 |---|---|---|
 | `wifi_page` | no (`skip`) | first page, so it is what boots; returns after 10 s offline — **but never over the settings page** |
-| `race_page` | yes | the primary page in `SESSION_*`, `RACE_LIVE`, `POST_RACE` |
+| `race_page` | yes | the primary page in `SESSION_*`, `RACE_LIVE`, `POST_SESSION` |
 | `order_page` | yes | the full 22-driver order (§6.3) |
 | `circuit_page` | yes | the primary page in `IDLE`, `RACE_WEEK`, `OFF_SEASON` (§6.4) |
 | `standings_page` | yes | championship (§8.1) |
 | `settings_page` | no (`skip`) | gear, lower right |
+| `about_page` | no (`skip`) | **About** button, lower right of the settings page (UI-67) |
 | `debug_page` | no (`skip`) | **long-press** the gear |
 
 - [ ] **UI-2a: the rotation order changes with state.** The *first* page after
       a flip from `wifi_page` is whichever page the state machine says is
       primary. The pages themselves do not move; only which one the device
       rests on does.
+- [x] **NET-2b / BOOT-2: the boot page** (decision 178), ported from
+      `sky-tracker` 4.6.27 (its NET-2b, NET-2c and BOOT-2) and driven by
+      `f1_boot.h`, which is pure and host-tested:
+      - a centred 380 px column: the mark (200 px), **"F1 Tracker"**
+        (`setup_title`), a status line and a body line (`setup_body`), firmware
+        version lower right;
+      - **"Loading"** from the first frame until start-up ends, then
+        **"Connecting to Wi-Fi"** over the network being tried (NET-2c: the
+        entry ESPHome selected — saved to flash by Improv — and
+        `Waiting for Wi-Fi details` when there is none);
+      - **fallback AP up:** `Set up Wi-Fi` over `Join 'F1 Tracker - XXXX'` /
+        `from your phone`;
+      - **BOOT-2:** the page is drawn with `lv_refr_now()` and the backlight is
+        set at the start of the start-up lambda, because LVGL draws nothing until
+        setup ends and the light writes its output only from `loop()` — without
+        it the panel stays dark through the whole of start-up;
+      - checked every 2 s: **on connect it fades to the primary page** the state
+        machine names (race page around a session, otherwise the carousel —
+        UI-2a), and **after 10 s without Wi-Fi it comes back, but never over the
+        settings page**.
+      Not ported: `sky-tracker`'s 30 s `ap_timeout` (decision 42 keeps ESPHome's
+      default), its GPS/compass lines (no such hardware here), the launch
+      animation over the boot screen, and UI-72's 60 s idle close of other pages,
+      which is a settings behaviour rather than a boot one.
 - [ ] With a detail card open, a tap anywhere — **including the gear** —
       closes the card rather than acting. Both siblings do this.
 - [ ] **Corner furniture is screen-fixed.** The clock and gear must not move
@@ -1365,8 +1435,8 @@ current.
       estimated — see §6.3.1. The fallback of dropping TEAM is **not needed**.
 - [ ] **UI-10c: the order page is the single source of truth for position.**
       `plane-tracker` decision 47 and 57 both came from two places counting the
-      same thing and disagreeing. The header's `LAP n/m`, the top-5 strip and
-      this page must all read **one** ordered array, never the raw feed.
+      same thing and disagreeing. The race page's state line, the top-5 strip
+      and this page must all read **one** ordered array, never the raw feed.
 - [ ] **RACE-12: four order modes, one data path** (§3.5). The mode is chosen
       by state, never by the user, and **the mode's name is always on screen**
       so the order is never ambiguous:
@@ -1404,16 +1474,17 @@ current.
 - [ ] **Gap column**: `interval` from OpenF1 is 3.5 MB per session (§3.0), so
       it is **not** fetched wholesale. Either narrow it hard to the newest rows
       or leave the column blank. **Blank is acceptable**; a wrong gap is not.
-- [ ] Highlight **position changes** briefly — a short green/red tint on a row
-      that gained or lost places since the last poll. This is the cheapest way
-      to make a 5 s poll feel live without any animation.
+- [ ] ~~Highlight position changes with a green/red tint per poll~~ —
+      **superseded** (decision 58): there is no live poll for it to tint. The
+      grid → `FINAL` transition above carries the same information once, as
+      places gained and lost against the grid (§8.1).
 - [ ] A **retirement** keeps its row, greyed, with the status word (`DNF`,
       `ACCIDENT`, `+1 LAP`) rather than vanishing.
 
 #### 6.3.1 The layout is measured, not estimated (answers open question 3)
 `tools/mock_order_page.py` renders this page at 480×480 using **real Roboto
 Mono metrics, the real 2026 entry list and the real OpenF1 team colours**, and
-reports the fit. Output is committed under `reference/mockups/`. Rerun with:
+reports the fit. Output is committed under `docs/renders/`. Rerun with:
 
 ```
 python3 tools/mock_order_page.py --font /path/to/RobotoMono.ttf
@@ -1624,10 +1695,14 @@ This is why the device stores a position at all.
 - [ ] **No ambient light sensor is fitted** (§2.1), and the backlight **is**
       PWM-capable, so "auto" means **sun-scheduled** and it can genuinely *dim*
       rather than merely switch off.
-- [ ] Sunrise and sunset are **computed on-device from the stored lat/lon** and
-      the clock. No network call and no extra configuration. `sky_math.h`
-      already has the solar position maths (`sun()`, `horizontal()`,
-      `next_events()`); copy it and strip the satellite parts.
+- [x] The Sun's elevation is **computed on-device from the latitude and longitude
+      entities** and the clock - no network call, no extra configuration.
+      `f1_sun.h` is `sky-tracker`'s `astro::sun` / `gmst_deg` / `horizontal`
+      (Astronomical Almanac low-precision formulae, ~0.01 deg, equation of time
+      included), stripped to the elevation alone (decision 179). The position is
+      read from the entities on **every** pass, never cached (decision 180), and
+      `Sun Elevation` is a diagnostic entity so a wrong position is a number, not
+      a mysteriously dim screen.
 - [ ] **Port `sky-tracker`'s UI-44 implementation**, which already works:
       - a `monochromatic` light on the `ledc` output, marked `internal: true`,
         with a **1–100 % `number` entity** as the user-facing control, so HA and
@@ -1738,22 +1813,22 @@ This is why the device stores a position at all.
 
 ### 6.11 Detail cards (UI-24)
 - [ ] Tapping a driver row opens a card: full name, number, acronym, team,
-      nationality + flag, grid position, current position, gap, tyre compound
-      and age, status. Tapping the circuit map opens a card with the full facts
-      set (§5.5) and the session times in all three zones (§6.7).
+      nationality + flag, grid position, finishing position and gap once the
+      result exists, and status. **No live position and no tyre compound** —
+      both are inside OpenF1's live window (decision 58); a post-session tyre
+      strip is §8.1's job. Tapping the circuit map opens a card with the full
+      facts set (§5.5) and the session times in all three zones (§6.7).
 - [ ] Touch targets are **finger-sized** — a ~40×40 px minimum hit box, and
       **the whole row is the target**, not just the text. `plane-tracker`
       decision 53: to a finger the label is part of the thing, and it is the
       larger of the two.
 - [ ] Clear dismissal: a tap anywhere closes the card (§6.1).
-- [ ] **Driver headshot is enrichment, not core.** OpenF1 gives a
-      `headshot_url`, and `sky_jpg.h` + `sky_photos.h` already solve the decode
-      side. Fetch on tap only, cache a few in PSRAM, never block the render
-      loop, and **clear the image the instant the selection changes** so a
-      previous driver's photo is never shown against new data
+- [ ] **The portrait is the compiled-in Commons image** (§5.6.3), with its
+      credit. **No runtime photo fetch, and never OpenF1's `headshot_url`**
+      (decision 73). **Clear the image the instant the selection changes** so
+      a previous driver's photo is never shown against new data
       (`plane-tracker` decision 45).
-- [ ] Check the licence and hotlinking terms before shipping a photo fetch
-      (§13). The card must be fully useful with no photo at all.
+- [ ] The card must be fully useful with no photo at all (RACE-13e).
 - [ ] **UI-24a: entry and card boxes carry explicit `pad_top`/`pad_bottom` and
       a 44 px height.** `plane-tracker` decision 46: relying on the LVGL
       theme's own padding clipped the bottom of every field.
@@ -1818,9 +1893,10 @@ permanent `33`.
       produces plausible, confidently wrong output (DATA-6).
 - [ ] Resolve to a live `driver_number` only where an OpenF1 row must be
       matched, and do it through the acronym for that session.
-- [ ] Default `max_verstappen`, settable from a `select` populated from the
-      **current entry list** (§7), so it cannot be set to a driver who is not
-      racing.
+- [ ] Default `max_verstappen`, settable from a `select`. **ESPHome `select`
+      options are compile-time** (decision 109), so the list is generated from
+      the **compiled driver table**, not the live entry list; a driver who
+      joins after the build is selectable only after the next one.
 - [ ] **DATA-10: the season driver list is not the race entry list.** Measured:
       Jolpica's 2026 `drivers` endpoint returns **32 rows**, of which only
       **23 carry a `code` and a `permanentNumber`** — the other 9 are reserve
@@ -1830,7 +1906,8 @@ permanent `33`.
       **Build the entry list from the round's own data** — qualifying
       classification, or OpenF1's per-session `drivers` once the window has
       closed — and fall back to "season rows that carry a `code`" before the
-      first session of a year.
+      first session of a year. The same rule applies to the compiled table
+      the `select` is generated from.
 
 #### 6.14.2 What "driving" means on a free tier
 The device cannot see cars on track (§3.6.1). It **can** know, to the second,
@@ -1927,7 +2004,7 @@ and `on_long_press` opens the debug page. Ported from `sky-tracker` exactly.
 | Carousel interval | slider | 15–120 s, step 15, default **45** |
 | Carousel order | dropdown | calendar / random / current season only |
 | Carousel content | dropdown | all (default) / circuits / drivers / legends / circuits + drivers (§6.4) |
-| Watched driver | dropdown | from the current entry list, default **Max Verstappen** (§6.14) |
+| Watched driver | dropdown | from the compiled driver table (decision 109), default **Max Verstappen** (§6.14) |
 | Watched driver alerts | checkbox | default **on** |
 | Milestone alerts only | checkbox | default off — the rare tier without the per-session one |
 | Alert style | dropdown | **loud** (default) / quiet (§6.14.3) |
@@ -1935,6 +2012,7 @@ and `on_long_press` opens the debug page. Ported from `sky-tracker` exactly.
 | Show sprint sessions | checkbox | — |
 | Order columns | dropdown | with team / with gap / with tyre |
 | Force page | dropdown | Auto / Race Day / Carousel (**not persisted**, §4.1) |
+| About | button | lower right of the settings page; opens the About page (UI-67, decision 181) |
 
 - [ ] All settings persist across reboot — ESPHome `globals` with
       `restore_value`, or the entity's own `restore_value`.
@@ -1950,8 +2028,13 @@ and `on_long_press` opens the debug page. Ported from `sky-tracker` exactly.
       field, `accepted_chars` restricted so bad input cannot be typed.
 - [ ] Reuse the LVGL `keyboard` in `mode: NUMBER`, hidden until a field is
       tapped.
-- [ ] Group the page into **tabs** as `sky-tracker` does (its UI-16a) — three
+- [x] Group the page into **tabs** as `sky-tracker` does (its UI-16a) — three
       panels, one shown at a time: **Display**, **Race**, **Location**.
+      Built (decision 170). Only the settings that were already on the panel
+      plus latitude, longitude and the Auto Off hours are there; the dropdown
+      settings (clock format, carousel order and content, watched driver,
+      alert style, order columns, favourite team, force page) remain on the
+      web UI and Home Assistant.
 
 ### 7.1 Every setting exposed to the web UI and Home Assistant
 All settings must be controllable from **three** places, kept in sync: the
@@ -1965,7 +2048,9 @@ touchscreen, the device's own **web UI**, and **Home Assistant**.
       **System**.
 - [ ] Mark diagnostics `entity_category: diagnostic` so they land on HA's
       device page rather than cluttering the controls.
-- [ ] Give every entity an `icon:`.
+- [x] Give every entity an `icon:` — the five diagnostics that lacked one (IP
+      Address, Connected SSID, ESPHome Version, WiFi Signal, Uptime) now have it
+      (decision 182).
 - [ ] **Set web UI authentication.** The page exposes control of every setting.
 - [ ] Prefer the HA **native API** over MQTT.
 
@@ -1974,12 +2059,14 @@ touchscreen, the device's own **web UI**, and **Home Assistant**.
 |---|---|
 | Latitude, Longitude | two `number` (box mode, step 0.001) |
 | Auto-dim display | `switch` |
+| Auto off overnight | `switch` (UI-44c) |
+| Auto off from / until | two `number` (local hours) |
 | Brightness | `number` (1–100 %, slider) |
 | Clock format | `select` (24 h / 12 h / Zulu) |
 | Carousel interval | `number` (15–120, step 15, slider) |
 | Carousel order | `select` |
 | Carousel content | `select` |
-| Watched driver | `select` (populated from the entry list) |
+| Watched driver | `select` (options generated from the compiled driver table — decision 109) |
 | Watched driver alerts | `switch` |
 | Milestone alerts only | `switch` |
 | Alert style | `select` |
@@ -2304,7 +2391,7 @@ exists.
 | 11 | **OpenF1** (`api.openf1.org`) is the system of record for the live session: actual grid, running order, tyres, flags, weather | 2026-10-01 | active |
 | 12 | The **season calendar is compiled in** and refreshed over the network; the compiled one is the floor, so the carousel runs with no network | 2026-10-01 | active |
 | 13 | Everything on screen is a function of **one weekend state machine** (§4.1), derived from UTC session times — **never from the device's local date** | 2026-10-01 | active |
-| 14 | Poll intervals are **a table keyed on state**, not a fixed timer; only `RACE_LIVE` (5 s) is demanding | 2026-10-01 | active |
+| 14 | Poll intervals are **a table keyed on state**, not a fixed timer; ~~only `RACE_LIVE` (5 s) is demanding~~ | 2026-10-01 | active; **the 5 s `RACE_LIVE` poll is superseded by 58/59** — see 66 |
 | 15 | **OpenF1 has no `starting_grid` endpoint** (HTTP 404, measured) | 2026-10-01 | active |
 | 16 | The **actual grid is the earliest `position` row per driver** — measured as a complete P1–P22 set at one timestamp | 2026-10-01 | active |
 | 17 | Qualifying classification is shown as **`GRID (PROVISIONAL)`** until decision 16 or the results confirm it; penalties are not applied in it | 2026-10-01 | active |
@@ -2364,22 +2451,26 @@ exists.
 | 71 | **DATA-8: API pole counts are hand-curated for pre-1994 drivers, or omitted.** Measured: Prost 0, Fangio 0, Clark 0, Senna 3 against actuals of 33/29/33/65. The generator **refuses** to emit an API pole count for a pre-1994 career — a build guard, because a blank is correct and a zero is a lie | 2026-10-01 | active |
 | 72 | **Portraits come from Wikimedia Commons, baked in, with the photographer credited on the card.** The generator records licence and artist and **fails the build on an unattributable image** | 2026-10-01 | active |
 | 73 | **OpenF1's `headshot_url` is not used.** It points at F1's own media CDN with no public licence, via a fallback transform that may not resolve. Commons has terms we can actually comply with | 2026-10-01 | active |
-| 74 | **Portraits are the dominant flash asset** (0.8–1.4 MB vs ~310 KB for everything else). The generator reports the total and fails above 2 MB | 2026-10-01 | active |
+| 74 | **Portraits are the dominant flash asset** (0.8–1.4 MB vs ~310 KB for everything else). The generator reports the total and fails above ~~2 MB~~ **3 MB** (`CAP_BYTES` in `gen_portraits.py`; §5.6.3) | 2026-10-01 | active, cap raised with 91 |
 | 75 | **The legends list is taste, not data** — proposed in §5.6.4 for the owner to edit, with the selection criteria recorded so additions stay consistent | 2026-10-01 | **needs owner input** |
 | 76 | **One driver is watched; the device ships watching Max Verstappen**, and the watched driver is a setting so it is a mechanism rather than a constant | 2026-10-01 | **decided by owner** |
 | 77 | **DATA-6: the watched driver is keyed on `driverId`, never the car number.** Measured: Norris holds `1` in 2026 and Verstappen holds `3`, not `1` and not his permanent `33`. A number-keyed watch would silently follow whoever holds the number next season | 2026-10-01 | active |
 | 78 | **"Driving" is derived from the calendar and the entry list**, not from live track data — both are free of OpenF1's live window, which is what makes the alert work at all under 58 | 2026-10-01 | active |
-| 79 | **Alerts are a strip, never a modal, and nothing ever needs dismissing.** Three tiers: ambient marker (always), event (~20 s, then collapses), milestone (held, distinct colour). `plane-tracker`'s §5.13 rules | 2026-10-01 | active |
+| 79 | **Alerts are a strip, never a modal, and nothing ever needs dismissing.** Three tiers: ambient marker (always), event (~20 s, then collapses), milestone (held, distinct colour). `plane-tracker`'s §5.13 rules | 2026-10-01 | **timings superseded by 92**: event banner ~30 s, milestone takeover ~8 s (§6.14.3, `f1_watch.h`) |
 | 80 | **Each alert event latches once** against a `(round, session, event)` key in a `restore_value` global, so a mid-weekend reboot does not replay the set. The most likely bug in the feature | 2026-10-01 | active |
 | 81 | **The ambient marker is the feature most of the time** — his flag in the header and his row highlighted — and is the part worth polishing. The strip is for the few moments that deserve one | 2026-10-01 | active |
 | 82 | A **cancelled session suppresses the "on track" alert** (`is_cancelled`), and a **withdrawal is never reported as a DNF** | 2026-10-01 | active |
 | 83 | **Red night mode is declined** — not ported, not shipped disabled, absent. Both siblings are instruments watched in the dark; this is a living-room object showing a sport, and at 61.58 N a dusk trigger would hold the screen red up to 19 h a day in December. Auto-dim (§6.8) answers the same problem without destroying team colours and flags | 2026-10-01 | **decided by owner**, closes open question 2 |
 | 84 | **No hardware yet.** Work stops at `esphome compile`; §14.1 collects every hardware-gated item. The generators, data layer, state machine and test suite are all host work and carry most of the project's risk, so this costs little | 2026-10-01 | **decided by owner** |
-| 85 | **The legends list is settled at 31 rows** (§5.6.4), delegated by the owner. Two errors in the draft fixed: Jack Brabham was duplicated, and Räikkönen and Button were missing. Barrichello dropped on the stated bar | 2026-10-01 | settles 75 |
+| 85 | **The legends list is settled at 31 rows** — 32 after 96 adds `max_verstappen` (§5.6.4), delegated by the owner. Two errors in the draft fixed: Jack Brabham was duplicated, and Räikkönen and Button were missing. Barrichello dropped on the stated bar | 2026-10-01 | settles 75 |
 | 86 | **A driver in both sets gets one card** — their current-driver card with a `LEGEND` badge. Measured overlap: Alonso, Hamilton, Verstappen | 2026-10-01 | **corrected by 96** — the resolution is at runtime, not build time |
 | 87 | **DATA-10: the season driver list is not the race entry list.** Measured: 32 rows for 2026, only 23 with a `code` and number; the rest are reserves. Build the watched-driver `select` from the round's own data, not the season pool | 2026-10-01 | active |
 | 88 | **22 order rows fit at `mono12`, 18 px per row, TEAM column kept** — measured by rendering the real layout with real font metrics and the real entry list (§6.3.1). The fallback of dropping TEAM is unnecessary. 19 px puts P22 flush to the edge; 17 px removes padding entirely | 2026-10-01 | **answers open question 3** |
 | 89 | ~~Target season is 2027~~ | 2026-10-01 | **superseded by 94** |
+| 90 | **A Sprint is a first-class race day** (RACE-14) — its own grid, result and race page, labelled `SPRINT`. A sprint weekend has two race days. Sprint wins must **not** count toward career win milestones; Jolpica keeps them in a separate endpoint | 2026-10-01 | **decided by owner**, closes open question 6 |
+| 91 | **Portraits are 240×320**, not 150×200. The brief asked to show the picture; at 480 px wide, 150×200 reads as a thumbnail. Budget restated against the **app slot** (~6.5–7.8 MB), not total flash: portraits are 25–30 % of one slot | 2026-10-01 | **delegated**, answers open question 13 |
+| 92 | **Alerts are loud** (§6.14.3): full-width banner for events, brief full-screen takeover for milestones. Safe here specifically because **nothing underneath is changing** — no live timing (58) — which is not a general licence. Nothing ever requires dismissing; a tap only dismisses early. An `Alert style: loud/quiet` setting ships with loud as the default | 2026-10-01 | **decided by owner**, closes open question 12 |
+| 93 | **UI-10d: the GAP column carries the gap to pole in grid modes**, from Jolpica's Q1/Q2/Q3 times — free, no live window. Found by rendering §6.3.1, which showed race gaps against a provisional grid. Decision 31's blank column was about *live* intervals only | 2026-10-01 | refines 31 |
 | 94 | **The season is resolved at runtime from `/current/`, never fixed.** No season year appears in the firmware, YAML or generated headers as a target. This is a device meant to sit on a wall for years; a fixed season means a rebuild every winter and a stale year if nobody does one | 2026-10-01 | **decided by owner**, supersedes 89 |
 | 95 | **An empty `/current/next/` is the end-of-season signal, not an error**, and the months-long gap until the next calendar is published is `OFF_SEASON` — a first-class screen showing the champion, the final standings and the carousel, never a "no data" state | 2026-10-01 | active |
 | 96 | **RACE-13d: the legend/current-driver overlap is resolved at _runtime_**, against the live entry list. **Corrects decision 86.** Baked overlap + a runtime season rollover would make a newly retired driver vanish from both rotations. `max_verstappen` is therefore listed in the legends table (32 rows), not omitted | 2026-10-01 | **corrects 86** |
@@ -2394,7 +2485,7 @@ exists.
 | 105 | **`glyphsets: [GF_Latin_Core]`**, ESPHome's own mechanism, not a hand-built literal string. Verified against all **715 real strings** in the fixtures and traces: **0 missing** | 2026-10-01 | settles 35 |
 | 106 | **UI-40c: normalise incoming text to precomposed form at parse time.** Roboto Mono lacks all 12 of `GF_Latin_Core`'s combining marks, so decomposed (NFD) input would render `u` + a box instead of `ü`. A small Latin-1 fold table, not full NFC | 2026-10-01 | active |
 | 107 | **The §9 font estimate was 2.6× low** — ~80 KB against a measured **212.5 KB** — because it counted only the five `mono` sizes and ignored the two large Roboto faces and the MDI icon face. Immaterial against the slot; recorded because the error is worth knowing | 2026-10-01 | corrects 9 |
-| 108 | **`deploy.sh` ships at M0, not M7.** Decision 63's gate caught three `-Wformat` warnings in our own lambda on the **first** build — exactly the class of thing it exists for, found immediately | 2026-10-01 | implements 63 |
+| 108 | **`deploy.sh` ships at M0, not M7.** `plane-tracker` decision 63's gate caught three `-Wformat` warnings in our own lambda on the **first** build — exactly the class of thing it exists for, found immediately | 2026-10-01 | implements `plane-tracker` 63 (§10) |
 | 109 | **ESPHome `select` options are compile-time**, so the watched-driver list (§6.14.1) **cannot** be populated from a live entry list. It is generated from the **compiled driver table** at M2 instead, which means a driver who joins after the build is not selectable until the next one — consistent with RACE-13e | 2026-10-01 | constrains 87 |
 | 110 | **`web_server` OTA is declared explicitly** rather than left implicit, so its plaintext `/update` endpoint is a deliberate choice; `auth: type: digest` gates it, ahead of ESPHome's 2027.1.0 default flip | 2026-10-01 | active |
 | 111 | **The GPIO19/20 USB-Serial-JTAG build warning is expected** and is direct confirmation of decision 5: the GT911 owns GPIO19, so the S3's default console would fight it. GPIO45 is a strapping pin, known-good because `sky-tracker` drives this panel on these exact pins in production | 2026-10-01 | confirms 5 |
@@ -2412,11 +2503,11 @@ exists.
 | 123 | **Wikimedia serves a per-file list of thumbnail widths.** Constructing a `/thumb/` URL by hand earns HTTP 400 — 640, 320, 800 and 1024 were all refused for a file that served 250. Ask the API for a `thumburl` via `iiurlwidth`, which is guaranteed servable. Fetching full-resolution originals earns 429, and the 429 body names this as the fix | 2026-10-01 | active |
 | 124 | **Commons normalises `File:A_B.jpg` to spaces**, so a key taken from the image URL never matches one taken from the API response. This silently discarded 47 of 48 portraits as unattributable — a lookup that fails closed looks exactly like a licence problem | 2026-10-01 | active |
 | 125 | **OGL 3 is a free, attribution-requiring licence** and belongs in the accepted set. Rejecting it was the regex being wrong, not the image being unusable | 2026-10-01 | refines 72 |
-| 126 | **`3.7.4` applies to every service, not only ours.** Both the Jolpica client and the portrait fetcher back off on 429 and treat other 4xx as fatal for that request shape. My first Jolpica client treated all 4xx as fatal including 429, which is precisely the distinction 3.7.4 exists to draw | 2026-10-01 | implements 33 |
+| 126 | **`3.7.4` applies to every service, not only ours.** Both the Jolpica client and the portrait fetcher back off on 429 and treat other 4xx as fatal for that request shape. My first Jolpica client treated all 4xx as fatal including 429, which is precisely the distinction 3.7.4 exists to draw | 2026-10-01 | implements §3.7.4, 57 |
 | 127 | **The latch word must be 64 bits.** 7 sessions × 6 events reaches index 42, and a 32-bit word silently dropped everything from 32 up — the whole RACE session — so race alerts never latched and fired every tick. A `static_assert` now fails the build if a session type is added | 2026-10-01 | implements 80 |
 | 128 | **The fetch task is double-buffered and pinned to core 1.** It parses into a back store and swaps under a mutex, so the UI thread never reads a torn parse and the lock is held for a `memcpy`, never for drawing | 2026-10-01 | implements 9 |
 | 129 | **`Entry` lives in `f1_store.h`, not `f1_order.h`.** The parsers and their tests must build on the host, and `f1_order.h` needs LVGL. Pure data belongs on the testable side of that line | 2026-10-01 | active |
-| 130 | **`-Wformat-truncation` caught a real truncation**: a 24-byte race status written into the 12-byte gap field. Now truncated **explicitly** with a precision specifier, so the cut is intentional rather than silent. The third time decision 63's gate has paid for itself | 2026-10-01 | implements 63 |
+| 130 | **`-Wformat-truncation` caught a real truncation**: a 24-byte race status written into the 12-byte gap field. Now truncated **explicitly** with a precision specifier, so the cut is intentional rather than silent. The third time `plane-tracker` decision 63's gate has paid for itself | 2026-10-01 | implements `plane-tracker` 63 (§10) |
 | 131 | **`#` is not a comment inside a C++ lambda in YAML**, and `time` is ambiguous against ESPHome's `time::` namespace — `::time(nullptr)` is required | 2026-10-01 | active |
 | 132 | **Legend prose states facts, not adjectives** (5.6.2): records and circumstances, because the numbers are already on the card and a superlative adds nothing a reader cannot see. A driver who is also a legend carries the line on their driver card — one card, both facts | 2026-10-01 | implements 86 |
 | 133 | **The post-session summary needs no OpenF1 at all.** Found at implementation: Jolpica carries **both** the fastest lap (`/last/fastest/1/results/`, 1.2 kB) and the pit stops (`/last/pitstops/`), neither of which has a live window. So the page appears as soon as results publish rather than waiting out OpenF1's +30 min, and §8.1's strongest free-tier feature turns out to be cheaper than planned | 2026-10-01 | refines 64 |
@@ -2426,10 +2517,12 @@ exists.
 | 137 | **`tools/render_pages.py` renders every page from the GENERATED headers**, not from mock text — the same bytes the firmware carries, with the same geometry and the same Roboto Mono metrics. It is a check on the design, not a drawing of it | 2026-10-01 | active |
 | 138 | **The renders caught two real gaps on the race page**: the circuit country flag and the top-5 strip (decision 49) were both specified and neither was built. The flag also collided with the clock in the top-right corner. All three fixed. This is the second time rendering the real layout has found something a reading of the document did not | 2026-10-01 | active |
 | 139 | **The OTA panel names the phase it is in**: `UPLOADING` while the bytes arrive, `UPGRADING` once they are being applied, `UPLOAD FAILED` on error. Every phase previously said `UPGRADING`, which is wrong for the part that takes longest and is the part a watcher is waiting on | 2026-10-01 | **asked for by owner** |
-| 140 | **`tools/check_glyphs.py` is built and is a `deploy.sh` gate** (decision 52). 1,901 strings from the YAML, the C++ headers and the **generated tables** — the last being where the risk lives, because nobody reads those files. A font's effective set is what it requests **intersected with what the typeface provides** | 2026-10-01 | implements 52 |
-| 141 | **The checker's first version made the very mistake decision 52 warns about**, in the opposite direction: it measured every string against one shared set and flagged the gear symbol, which `montserrat_28` draws perfectly well. It now resolves each label's **effective** font | 2026-10-01 | active |
+| 140 | **`tools/check_glyphs.py` is built and is a `deploy.sh` gate** (`plane-tracker` decision 52). 1,901 strings from the YAML, the C++ headers and the **generated tables** — the last being where the risk lives, because nobody reads those files. A font's effective set is what it requests **intersected with what the typeface provides** | 2026-10-01 | implements 36 |
+| 141 | **The checker's first version made the very mistake `plane-tracker` decision 52 warns about**, in the opposite direction: it measured every string against one shared set and flagged the gear symbol, which `montserrat_28` draws perfectly well. It now resolves each label's **effective** font | 2026-10-01 | active |
 | 142 | **On a driver's birthday their card is badged in gold and injected every 10th card.** The priority slot does not consume a cursor, so nothing is starved and the rotation resumes where it was; a birthday never overrides a content filter that excludes drivers | 2026-10-01 | **asked for by owner**, rate revised by 145 |
-| 145 | **The birthday rate was wrong twice, in both directions, and settled at every 10th card.** The rotation is circuit→driver→circuit→legend, so with 23 drivers any one appears naturally every 92 cards — about hourly. Every 4th was **23×** natural (480/day): wallpaper, which §5.13 explicitly warns against. Every 20th was **4.6×** (96/day): too rare for something that lasts one day, and easy to miss entirely on a device glanced at occasionally. **Every 10th** is **9.2×**, one per eight minutes, 192/day — met on most visits without dominating any. The arithmetic lives in the header because the intuition is bad in both directions | 2026-10-01 | **corrected twice by owner** |
+| 143 | **Birthdays are scoped to CURRENT DRIVERS.** Legends carry a date of birth but **no date of death**, so the device cannot tell a living driver's birthday from the anniversary of someone long dead — `BIRTHDAY` over Ayrton Senna would be the worst thing it could display. `LEGENDS_INCLUDED` is named so the reasoning is in the code, not only here | 2026-10-01 | active |
+| 144 | **A 29 February birthday falls back to the 28th** in a non-leap year, rather than being skipped three years in four | 2026-10-01 | active |
+| 145 | **The birthday rate was wrong twice, in both directions, and settled at every 10th card.** The rotation is circuit→driver→circuit→legend, so with 23 drivers any one appears naturally every 92 cards — about hourly. Every 4th was **23×** natural (480/day): wallpaper, which `plane-tracker`'s §5.13 explicitly warns against. Every 20th was **4.6×** (96/day): too rare for something that lasts one day, and easy to miss entirely on a device glanced at occasionally. **Every 10th** is **9.2×**, one per eight minutes, 192/day — met on most visits without dominating any. The arithmetic lives in the header because the intuition is bad in both directions | 2026-10-01 | **corrected twice by owner** |
 | 146 | **The project mark is the Monza trace from `f1_circuits.h`** — the same `int16` geometry the device draws — on a dark disc, with the orange start/finish tick the circuit cards use. Generated by `tools/gen_logo.py` rather than drawn, so it is a picture of what the device does, uses **no F1 or team trademark** (decision 44), and stays in step if the traces are regenerated | 2026-10-01 | **asked for by owner** |
 | 147 | **Monza because it survives icon size.** Two long straights and a distinctive kink stay legible at 32 px where most of the 40 traces become a blob. Checked at 16/32/48/64 before choosing | 2026-10-01 | active |
 | 148 | **The mark's canvas is pure black**, so the square is invisible against the device's black page and the disc is the whole mark. An alpha variant exists for any other ground | 2026-10-01 | active |
@@ -2454,12 +2547,23 @@ exists.
 | 167 | **Home Assistant triggers**: `Session Live` and `Race Day` as binary sensors, `Next Session In` as a number. The device knows the schedule to the second, so HA can act with no code here | 2026-10-01 | implements 8.2 |
 | 168 | **A teammate retirement is not a loss on merit.** The head-to-head is withheld and reported as "no result" rather than handed to the car that happened to keep running. Counting retirements is possible but must be asked for | 2026-10-01 | implements 8.2 |
 | 169 | **The favourite team's rows get a quieter tint than the watched driver's**, so both can be on screen and still be told apart | 2026-10-01 | implements 8.2 |
-| 143 | **Birthdays are scoped to CURRENT DRIVERS.** Legends carry a date of birth but **no date of death**, so the device cannot tell a living driver's birthday from the anniversary of someone long dead — `BIRTHDAY` over Ayrton Senna would be the worst thing it could display. `LEGENDS_INCLUDED` is named so the reasoning is in the code, not only here | 2026-10-01 | active |
-| 144 | **A 29 February birthday falls back to the 28th** in a non-leap year, rather than being skipped three years in four | 2026-10-01 | active |
-| 90 | **A Sprint is a first-class race day** (RACE-14) — its own grid, result and race page, labelled `SPRINT`. A sprint weekend has two race days. Sprint wins must **not** count toward career win milestones; Jolpica keeps them in a separate endpoint | 2026-10-01 | **decided by owner**, closes open question 6 |
-| 91 | **Portraits are 240×320**, not 150×200. The brief asked to show the picture; at 480 px wide, 150×200 reads as a thumbnail. Budget restated against the **app slot** (~6.5–7.8 MB), not total flash: portraits are 25–30 % of one slot | 2026-10-01 | **delegated**, answers open question 13 |
-| 92 | **Alerts are loud** (§6.14.3): full-width banner for events, brief full-screen takeover for milestones. Safe here specifically because **nothing underneath is changing** — no live timing (58) — which is not a general licence. Nothing ever requires dismissing; a tap only dismisses early. An `Alert style: loud/quiet` setting ships with loud as the default | 2026-10-01 | **decided by owner**, closes open question 12 |
-| 93 | **UI-10d: the GAP column carries the gap to pole in grid modes**, from Jolpica's Q1/Q2/Q3 times — free, no live window. Found by rendering §6.3.1, which showed race gaps against a provisional grid. Decision 31's blank column was about *live* intervals only | 2026-10-01 | refines 31 |
+| 170 | **The settings page is three tabs** (Display / Race / Location) with a numeric keyboard, and latitude, longitude and the Auto Off hours are entered on the panel. **Save validates first and writes nothing until every field is valid**: a clamped value is shown back in the field with a one-line message and the page stays open (§6.8). Tabs are three hidden-flag panels rather than an LVGL `tabview`, so a swipe cannot change tab under a finger | 2026-10-05 | **asked for by owner**, implements 7 |
+| 171 | **The post-session summary carries OpenF1's half**: tyre strategy for the podium, weather, and the safety cars, virtual safety cars and red flags with their laps. Fetched **once per race**, after the window closes, one piece per loop; shown **only when it describes the same race as the Jolpica half** (a UTC-date match), because another race's tyres under this race's fastest lap looks like correct data | 2026-10-05 | **asked for by owner**, implements 8.1 / 134 |
+| 172 | **"Is this driver racing?" is answered by the live roster** (`/current/drivers/`, rows with a code **and** a number — DATA-10), with the compiled table only as the floor before a fetch. Found by the rollover test: the carousel's overlap rule (RACE-13d) had been reading the **compiled** table, so a driver who retired kept a stale driver card and lost their legend card. A roster under 10 drivers is refused, because a briefly short feed would otherwise retire the rest of the grid. A rookie with no profile gets a text-only card (RACE-13e). The watched driver's `entered` follows the roster too | 2026-10-05 | corrects the implementation of 96/97 |
+| 173 | **Every fetched resource has its own timer, and the schedule is pure and host-tested.** The first version shared the calendar's timer, so once the calendar succeeded **nothing else was due** — qualifying, standings, constructors and the summary were never fetched — while POST_SESSION's results had no interval at all (~1,800 requests/hour against Jolpica's 500). `last/results` is also the **previous** race's, so the race-only requests wait for the Grand Prix itself; after qualifying the grid is what is fetched. A failed resource is retried no tighter than 60 s (3.7.4). Neither fault was visible without a board | 2026-10-05 | corrects 14, implements 3.7.4 |
+| 174 | **The rollover test derives 2027 from the real 2026 fixtures** — dates move a year, one driver leaves, one rookie arrives — because no 2027 exists to capture. It was mutation-checked: ignoring the roster makes it fail seven ways | 2026-10-05 | implements 98 |
+| 175 | **DATA-12: OpenF1's track-temperature sensor drops out to exactly 0.0** (2 of 168 rows in session 11377, with the air at 26 °C). Left in, the weather line would read "Track 0–48". A zero beside warm air is ignored | 2026-10-05 | active |
+| 176 | **OpenF1 answers a filter that matches nothing with HTTP 404** and `{"detail":"No results found."}` — measured with `flag=RED` on a race that had none. That is an empty result, not a fault; treated as an error it would back the data task off for five minutes over a clean race, the common case. `session_type=Race` also includes **Sprints** (name `Sprint`), so the session is chosen by `session_name` | 2026-10-05 | active |
+| 177 | **`setup()` configured the carousel with zero drivers and zero legends** ("M2 fills them in") and `set_focus()` returns early when nothing changed, so in IDLE — most of the year — the carousel showed circuits only until someone touched Carousel Content. The counts are real from the first frame | 2026-10-05 | corrects 68 |
+| 178 | **The boot / Wi-Fi page is ported from `sky-tracker` — and nothing ever left it.** This project had the page but no code that moved off it, so a device that connected would have sat on "Connecting to Wi-Fi" for ever. A 2 s check now fades to the primary page on connect and returns after 10 s offline (never over settings). Porting `sky-tracker`'s outage clock exactly would have carried a bug with it: it stores `now \| 1` and later computes `now - lost_since`, which for an **even** `now` is one tick in the future and wraps to ~4 billion, so the status page would return **at once** on half of all outages rather than after 10 s. The clock now stores `now`, or 1 when `now` is 0 | 2026-10-08 | **asked for by owner**, implements 6.1 |
+| 179 | **Auto-dim reads the Sun from `sky-tracker`'s solar position**, not a cheaper formula. The first version used declination from the day of year and no equation of time - up to ~4 deg out around the equinoxes, harmless for a 13 deg ramp but no reason to be less accurate than the sibling. `tests/test_sun.cpp` pins it to known geometry (solstice noon elevations 51.9 / 5.0 deg, solar noon at Greenwich 11:44 UTC on 3 Nov and 12:14 on 11 Feb, east-positive longitude, both hemispheres) and shows midsummer at 61.58 N dips only to ~42 % while midwinter reaches the 25 % floor | 2026-10-08 | **asked for by owner**, implements 6.8 |
+| 180 | **The position is an input, read live.** The app had copied latitude and longitude into its own state once at boot, so a change from the new settings fields, the web UI or Home Assistant never reached the dimmer until a reboot - and at boot the restored value may not yet have been loaded. `auto_factor(time, lat, lon)` takes them as arguments and the 30 s pass reads the entities each time | 2026-10-08 | corrects 7 |
+| 181 | **About page, modelled on `sky-tracker`'s UI-67**: logo (112 px, resized at build time because LVGL's own scaling garbles it), name, version, "by Dan Morphis", ESPHome version and build date, THIS DEVICE (name, IP, Wi-Fi and signal, MAC, uptime, refreshed each second while shown), DATA FROM with licences, and the trademark non-affiliation notice (3.7.5). Reached from a button where the settings page's version used to be. **Close returns to Settings without re-staging it**: on_load would otherwise discard unsaved edits and re-capture a live-changed brightness as Cancel's baseline | 2026-10-08 | **asked for by owner** |
+| 182 | **Icons everywhere a control is**: Cancel, Save, About, Close and the three settings tabs on the panel, and the five diagnostic entities that had none on the web UI and in Home Assistant. Codepoints come from `tools/gen_icons.py` by name and the build fails on one that does not exist. The renders draw them from the same MDI font | 2026-10-08 | **asked for by owner**, implements 7.1 |
+| 183 | **Firmware updates modelled on `sky-tracker`'s UI-68**: a prompt card on the top layer (Checking / Up to date / Update available with notes / Couldn't check), an icon beside the gear for an update the hourly check found, an install card with a bar, and an Upgrade Check button for the web UI and HA. First check 3 min after boot, then hourly. **Only a newer version counts**, because ESPHome offers an older one as readily - the bug that replaced `sky-tracker`'s working build with 4.6.3. The logic is pure and has `tests/test_update.cpp` (46 checks) | 2026-10-08 | **asked for by owner**, implements 2.4.6 |
+| 184 | **The release notes are the manifest's `ota.summary`**, written by `make_release.py` from `--notes FILE` or the commit subjects since the previous tag, so the card says what changed without anyone remembering to write it. The device shows ~1.5 KB and the script warns past that | 2026-10-08 | implements 183 |
+| 185 | **The web page's OTA upload had no hooks**, so an upload from it ran the whole write with the data task live and the screen frozen on its last frame - the exact failure FAIL-12 exists to prevent, on the one platform it was not wired to. It now shares the IDE upload's hooks through a YAML anchor | 2026-10-08 | corrects FAIL-12 |
+| 186 | **`CONFIG_MBEDTLS_EXTERNAL_MEM_ALLOC: y`**, taken from `sky-tracker` where the update check's TLS session failed with out-of-memory until it was set (plain `malloc` was not enough). Adopted on the same evidence rather than on a measurement of this device, and listed in 14.1 so it is measured; if handshakes on the PSRAM bus show as `lvgl took a long time`, it is the first thing to revisit | 2026-10-08 | active, **unmeasured** |
 
 ---
 
@@ -2504,8 +2608,8 @@ exists.
    response is NET-14 (§3.6.1), the cost is stated in §3.6.2, and the affected
    features are preserved in §8.3 in case it is ever reconsidered. **The
    original brief is unaffected.**
-10. ~~**Which legends?**~~ **CLOSED 2026-10-01 — delegated and settled** at 31
-   rows (§5.6.4, decision 85). Still the easiest thing in the project to
+10. ~~**Which legends?**~~ **CLOSED 2026-10-01 — delegated and settled** at 32
+   rows (§5.6.4, decisions 85 and 96). Still the easiest thing in the project to
    change: it is one table, and nothing depends on its contents.
 11. **Is the `POST_SESSION` window-close moment exactly right?** The +30 min
    boundary is OpenF1's published definition, but whether their data is
@@ -2632,39 +2736,52 @@ project's real risk.
    - [x] Pre-1994 pole values curated with sources
    - [x] Curated legend prose for all 32 legends (5.6.2)
    - [x] Portraits at **240×320**; generator caps at 3 MB
-4. **M3 — Data path and the state machine — DONE 2026-10-01**
-   - [ ] `f1_net.h`: TLS to both hosts, persistent sessions, selective parse,
-         `.buffer_size = 4096` on the HTTP client (NET-15)
-   - [ ] `f1_state.h`: the state machine, the poll-interval table, retiming
-   - [ ] Host tests for the state machine, **including a `04:00Z` race read
-         from Alaska**
-   - [ ] Calendar refresh superseding the compiled floor; source + age
-         diagnostic, plus the **profile build date** (RACE-13e)
-   - [ ] **Season resolution from `/current/`** and the `OFF_SEASON` gap
-         (RACE-13a–c)
-   - [ ] **Rollover host test** (decision 98): advance `current` by a year
-         mid-run and assert the calendar, entry list, driver carousel and
-         watched-driver resolution all follow with no rebuild
-5. **M4 — Race day — DONE 2026-10-01**
-   - [ ] `race_page`: header, state line, map, top-5 strip
-   - [ ] `order_page`: 22 rows, flags, team-colour bars
-   - [ ] Grid extraction (RACE-11) + host test against the position fixture
-   - [ ] **Measure 22 rows at `mono12` on hardware** (open question 3)
-   - [ ] **The four order modes** (RACE-12): `ENTRY LIST` →
-         `GRID (PROVISIONAL)` → `GRID` + `FINAL`. Host-test all transitions,
-         including the window-close moment (decision 60).
-   - [ ] **NET-14**: compute OpenF1's live window and skip requests inside it;
-         host-test the window arithmetic against the session fixtures
-   - [ ] `RESULTS IN ~mm:ss` countdown (UI-3a) — the only moving element
-   - [ ] Attribution footer and the web UI links (§3.7.3)
-   - [ ] The two distinct failure states (decision 57)
-   - [ ] **Watched driver** (§6.14): `driverId` resolution, the ambient marker,
+4. **M3 — Data path and the state machine — mostly done 2026-10-01**
+   - [x] `f1_net.h`: TLS to both hosts, persistent sessions (`keep_alive`),
+         selective parse (`f1_json.h`), `.buffer_size = 4096` on the HTTP
+         client (NET-15)
+   - [x] `f1_state.h`: the state machine and the poll-interval table
+         (`intervals_for()`), read by the fetch task each cycle
+   - [x] Host tests for the state machine, **including a `04:00Z` race read
+         from Alaska** (`tests/test_state.cpp`)
+   - [x] Calendar refresh superseding the compiled floor, with a
+         `Calendar Source` diagnostic
+   - [ ] The **profile build date** on the debug page (RACE-13e) — not built
+   - [x] **A live roster** from `/current/drivers/` (`parse_roster`, `f1_roster.h`),
+         so the carousel and the watched driver follow who is racing without a
+         rebuild — decision 172
+   - [x] **Per-resource fetch timers**, a pure `plan_for()`/`pick()`, and
+         `tests/test_net.cpp` — decision 173
+   - [x] **Season resolution from `/current/`** and the `OFF_SEASON` gap
+         (RACE-13a–c); "no calendar yet is `OFF_SEASON`, not a fault" is tested
+   - [x] **Rollover host test** (decision 98): `tests/test_rollover.cpp`, 51
+         checks. The 2027 inputs are derived from the real 2026 fixtures by the
+         smallest edit that makes the point (decision 174)
+5. **M4 — Race day — mostly done 2026-10-01**
+   - [x] `race_page`: header, state line, map, top-5 strip
+   - [x] `order_page`: 22 rows, flags, team-colour bars
+   - [x] Grid extraction (RACE-11) + host test against the position fixture
+   - [ ] **Measure 22 rows at `mono12` on hardware** — §14.1
+   - [x] **The four order modes** (RACE-12): `ENTRY LIST` →
+         `GRID (PROVISIONAL)` → `GRID` + `FINAL`, host-tested, including the
+         window-close moment (decision 60)
+   - [x] **NET-14**: OpenF1's live window computed and skipped; host-tested
+   - [x] `RESULTS IN ~mm:ss` countdown (UI-3a) — the only moving element
+   - [x] Attribution footer on every page (§3.7.3)
+   - [ ] **Clickable links to both sources in the web UI** (§3.7.3) — the
+         footer text is on the panel, but the web page carries no links yet
+   - [x] The distinct failure states (decision 57)
+   - [x] **Watched driver** (§6.14): `driverId` resolution, the ambient marker,
          the three alert tiers, and the **once-only latch** with a host test
          that replays a reboot mid-weekend (decision 80)
-6. **M5 — Settings and web/HA parity — DONE 2026-10-01**
-   - [ ] Settings page with tabs, staged Save/Cancel, numeric keyboard
-   - [ ] Every entity on the web UI and HA, sorted into groups
-   - [ ] Auto-dim (§6.8) and the lat/lon-vs-timezone note
+6. **M5 — Settings and web/HA parity — mostly done 2026-10-01**
+   - [x] Settings page with staged Save/Cancel (decision 38); brightness live
+   - [x] **Tabs** (Display / Race / Location), the **numeric keyboard**, and
+         latitude, longitude and the Auto Off hours as on-screen fields, with
+         validation that clamps visibly and never saves a partial form
+         (decision 170)
+   - [x] Every entity on the web UI and HA, sorted into groups
+   - [x] Auto-dim (§6.8) and the lat/lon-vs-timezone note
 7. **M6 — Standings and detail cards — mostly done 2026-10-01**
    - [x] `standings_page`, rendered from the fetched championship table
    - [x] **Runtime legend/driver overlap** (RACE-13d) and the text-only card
@@ -2676,8 +2793,9 @@ project's real risk.
          podium. **No OpenF1 needed** (decision 133)
    - [x] Race page's **circuit flag and top-5 strip** (decision 49), both found
          missing by `render_pages.py` (decision 138)
-   - [ ] Tyre strategy strips, flags that occurred and weather — the only
-         parts of §8.1 that still need OpenF1 (decision 134)
+   - [x] Tyre strategy, weather and the safety cars and red flags that
+         occurred — from OpenF1, once the window closes (decision 171). Tyres are
+         a text line per podium finisher (`NOR M30 S5`), not coloured blocks
 8. **M7 — Polish — mostly done 2026-10-01**
    - [x] OTA progress panel on both platforms, with the data task paused for
          the duration and resumed on failure (§2.4.6)
@@ -2708,6 +2826,9 @@ Not forgotten — **blocked**. Collected here so the backlog stays honest.
 | Real transfer times vs the §2.4.8 arithmetic | the model is corroborated but unverified on this board | §2.4.8 |
 | Boot time, and whether icon/portrait work needs core 1 | `plane-tracker` decision 64 | §9 |
 | `MAP-5a` — the `lv_line` redraw cost at ~300×300 | PSRAM bandwidth | §6.5 |
+| **Does the update check's TLS session fit?** And does `MBEDTLS_EXTERNAL_MEM_ALLOC` slow handshakes enough to show as `lvgl took a long time`? | free internal RAM beside two kept sessions is the thing that failed on `sky-tracker` | §2.4.6, decision 183 |
+| **A real update, end to end**: the card, the bar through a blocking download, the restart, and the rollback if it fails | the install blocks the loop; nothing redraws except from the OTA hooks | decision 183 |
+| The release asset round trip: `/releases/latest/download/manifest.json` → the 302 → the `.ota.bin` path resolved against it | needs a published release with a manifest that carries `ota.summary` | decision 184 |
 
 - [ ] **Everything in this table is a measurement, not a design decision.**
       Nothing in §1–§13 is blocked by it; the design is settled and the
