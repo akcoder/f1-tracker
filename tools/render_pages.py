@@ -490,10 +490,10 @@ def _settings_frame(ctx, page, tab, ids):
             "pnl_display", "pnl_race", "pnl_location", "settings_err", *ids)
     img = Image.new("RGB", (W, H), BG); d = ImageDraw.Draw(img)
     d.text((16, 14), "Settings", font=FONT[16], fill=ORANGE)
-    for x, w, col, lab, cp in ((238, 110, (0x1A, 0x25, 0x47), "Cancel", 0xF0156),
-                               (356, 110, BORDER, "Save", 0xF0193)):
+    for x, w, col, lab in ((238, 110, (0x1A, 0x25, 0x47), "Cancel"),
+                           (356, 110, BORDER, "Save")):
         d.rounded_rectangle([x, 8, x + w, 46], 6, fill=col)
-        _pair(d, x, 8, w, 38, lab, cp, 16)
+        d.text((x + w / 2, 8 + 19), lab, font=FONT[16], fill=TEXT, anchor="mm")
     mdi = None
     mdi_path = os.path.join(ROOT, "tools", ".cache", "mdi.ttf")     # the firmware's MDI 7.4.47
     if os.path.exists(mdi_path):

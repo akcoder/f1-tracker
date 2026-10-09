@@ -1384,19 +1384,7 @@ lvgl:
             bg_color: 0x1A2547
             shadow_width: 0
             widgets:
-              - obj:
-                  align: CENTER
-                  width: SIZE_CONTENT
-                  height: SIZE_CONTENT
-                  bg_opa: TRANSP
-                  border_width: 0
-                  pad_all: 0
-                  clickable: false
-                  scrollable: false
-                  layout: {type: FLEX, flex_flow: ROW, flex_align_cross: CENTER, pad_column: 6}
-                  widgets:
-                    - label: {text: "\U000F0156", text_font: mdi18, text_color: 0xC9D3F2}
-                    - label: {text: "Cancel", text_font: mono16, text_color: 0xC9D3F2}
+              - label: {text: "Cancel", align: CENTER, text_font: mono16, text_color: 0xC9D3F2}
             on_click:
               # Cancel restores the brightness captured in on_load - the one
               # setting that was applied live.
@@ -1414,19 +1402,7 @@ lvgl:
             bg_color: 0x2D5BD0
             shadow_width: 0
             widgets:
-              - obj:
-                  align: CENTER
-                  width: SIZE_CONTENT
-                  height: SIZE_CONTENT
-                  bg_opa: TRANSP
-                  border_width: 0
-                  pad_all: 0
-                  clickable: false
-                  scrollable: false
-                  layout: {type: FLEX, flex_flow: ROW, flex_align_cross: CENTER, pad_column: 6}
-                  widgets:
-                    - label: {text: "\U000F0193", text_font: mdi18, text_color: 0xC9D3F2}
-                    - label: {text: "Save", text_font: mono16, text_color: 0xC9D3F2}
+              - label: {text: "Save", align: CENTER, text_font: mono16, text_color: 0xC9D3F2}
             on_click:
               # 7.1.2: every change routes through the ENTITIES, which are the
               # single source of truth. The widgets are one view of them.
