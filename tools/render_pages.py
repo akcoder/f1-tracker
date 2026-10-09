@@ -717,10 +717,19 @@ def page_settings_location(ctx):
     kx, ky, kw, kh = box(G, "settings_kb")
     ky = H - (kh or 160)
     d.rectangle([0, ky, W, H], fill=(0x0E, 0x18, 0x36))
-    for r in range(4):
-        for c in range(4):
-            d.rounded_rectangle([8 + c * 118, ky + 8 + r * 38, 8 + c * 118 + 110, ky + 8 + r * 38 + 32],
-                                4, fill=(0x1A, 0x25, 0x47))
+    # LVGL's NUMBER keyboard map (UI-44b): three rows of four, then five keys.
+    # Glyphs are ASCII stand-ins for the LV_SYMBOL_* keys (keyboard, OK, backspace,
+    # left, right); the key positions are the point, not the exact symbols.
+    rows = (("1", "2", "3", "kb"), ("4", "5", "6", "OK"), ("7", "8", "9", "<x"),
+            ("+/-", "0", ".", "<", ">"))
+    rh = (H - ky - 16) // 4
+    for r, keys in enumerate(rows):
+        kw_ = (W - 16 - 6 * (len(keys) - 1)) / len(keys)
+        for c, k in enumerate(keys):
+            x0 = 8 + c * (kw_ + 6)
+            y0 = ky + 8 + r * rh
+            d.rounded_rectangle([x0, y0, x0 + kw_, y0 + rh - 6], 4, fill=(0x1A, 0x25, 0x47))
+            d.text((x0 + kw_ / 2, y0 + (rh - 6) / 2), k, font=FONT[16], fill=TEXT, anchor="mm")
     return img, "page-9c-settings-location"
 
 
