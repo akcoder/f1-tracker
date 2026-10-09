@@ -38,6 +38,18 @@ ICONS = {
     "team":          ("shield-star",       "Favourite team"),
     "night":         ("weather-night",     "Night"),
     "update":        ("cloud-download",    "Check for updates"),
+    "tab_display":   ("monitor",           "Settings tab: Display"),
+    "tab_race":      ("flag-checkered",    "Settings tab: Race"),
+    "tab_location":  ("map-marker",        "Settings tab: Location"),
+    "about":         ("information-outline", "About"),
+    "save":          ("content-save",      "Save"),
+    "cancel":        ("close",             "Cancel / Close"),
+    "sun":           ("white-balance-sunny", "Sun elevation"),
+    "device":        ("chip",              "This device"),
+    "ip":            ("ip-network",        "IP address"),
+    "ssid":          ("wifi",              "Connected SSID"),
+    "signal":        ("wifi-strength-3",   "Wi-Fi signal"),
+    "uptime":        ("timer-outline",     "Uptime"),
 }
 
 

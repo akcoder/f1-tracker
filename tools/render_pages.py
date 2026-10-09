@@ -19,7 +19,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
 SRC = os.path.join(ROOT, "f1-tracker")
 SAMP = os.path.join(ROOT, "reference", "samples")
-OUT = os.path.join(ROOT, "reference", "mockups")
+OUT = os.path.join(ROOT, "docs", "renders")
 W = H = 480
 
 BG      = (0x00, 0x00, 0x00)
@@ -242,17 +242,34 @@ FONT = {}
 
 
 # ---------------------------------------------------------------- pages
-def page_wifi(ctx):
-    require(ctx["geo"], "page-1-wifi", "boot_mark")
+def page_wifi(ctx, mode="connecting"):
+    require(ctx["geo"], "page-1-wifi", "boot_mark", "boot_name", "wifi_title", "wifi_body")
     img = Image.new("RGB", (W, H), BG); d = ImageDraw.Draw(img)
     # the real generated mark, not a placeholder
     mark = os.path.join(ROOT, "reference", "logo", "boot-200.png")
+    # Same column as the firmware: logo, name, status, body (NET-2b).
+    top = 40
     if os.path.exists(mark):
-        img.paste(Image.open(mark), ((W - 200) // 2, 56))
-    d.text((240, 300), "Connecting to Wi-Fi", font=FONT[34], fill=WHITE, anchor="mm")
-    d.text((240, 348), "home-ssid", font=FONT[22], fill=(0xB0, 0xB0, 0xB0), anchor="mm")
+        img.paste(Image.open(mark), ((W - 200) // 2, top))
+    d.text((240, top + 200 + 10 + 20), "F1 Tracker", font=FONT[34], fill=WHITE, anchor="mm")
+    title, body = {
+        "loading":    ("Loading", ""),
+        "connecting": ("Connecting to Wi-Fi", "home-ssid"),
+        "ap":         ("Set up Wi-Fi", "Join 'F1 Tracker - 9CAD'\nfrom your phone"),
+    }[mode]
+    y = top + 200 + 10 + 40 + 8 + 6
+    d.text((240, y + 11), title, font=FONT[22], fill=WHITE, anchor="mm")
+    d.multiline_text((240, y + 11 + 30), body, font=FONT[22], fill=(0xB0, 0xB0, 0xB0),
+                     anchor="ma", align="center", spacing=4)
     d.text((W - 60, 464), "v0.1.0", font=FONT[12], fill=DIM)
-    return img, "page-1-wifi"
+    name = {"loading": "page-1-wifi", "connecting": "page-1b-wifi-connecting",
+            "ap": "page-1c-wifi-setup"}[mode]
+    return img, name
+
+
+def page_wifi_loading(ctx): return page_wifi(ctx, "loading")
+def page_wifi_connecting(ctx): return page_wifi(ctx, "connecting")
+def page_wifi_ap(ctx): return page_wifi(ctx, "ap")
 
 
 def page_race(ctx, hide_strip=False):
@@ -431,42 +448,280 @@ def page_summary(ctx):
             f"{'Fastest lap':<16} {s['fl_time']}\n{'':<16} {s['fl_driver']}, lap {s['fl_lap']}\n\n"
             f"{'Pit stops':<16} {s['n_stops']}\n"
             f"{'Quickest':<16} {s['best_driver']}, {s['best']}\n\n"
-            f"{'Podium':<16} " + " ".join(s["podium"]))
+            f"{'Podium':<16} " + " ".join(s["podium"]) + "\n\n"
+            # decision 134: OpenF1's half, same text format_extras() produces
+            f"{'Tyres':<16} RUS M30 S5\n{'':<16} VER M24 H11\n{'':<16} HAD H18 M17\n"
+            f"{'Weather':<16} Track 39-48\u00b0C, air 26-27\u00b0C, dry\n"
+            f"{'Incidents':<16} Safety car, lap 31\n{'':<16} Safety car, lap 36")
     d.multiline_text((16, 44), body, font=FONT[14], fill=TEXT, spacing=5)
     footer(d); gear(d)
     return img, "page-8-summary"
 
 
-def page_settings(ctx):
-    require(ctx["geo"], "page-9-settings", "sw_autodim", "sl_bright", "sl_carousel",
-            "lbl_carousel", "sw_alerts", "sw_milestone")
+def _mdi(size=18):
+    path = os.path.join(ROOT, "tools", ".cache", "mdi.ttf")     # the firmware's MDI 7.4.47
+    return ImageFont.truetype(path, size) if os.path.exists(path) else None
+
+
+def _pair(d, x, y, w, h, label, cp, size, fill=None):
+    """An icon and a label centred as a pair, as the firmware's FLEX row does."""
+    mdi = _mdi(18)
+    tw = d.textlength(label, font=FONT[size])
+    iw, gap = (18, 6) if mdi else (0, 0)
+    x0 = x + (w - (iw + gap + tw)) / 2
+    if mdi:
+        d.text((x0, y + h // 2), chr(cp), font=mdi, fill=fill or TEXT, anchor="lm")
+    d.text((x0 + iw + gap, y + h // 2), label, font=FONT[size], fill=fill or TEXT, anchor="lm")
+
+
+def _icon_button(d, G, wid, label, cp, size):
+    x, y, w, h = box(G, wid)
+    if wid in G and G[wid].get("x", 0) < 0 or wid == "btn_about":
+        x = W + G[wid].get("x", 0) - w          # BOTTOM_RIGHT / TOP_RIGHT anchored
+        y = H + G[wid].get("y", 0) - h if wid == "btn_about" else y
+    d.rounded_rectangle([x, y, x + w, y + h], 8, fill=(0x1A, 0x25, 0x47))
+    _pair(d, x, y, w, h, label, cp, size)
+
+
+def _settings_frame(ctx, page, tab, ids):
+    """Header, the tab row and the panel origin - all read from the YAML."""
+    G = ctx["geo"]
+    require(G, page, "tab_display", "tab_race", "tab_location", "btn_about",
+            "pnl_display", "pnl_race", "pnl_location", "settings_err", *ids)
     img = Image.new("RGB", (W, H), BG); d = ImageDraw.Draw(img)
     d.text((16, 14), "Settings", font=FONT[16], fill=ORANGE)
-    for x, w, col, lab in ((238, 110, (0x1A, 0x25, 0x47), "Cancel"), (356, 110, BORDER, "Save")):
+    for x, w, col, lab, cp in ((238, 110, (0x1A, 0x25, 0x47), "Cancel", 0xF0156),
+                               (356, 110, BORDER, "Save", 0xF0193)):
         d.rounded_rectangle([x, 8, x + w, 46], 6, fill=col)
-        d.text((x + w // 2, 27), lab, font=FONT[16], fill=TEXT, anchor="mm")
+        _pair(d, x, 8, w, 38, lab, cp, 16)
+    mdi = None
+    mdi_path = os.path.join(ROOT, "tools", ".cache", "mdi.ttf")     # the firmware's MDI 7.4.47
+    if os.path.exists(mdi_path):
+        mdi = ImageFont.truetype(mdi_path, 18)
+    for i, (wid, lab, cp) in enumerate((("tab_display", "Display", 0xF0379),
+                                        ("tab_race", "Race", 0xF023C),
+                                        ("tab_location", "Location", 0xF034E))):
+        x, y, w, h = box(G, wid)
+        d.rounded_rectangle([x, y, x + w, y + h], 8, fill=BORDER if i == tab else (0x1A, 0x25, 0x47))
+        # icon, 8 px, label - centred as a pair, as the FLEX row does on the device
+        tw = d.textlength(lab, font=FONT[14])
+        iw = 18 if mdi else 0
+        gap = 8 if mdi else 0
+        x0 = x + (w - (iw + gap + tw)) / 2
+        if mdi:
+            d.text((x0, y + h // 2), chr(cp), font=mdi, fill=TEXT, anchor="lm")
+        d.text((x0 + iw + gap, y + h // 2), lab, font=FONT[14], fill=TEXT, anchor="lm")
+    _icon_button(d, G, "btn_about", "About", 0xF02FD, 14)
+    px, py, pw, ph = box(G, ("pnl_display", "pnl_race", "pnl_location")[tab])
+    return img, d, px, py
 
-    def sw(y, on):
-        d.rounded_rectangle([380, y, 452, y + 32], 16, fill=BORDER if on else (0x33, 0x3A, 0x4A))
-        cx = 436 if on else 396
-        d.ellipse([cx - 12, y + 4, cx + 12, y + 28], fill=WHITE)
 
-    d.text((16, 66), "Auto-dim display", font=FONT[14], fill=TEXT); sw(60, True)
-    d.multiline_text((16, 90),
+def _sw(d, px, py, wid, G, on):
+    x, y, w, h = box(G, wid, px, py)
+    d.rounded_rectangle([x, y, x + w, y + h], h // 2, fill=BORDER if on else (0x33, 0x3A, 0x4A))
+    cx = x + w - h // 2 if on else x + h // 2
+    d.ellipse([cx - 12, y + 4, cx + 12, y + h - 4], fill=WHITE)
+
+
+def _field(d, px, py, wid, G, text):
+    x, y, w, h = box(G, wid, px, py)
+    d.rectangle([x, y, x + w, y + h], fill=(0x0E, 0x18, 0x36), outline=(0x3A, 0x4E, 0x86), width=2)
+    d.text((x + 8, y + h // 2), text, font=FONT[14], fill=(0xEE, 0xF2, 0xFF), anchor="lm")
+
+
+def _slider(d, px, py, wid, G, frac):
+    x, y, w, h = box(G, wid, px, py)
+    d.rounded_rectangle([x, y, x + w, y + h], h // 2, fill=(0x22, 0x30, 0x5A))
+    d.rounded_rectangle([x, y, x + int(w * frac), y + h], h // 2, fill=BORDER)
+
+
+def update_consts():
+    """The card's geometry, read from f1_update.h so the render cannot drift from it."""
+    src = open(os.path.join(ROOT, "f1-tracker", "f1_update.h"), encoding="utf-8").read()
+    out = {}
+    for m in re.finditer(r"inline constexpr int ([^;]+);", src):
+        for part in m.group(1).split(","):
+            k, _, v = part.partition("=")
+            out[k.strip()] = int(v.strip())
+    need = ("CARD_W", "CARD_H", "CARD_TALL_W", "CARD_TALL_H", "NOTES_W", "NOTES_H", "NOTES_Y",
+            "BTN_W", "BTN_H", "BTN_Y", "BTN_TALL_Y", "BAR_W", "BAR_H", "BAR_Y",
+            "ICON_W", "ICON_H", "ICON_X", "ICON_Y")
+    missing = [k for k in need if k not in out]
+    if missing:
+        raise DriftError(f"f1_update.h no longer defines {missing}")
+    return out
+
+
+def _card(mode):
+    c = update_consts()
+    img = Image.new("RGB", (W, H), BG); d = ImageDraw.Draw(img)
+    tall = mode == "available"
+    cw, ch = (c["CARD_TALL_W"], c["CARD_TALL_H"]) if tall else (c["CARD_W"], c["CARD_H"])
+    d.rectangle([0, 0, W, H], fill=(0, 0, 0))
+    x0, y0 = (W - cw) // 2, (H - ch) // 2
+    d.rounded_rectangle([x0, y0, x0 + cw, y0 + ch], 14, fill=(0x0E, 0x18, 0x36), outline=(0x2A, 0x3A, 0x66), width=2)
+    def line(txt, y, size, fill):
+        d.text((x0 + cw // 2, y0 + y), txt, font=FONT[size], fill=fill, anchor="ma")
+    l1y, l2y = (58, 82) if tall else (76, 104)
+    btn_y = c["BTN_TALL_Y"] if tall else c["BTN_Y"]
+    def button(i, label, col):
+        bx = x0 + (cw // 2 - 186 if i == 0 else cw // 2 + 16)
+        d.rounded_rectangle([bx, y0 + btn_y, bx + c["BTN_W"], y0 + btn_y + c["BTN_H"]], 8, fill=col)
+        d.text((bx + c["BTN_W"] // 2, y0 + btn_y + c["BTN_H"] // 2), label, font=FONT[16], fill=WHITE, anchor="mm")
+    def one_button(label):
+        bx = x0 + (cw - c["BTN_W"]) // 2
+        d.rounded_rectangle([bx, y0 + btn_y, bx + c["BTN_W"], y0 + btn_y + c["BTN_H"]], 8, fill=(0x1A, 0x25, 0x47))
+        d.text((bx + c["BTN_W"] // 2, y0 + btn_y + c["BTN_H"] // 2), label, font=FONT[16], fill=WHITE, anchor="mm")
+    if mode == "checking":
+        line("Checking for updates", 16, 22, WHITE); line("Asking GitHub for the latest release", l1y, 16, (0xDC, 0xE4, 0xF8))
+        line("Installed: 0.1.0", l2y, 16, MUTED); one_button("Close"); name = "overlay-update-checking"
+    elif mode == "latest":
+        line("Up to date", 16, 22, WHITE); line("0.1.0 is the latest version", l1y, 16, (0xDC, 0xE4, 0xF8))
+        line("Checks again every hour", l2y, 16, MUTED); one_button("Close"); name = "overlay-update-latest"
+    elif mode == "available":
+        line("Update available", 16, 22, WHITE); line("New version: 0.2.0", l1y, 16, (0xDC, 0xE4, 0xF8))
+        line("Installed: 0.1.0 - what's new:", l2y, 16, MUTED)
+        nx, ny = x0 + (cw - c["NOTES_W"]) // 2, y0 + c["NOTES_Y"]
+        d.rounded_rectangle([nx, ny, nx + c["NOTES_W"], ny + c["NOTES_H"]], 8, fill=(0x0A, 0x11, 0x28))
+        d.multiline_text((nx + 8, ny + 8),
+            "- Settings in three tabs, with a keyboard\n- About screen\n- Auto-dim from your latitude and\n  longitude\n"
+            "- Firmware updates show what is new,\n  and never offer an older version",
+            font=FONT[12], fill=TEXT, spacing=5)
+        button(0, "Not now", (0x1A, 0x25, 0x47)); button(1, "Update", BORDER); name = "overlay-update-available"
+    elif mode == "installing":
+        line("Updating firmware", 16, 22, WHITE); line("Downloading", l1y, 16, (0xDC, 0xE4, 0xF8))
+        line("Keep the power on", l2y, 16, (0xFF, 0xB5, 0x47))
+        bx, by = x0 + (cw - c["BAR_W"]) // 2, y0 + c["BAR_Y"]
+        d.rounded_rectangle([bx, by, bx + c["BAR_W"], by + c["BAR_H"]], 8, fill=(0x22, 0x30, 0x5A))
+        d.rounded_rectangle([bx, by, bx + int(c["BAR_W"] * 0.42), by + c["BAR_H"]], 8, fill=BORDER)
+        name = "overlay-update-installing"
+    else:
+        line("Couldn't check", 16, 22, WHITE); line("No network connection", l1y, 16, (0xDC, 0xE4, 0xF8))
+        line("Check the Wi-Fi and try again later", l2y, 16, MUTED); one_button("Close"); name = "overlay-update-failed"
+    return img, name
+
+
+def overlay_update_available(ctx): return _card("available")
+def overlay_update_installing(ctx): return _card("installing")
+def overlay_update_checking(ctx): return _card("checking")
+def overlay_update_failed(ctx): return _card("failed")
+
+
+def page_race_with_icon(ctx):
+    """The race page with the update icon beside the gear (UI-68a)."""
+    img, name = page_race(ctx)
+    c = update_consts()
+    d = ImageDraw.Draw(img)
+    x = W + c["ICON_X"] - c["ICON_W"]; y = H + c["ICON_Y"] - c["ICON_H"]
+    d.text((x + c["ICON_W"] // 2, y + c["ICON_H"] // 2), "\u2193", font=FONT[24], fill=(0xFF, 0xB5, 0x47), anchor="mm")
+    return img, "page-2b-race-update-icon"
+
+
+def page_about(ctx):
+    G = ctx["geo"]
+    require(G, "page-12-about", "about_close", "about_mark", "about_name", "about_version",
+            "about_by", "about_build", "about_device", "about_data", "about_legal")
+    img = Image.new("RGB", (W, H), BG); d = ImageDraw.Draw(img)
+    mark = os.path.join(ROOT, "reference", "logo", "boot-200.png")
+    mx, my, _, _ = box(G, "about_mark")
+    if os.path.exists(mark):
+        img.paste(Image.open(mark).resize((112, 112), Image.LANCZOS), (mx, my))
+    # the close button is TOP_RIGHT anchored
+    cx, cy, cw, ch = box(G, "about_close")
+    cx = W + cx - cw
+    d.rounded_rectangle([cx, cy, cx + cw, cy + ch], 8, fill=(0x1A, 0x25, 0x47))
+    _pair(d, cx, cy, cw, ch, "Close", 0xF0156, 16)
+    def centred(wid, text, size, fill):
+        x, y, w, h = box(G, wid)
+        d.text((x + w // 2, y), text, font=FONT[size], fill=fill, anchor="ma")
+    centred("about_name", "F1 Tracker", 34, WHITE)
+    centred("about_version", "Version 0.1.0", 14, TEXT)
+    centred("about_by", "by Dan Morphis", 14, MUTED)
+    centred("about_build", "ESPHome 2026.9.1, built Oct  8 2026", 12, MUTED)
+    dx, dy, dw, dh = box(G, "about_device")
+    mdi = _mdi(18)
+    if mdi: d.text((16, dy - 2), chr(0xF061A), font=mdi, fill=MUTED)
+    d.multiline_text((dx, dy),
+        "This device\n  Name   f1-tracker-9cad68\n  IP     192.168.1.52\n"
+        "  Wi-Fi  home-ssid  -52 dBm\n  MAC    24:EC:4A:9C:AD:68\n  Up     3h 12m",
+        font=FONT[12], fill=TEXT, spacing=5)
+    x, y, w, h = box(G, "about_data")
+    d.multiline_text((x, y),
+        "Data from\n  Jolpica, jolpi.ca  and  OpenF1, openf1.org  (CC BY-NC-SA 4.0)\n"
+        "  Portraits: Wikimedia Commons, credited on each card\n"
+        "  Flags: flag-icons (MIT)   Circuits: f1-circuits (MIT)",
+        font=FONT[12], fill=MUTED, spacing=5)
+    x, y, w, h = box(G, "about_legal")
+    d.multiline_text((x, y),
+        "Unofficial and not affiliated with Formula 1, the FIA or\nany team. Names are trademarks of their owners.",
+        font=FONT[12], fill=DIM, spacing=5)
+    return img, "page-12-about"
+
+
+def _row_icon(d, px, py, y, cp):
+    m = _mdi(18)
+    if m: d.text((px + 16, py + y), chr(cp), font=m, fill=MUTED)
+
+
+def page_settings(ctx):
+    G = ctx["geo"]
+    img, d, px, py = _settings_frame(ctx, "page-9-settings", 0,
+        ("sw_autodim", "sw_autooff", "sl_bright", "ta_off_from", "ta_off_to"))
+    _row_icon(d, px, py, 6, 0xF00E1); d.text((px + 44, py + 6), "Auto-dim display", font=FONT[14], fill=TEXT)
+    _sw(d, px, py, "sw_autodim", G, True)
+    _row_icon(d, px, py, 56, 0xF0904); d.text((px + 44, py + 56), "Auto off overnight", font=FONT[14], fill=TEXT)
+    _sw(d, px, py, "sw_autooff", G, True)
+    _row_icon(d, px, py, 106, 0xF0594); d.text((px + 44, py + 106), "Off from", font=FONT[14], fill=TEXT)
+    _field(d, px, py, "ta_off_from", G, "23")
+    d.text((px + 224, py + 106), "until", font=FONT[14], fill=MUTED)
+    _field(d, px, py, "ta_off_to", G, "7")
+    d.text((px + 364, py + 106), "local h", font=FONT[12], fill=MUTED)
+    _row_icon(d, px, py, 162, 0xF00DF); d.text((px + 44, py + 162), "Brightness", font=FONT[14], fill=TEXT)
+    _slider(d, px, py, "sl_bright", G, 0.8)
+    return img, "page-9-settings"
+
+
+def page_settings_race(ctx):
+    G = ctx["geo"]
+    img, d, px, py = _settings_frame(ctx, "page-9b-settings-race", 1,
+        ("sl_carousel", "lbl_carousel", "sw_alerts", "sw_milestone"))
+    _row_icon(d, px, py, 6, 0xF051B); d.text((px + 44, py + 6), "Carousel", font=FONT[14], fill=TEXT)
+    d.text((px + 160, py + 6), "45 s", font=FONT[14], fill=MUTED)
+    _slider(d, px, py, "sl_carousel", G, 0.29)
+    _row_icon(d, px, py, 56, 0xF009E); d.text((px + 44, py + 56), "Watched driver alerts", font=FONT[14], fill=TEXT)
+    _sw(d, px, py, "sw_alerts", G, True)
+    _row_icon(d, px, py, 106, 0xF053A); d.text((px + 44, py + 106), "Milestones only", font=FONT[14], fill=TEXT)
+    _sw(d, px, py, "sw_milestone", G, False)
+    return img, "page-9b-settings-race"
+
+
+def page_settings_location(ctx):
+    G = ctx["geo"]
+    img, d, px, py = _settings_frame(ctx, "page-9c-settings-location", 2,
+        ("ta_lat", "ta_lon", "btn_update", "settings_kb"))
+    _row_icon(d, px, py, 10, 0xF0F57); d.text((px + 44, py + 10), "Latitude", font=FONT[14], fill=TEXT)
+    _field(d, px, py, "ta_lat", G, "61.580")
+    d.text((px + 320, py + 12), "N+  S-", font=FONT[12], fill=MUTED)
+    _row_icon(d, px, py, 60, 0xF0F5A); d.text((px + 44, py + 60), "Longitude", font=FONT[14], fill=TEXT)
+    _field(d, px, py, "ta_lon", G, "-149.440")
+    d.text((px + 320, py + 62), "E+  W-", font=FONT[12], fill=MUTED)
+    d.multiline_text((px + 16, py + 104),
         "Latitude and longitude set sunrise/sunset for auto-dim only.\n"
         "The time zone is fixed in firmware and does not follow them.",
         font=FONT[12], fill=MUTED, spacing=3)
-    d.text((16, 136), "Brightness", font=FONT[14], fill=TEXT)
-    d.rounded_rectangle([150, 140, 450, 154], 7, fill=(0x22, 0x30, 0x5A))
-    d.rounded_rectangle([150, 140, 390, 154], 7, fill=BORDER)
-    d.text((16, 180), "Carousel", font=FONT[14], fill=TEXT)
-    d.text((150, 180), "45 s", font=FONT[14], fill=MUTED)
-    d.rounded_rectangle([230, 184, 450, 198], 7, fill=(0x22, 0x30, 0x5A))
-    d.rounded_rectangle([230, 184, 296, 198], 7, fill=BORDER)
-    d.text((16, 224), "Watched driver alerts", font=FONT[14], fill=TEXT); sw(218, True)
-    d.text((16, 262), "Milestones only", font=FONT[14], fill=TEXT); sw(256, False)
-    d.text((W - 64, 464), "v0.1.0", font=FONT[12], fill=DIM)
-    return img, "page-9-settings"
+    x, y, w, h = box(G, "btn_update", px, py)
+    d.rounded_rectangle([x, y, x + w, y + h], 8, fill=(0x1A, 0x25, 0x47))
+    _pair(d, x, y, w, h, "Check for updates", 0xF0162, 14)
+    # The keyboard covers the lower third while a field is being edited; draw it
+    # so a panel row that slides under it shows up here rather than on a device.
+    kx, ky, kw, kh = box(G, "settings_kb")
+    ky = H - (kh or 160)
+    d.rectangle([0, ky, W, H], fill=(0x0E, 0x18, 0x36))
+    for r in range(4):
+        for c in range(4):
+            d.rounded_rectangle([8 + c * 118, ky + 8 + r * 38, 8 + c * 118 + 110, ky + 8 + r * 38 + 32],
+                                4, fill=(0x1A, 0x25, 0x47))
+    return img, "page-9c-settings-location"
 
 
 def page_debug(ctx):
@@ -579,9 +834,13 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--font", default="/tmp/RobotoMono.ttf")
     ap.add_argument("--sans", default=None)
+    ap.add_argument("--out", default=None, help="output directory (default docs/renders)")
     a = ap.parse_args()
     for sz in (10, 12, 14, 15, 16, 18, 22, 24, 34):
         FONT[sz] = ImageFont.truetype(a.font, sz)
+    global OUT
+    if a.out:
+        OUT = os.path.abspath(a.out)
     os.makedirs(OUT, exist_ok=True)
 
     pts, cs, idmap = circuits()
@@ -660,9 +919,12 @@ def main():
     print(f"geometry OK: map {my}-{my+mh}, top5 {ty}-{ty+th}, "
           f"banner {by}-{by+bh}, gear 432+")
 
-    pages = [page_wifi, page_race, page_order, page_circuit, page_driver, page_legend,
-             page_standings, page_summary, page_settings, page_debug, page_offseason,
-             overlay_detail, overlay_alert, overlay_milestone]
+    pages = [page_wifi_loading, page_wifi_connecting, page_wifi_ap, page_race, page_order, page_circuit, page_driver, page_legend,
+             page_standings, page_summary, page_settings, page_settings_race,
+             page_settings_location, page_about, page_debug, page_offseason,
+             overlay_detail, overlay_alert, overlay_milestone,
+             page_race_with_icon, overlay_update_checking, overlay_update_available,
+             overlay_update_installing, overlay_update_failed]
     made = []
     for fn in pages:
         try:

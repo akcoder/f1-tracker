@@ -6,6 +6,8 @@
 #include <cmath>
 #include <cstdint>
 
+#include "f1_sun.h"
+
 namespace f1 {
 namespace display {
 
@@ -16,6 +18,15 @@ inline float dim_factor(float sun_elevation_deg, bool clock_valid) {
   if (!clock_valid) return 1.0f;
   const float f = 0.25f + 0.75f * (sun_elevation_deg + 8.0f) / 13.0f;
   return f < 0.25f ? 0.25f : (f > 1.0f ? 1.0f : f);
+}
+
+// UI-44: the factor for a place and a moment. The position is read from the
+// latitude and longitude ENTITIES at the call, never cached - the settings page
+// and the web UI can change them at any time, and a copy taken at boot would
+// keep dimming for the old place until the next reboot.
+inline float auto_factor(double unix_s, double lat_deg, double lon_deg, bool clock_valid) {
+  if (!clock_valid) return 1.0f;
+  return dim_factor(sun::elevation(unix_s, lat_deg, lon_deg), true);
 }
 
 // UI-44c: Auto Off. Dimming helps; at 61.58 N in December the panel is still

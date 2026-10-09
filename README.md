@@ -23,12 +23,12 @@ card is badged in gold and shown nine times more often than usual.
 
 | | |
 |:--:|:--:|
-| ![Race day](reference/mockups/page-2-race.png) | ![Order](reference/mockups/page-3-order.png) |
+| ![Race day](docs/renders/page-2-race.png) | ![Order](docs/renders/page-3-order.png) |
 | Race day — map, state line, top five | The grid, 22 rows with flags and team colours |
-| ![Circuit](reference/mockups/page-4-circuit.png) | ![Legend](reference/mockups/page-6-legend.png) |
+| ![Circuit](docs/renders/page-4-circuit.png) | ![Legend](docs/renders/page-6-legend.png) |
 | A circuit card with its facts | A legend, with portrait and career |
 
-More in [`reference/mockups/`](reference/mockups/) — every page is rendered from
+More in [`docs/renders/`](docs/renders/) — every page is rendered from
 the real compiled data, not drawn.
 
 ## Install

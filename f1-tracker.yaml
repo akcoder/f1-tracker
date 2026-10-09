@@ -49,6 +49,11 @@ esphome:
     - f1-tracker/f1_display.h
     - f1-tracker/f1_champ.h
     - f1-tracker/f1_team.h
+    - f1-tracker/f1_roster.h
+    - f1-tracker/f1_boot.h
+    - f1-tracker/f1_sun.h
+    - f1-tracker/f1_updlogic.h
+    - f1-tracker/f1_update.h
     - f1-tracker/f1_map.h
     - f1-tracker/f1_state.h
     - f1-tracker/f1_watch.h
@@ -74,11 +79,28 @@ esphome:
             auto ap = id(wifi_comp).get_ap();
             ap.set_ssid(ssid);
             id(wifi_comp).set_ap(ap);
+    - priority: -200           # UI-68: the first update check, once the boot fetches are
+      then:                    # done - at boot a third TLS session beside the two the
+        - delay: 3min          # data task keeps ran out of memory on sky-tracker
+        - lambda: |-
+            if (id(wifi_comp).is_connected()) f1::upd::check_quiet("boot");
     - priority: 600            # NET-10: before web_server's own setup (249), so
       then:                    # our handler for "/" is asked first
         - lambda: f1::web::install();
     - priority: -100           # widgets exist by now (7.1.2: entities own the
       then:                    # values, the widgets are one view of them)
+        - lambda: |-
+            // BOOT-2: the boot screen (logo, "Loading") on the panel BEFORE the slow
+            // start-up below. LVGL draws nothing on its own until setup ends, so one
+            // frame is forced now; and the light writes its restored level only from
+            // loop(), after setup, so the backlight is set here too - without it the
+            // panel stays dark until setup is over.
+            lv_refr_now(nullptr);
+            {
+              float b = 0.0f;
+              id(backlight).current_values_as_brightness(&b);   // the restored level, gamma applied
+              id(backlight_pwm).set_level(b);
+            }
         - lambda: |-
             f1::ui::Widgets w;
             w.map_box = id(card_map);
@@ -112,8 +134,6 @@ esphome:
             aw.banner      = id(watch_banner);
             aw.banner_text = id(watch_text);
             aw.banner_flag = id(watch_flag);
-            f1::app::g.obs_lat = id(obs_lat).state;
-            f1::app::g.obs_lon = id(obs_lon).state;
             f1::app::setup(aw);
             {  // 8.2: the favourite team. This TemplateSelect exposes an index
                // rather than a string, so the names live beside the options.
@@ -128,7 +148,11 @@ esphome:
             }
             f1::detail::setup(id(detail_panel), id(detail_title), id(detail_body),
                               id(detail_flag));
+            f1::upd::set_source("https://github.com/akcoder/f1-tracker/releases/latest/download/manifest.json");
+            f1::upd::init(id(fw_update), id(setup_title)->get_lv_font(), id(mono16)->get_lv_font(),
+                          id(mono12)->get_lv_font(), &lv_font_montserrat_28);   // UI-68
             f1::net::start();                 // the data task, pinned to core 1
+            lv_label_set_text(id(wifi_title), "Connecting to Wi-Fi");   // BOOT-2: start-up done
 
 esp32:
   board: esp32-s3-devkitc-1
@@ -166,6 +190,12 @@ esp32:
       # windows therefore come from PSRAM - capacity is nothing against 8 MB, but
       # the BANDWIDTH shares a bus with the panel (see 14.1).
       CONFIG_SPIRAM_TRY_ALLOCATE_WIFI_LWIP: y
+      # UI-68: all mbedTLS memory from PSRAM. The update check is a THIRD TLS
+      # session beside the two the data task keeps open (NET-12), and from internal
+      # RAM it did not fit: sky-tracker's check failed with "-0x7F00" (out of
+      # memory) until this was set, and plain malloc (its 4.6.4) was not enough.
+      # Costs handshake time on the PSRAM bus - to be measured (14.1).
+      CONFIG_MBEDTLS_EXTERNAL_MEM_ALLOC: y
 
 psram:
   mode: octal
@@ -184,7 +214,7 @@ api:
 ota:
   - platform: esphome
     id: ota_esphome
-    on_begin:
+    on_begin: &ota_on_begin
       - lambda: f1::net::ota_begin();     # 2.4.6: pause the data task
       - lvgl.page.show: race_page
       - lambda: |-
@@ -192,7 +222,7 @@ ota:
           lv_label_set_text(id(ota_pct), "starting");
           lv_obj_remove_flag(id(ota_panel), LV_OBJ_FLAG_HIDDEN);
           lv_refr_now(NULL);              // the OTA write blocks the loop
-    on_progress:
+    on_progress: &ota_on_progress
       - lambda: |-
           static int last = -10;
           int p = (int) x;
@@ -203,12 +233,12 @@ ota:
           lv_label_set_text(id(ota_title), p >= 100 ? "Upgrading" : "Uploading");
           lv_label_set_text(id(ota_pct), b);
           lv_refr_now(NULL);
-    on_end:
+    on_end: &ota_on_end
       - lambda: |-
           lv_label_set_text(id(ota_title), "Upgrading");
           lv_label_set_text(id(ota_pct), "rebooting");
           lv_refr_now(NULL);
-    on_error:
+    on_error: &ota_on_error
       - lambda: |-
           lv_label_set_text(id(ota_title), "Upload failed");
           lv_label_set_text(id(ota_pct), "resuming");
@@ -218,8 +248,24 @@ ota:
       - lambda: lv_obj_add_flag(id(ota_panel), LV_OBJ_FLAG_HIDDEN);
   - platform: web_server      # 7.1: firmware upload from the device's own page
     id: ota_web
+    on_begin: *ota_on_begin   # 2.4.6: the panel and the paused data task, as for the
+    on_progress: *ota_on_progress   # IDE upload - this platform had no hooks at all, so a
+    on_end: *ota_on_end       # web-page upload froze the screen on whatever was last drawn
+    on_error: *ota_on_error
   - platform: http_request    # "Made for ESPHome": updates over the internet
     id: ota_http
+    on_begin:                 # UI-68: the download blocks the loop, so the card is
+      - lambda: |-            # redrawn from these hooks, and the data task steps aside
+          f1::net::ota_begin();
+          f1::upd::ota_begin("Downloading");
+    on_progress:
+      - lambda: f1::upd::ota_progress(x);
+    on_end:
+      - lambda: f1::upd::ota_end(true);
+    on_error:
+      - lambda: |-
+          f1::upd::ota_end(false);
+          f1::net::ota_error();            // resume if the install failed
 
 wifi:
   # "Made for ESPHome": no credentials here. They arrive over Improv - BLE or
@@ -384,6 +430,10 @@ image:
     id: boot_logo
     type: RGB565
     resize: 200x200
+  - file: reference/logo/boot-200.png     # About page: 112 px, resized when the
+    id: about_logo                        # firmware is built, not scaled by LVGL
+    type: RGB565
+    resize: 112x112
 
 font:
   - file: "gfonts://Roboto Mono"
@@ -428,7 +478,7 @@ font:
     size: 18                  # GENERATED from MDI's own metadata by
     bpp: 4                    # tools/gen_icons.py - guessing one gives a blank
                               # glyph that compiles and only shows on a screen.
-    glyphs: ["\U000F0017", "\U000F009E", "\U000F00DF", "\U000F00E1", "\U000F0150", "\U000F0241", "\U000F04BA", "\U000F051B", "\U000F051F", "\U000F053A", "\U000F056C", "\U000F0594", "\U000F0835", "\U000F0904", "\U000F0BB1", "\U000F0F57", "\U000F0F5A", "\U000F113B", "\U000F0162"]
+    glyphs: ["\U000F0017", "\U000F009E", "\U000F00DF", "\U000F00E1", "\U000F0150", "\U000F0156", "\U000F0162", "\U000F0193", "\U000F023C", "\U000F0241", "\U000F02FD", "\U000F034E", "\U000F0379", "\U000F04BA", "\U000F051B", "\U000F051F", "\U000F053A", "\U000F056C", "\U000F0594", "\U000F05A8", "\U000F05A9", "\U000F061A", "\U000F0835", "\U000F0904", "\U000F0925", "\U000F0A60", "\U000F0BB1", "\U000F0F57", "\U000F0F5A", "\U000F113B"]
   - file:
       type: web
       url: https://cdn.jsdelivr.net/npm/@mdi/font@7.4.47/fonts/materialdesignicons-webfont.ttf
@@ -438,6 +488,9 @@ font:
     glyphs: ["\U000F05A9", "\U000F16BE"]        # wifi, wifi-cog
 
 globals:
+  - id: from_about            # set by About's Close so the settings page does NOT
+    type: bool                # re-stage on return - that would discard unsaved edits and
+    initial_value: "false"     # re-capture a live-changed brightness as Cancel's baseline
   - id: bright_on_open        # UI-16: brightness when settings opened (Cancel restores)
     type: float
     initial_value: "1.0"
@@ -452,6 +505,16 @@ globals:
 # ---------------------------------------------------------------- entities
 # 7.1.2: entities are the single source of truth; LVGL widgets are one VIEW of
 # them. A design where the widget owns the value cannot be driven from HA.
+button:
+  - platform: template        # UI-68b: the web UI / HA twin of Settings > Check for updates
+    name: Upgrade Check
+    icon: mdi:cloud-refresh
+    entity_category: config
+    web_server: {sorting_group_id: grp_system, sorting_weight: 1}
+    on_press:                 # quiet: no card on the panel - the Firmware row and the
+      - lambda: |-            # icon beside the gear show the result
+          f1::upd::check_quiet("button");
+
 number:
   - platform: template        # UI-44 / decision 7: feeds sunrise/sunset ONLY
     id: obs_lat
@@ -701,15 +764,18 @@ text_sensor:
     ip_address:
       id: ip_addr
       name: IP Address
+      icon: mdi:ip-network
       entity_category: diagnostic
       web_server: {sorting_group_id: grp_system, sorting_weight: 5}
     ssid:
       id: wifi_ssid_info
       name: Connected SSID
+      icon: mdi:wifi
       entity_category: diagnostic
       web_server: {sorting_group_id: grp_system, sorting_weight: 6}
   - platform: version
     name: ESPHome Version
+    icon: mdi:chip
     entity_category: diagnostic
     web_server: {sorting_group_id: grp_system, sorting_weight: 7}
 
@@ -722,13 +788,24 @@ sensor:
     accuracy_decimals: 0
     update_interval: never
     web_server: {sorting_group_id: grp_race, sorting_weight: 8}
+  - platform: template        # UI-44: what auto-dim is reading, so a wrong latitude or
+    id: sun_elevation         # longitude shows up as a number instead of a dim screen
+    name: Sun Elevation
+    icon: mdi:white-balance-sunny
+    unit_of_measurement: "°"
+    accuracy_decimals: 1
+    entity_category: diagnostic
+    update_interval: never
+    web_server: {sorting_group_id: grp_display, sorting_weight: 20}
   - platform: wifi_signal
     name: WiFi Signal
+    icon: mdi:wifi-strength-3
     update_interval: 60s
     entity_category: diagnostic
     web_server: {sorting_group_id: grp_system, sorting_weight: 8}
   - platform: uptime
     name: Uptime
+    icon: mdi:timer-outline
     entity_category: diagnostic
     web_server: {sorting_group_id: grp_system, sorting_weight: 9}
 
@@ -874,24 +951,35 @@ lvgl:
               flex_flow: COLUMN
               flex_align_main: CENTER
               flex_align_cross: CENTER
-              pad_row: 22
+              pad_row: 6
             widgets:
               - image:
                   id: boot_mark
                   src: boot_logo
               - label:
-                  text: "Connecting to Wi-Fi"
+                  id: boot_name           # the device's name, plainly (3.7.5)
+                  text: "F1 Tracker"
                   text_font: setup_title
                   text_color: 0xFFFFFF
                   width: 380
                   text_align: CENTER
+                  pad_top: 10
+                  pad_bottom: 8
               - label:
-                  id: wifi_body   # the SSID is not known at compile time any
-                  text: "setting up"  # more - credentials arrive over Improv
+                  id: wifi_title
+                  text: "Loading"         # BOOT-2: until start-up ends; then the Wi-Fi status
+                  text_font: setup_body
+                  text_color: 0xFFFFFF
+                  width: 380
+                  text_align: CENTER
+              - label:
+                  id: wifi_body           # NET-2c: the network being tried, or the AP to
+                  text: ""                # join - written by the status check below
                   text_font: setup_body
                   text_color: 0xB0B0B0
                   width: 380
                   text_align: CENTER
+                  pad_bottom: 18
         - label:
             align: BOTTOM_RIGHT
             x: -10
@@ -1251,6 +1339,7 @@ lvgl:
         # widgets and are written to entities only on Save; Cancel restores what
         # was captured here. Brightness is the deliberate exception below.
         - lambda: |-
+            if (id(from_about)) { id(from_about) = false; return; }   // back from About
             id(bright_on_open) = id(backlight).current_values.get_brightness();
             id(bright_day_open) = id(bright_day);
             auto set = [](lv_obj_t *o, bool on) {
@@ -1266,6 +1355,20 @@ lvgl:
                 (int) roundf((id(auto_dim).state ? id(bright_day)
                                                  : id(bright_on_open)) * 100.0f), LV_ANIM_OFF);
             f1::ui::settings_labels(id(lbl_carousel), (int) id(carousel_secs).state);
+            char nb[16];
+            snprintf(nb, sizeof(nb), "%.3f", (double) id(obs_lat).state);
+            lv_textarea_set_text(id(ta_lat), nb);
+            snprintf(nb, sizeof(nb), "%.3f", (double) id(obs_lon).state);
+            lv_textarea_set_text(id(ta_lon), nb);
+            snprintf(nb, sizeof(nb), "%d", (int) id(off_from).state);
+            lv_textarea_set_text(id(ta_off_from), nb);
+            snprintf(nb, sizeof(nb), "%d", (int) id(off_to).state);
+            lv_textarea_set_text(id(ta_off_to), nb);
+            lv_label_set_text(id(settings_err), "");
+            lv_obj_add_flag(id(settings_kb)->obj, LV_OBJ_FLAG_HIDDEN);
+            lv_obj_t *pnl[3] = {id(pnl_display), id(pnl_race), id(pnl_location)};
+            lv_obj_t *btn[3] = {id(tab_display), id(tab_race), id(tab_location)};
+            f1::ui::settings_tab(pnl, btn, 0);
       widgets:
         - label:
             x: 16
@@ -1281,7 +1384,19 @@ lvgl:
             bg_color: 0x1A2547
             shadow_width: 0
             widgets:
-              - label: {align: CENTER, text: "Cancel", text_font: mono16}
+              - obj:
+                  align: CENTER
+                  width: SIZE_CONTENT
+                  height: SIZE_CONTENT
+                  bg_opa: TRANSP
+                  border_width: 0
+                  pad_all: 0
+                  clickable: false
+                  scrollable: false
+                  layout: {type: FLEX, flex_flow: ROW, flex_align_cross: CENTER, pad_column: 6}
+                  widgets:
+                    - label: {text: "\U000F0156", text_font: mdi18, text_color: 0xC9D3F2}
+                    - label: {text: "Cancel", text_font: mono16, text_color: 0xC9D3F2}
             on_click:
               # Cancel restores the brightness captured in on_load - the one
               # setting that was applied live.
@@ -1299,88 +1414,83 @@ lvgl:
             bg_color: 0x2D5BD0
             shadow_width: 0
             widgets:
-              - label: {align: CENTER, text: "Save", text_font: mono16}
+              - obj:
+                  align: CENTER
+                  width: SIZE_CONTENT
+                  height: SIZE_CONTENT
+                  bg_opa: TRANSP
+                  border_width: 0
+                  pad_all: 0
+                  clickable: false
+                  scrollable: false
+                  layout: {type: FLEX, flex_flow: ROW, flex_align_cross: CENTER, pad_column: 6}
+                  widgets:
+                    - label: {text: "\U000F0193", text_font: mdi18, text_color: 0xC9D3F2}
+                    - label: {text: "Save", text_font: mono16, text_color: 0xC9D3F2}
             on_click:
               # 7.1.2: every change routes through the ENTITIES, which are the
               # single source of truth. The widgets are one view of them.
-              - lambda: |-
-                  auto sw = [](lv_obj_t *o, switch_::Switch *e) {
-                    if (lv_obj_has_state(o, LV_STATE_CHECKED)) e->turn_on(); else e->turn_off();
-                  };
-                  sw(id(sw_autodim), id(auto_dim));
-                  sw(id(sw_autooff), id(auto_off));
-                  sw(id(sw_alerts), id(watched_alerts));
-                  sw(id(sw_milestone), id(milestone_only));
-                  id(carousel_secs).make_call()
-                      .set_value(lv_slider_get_value(id(sl_carousel))).perform();
-              - lvgl.page.show: race_page
+              # Validation lives HERE, not in the widget (7.1.2, 6.8): the
+              # keypad cannot stop "-" or "95". Nothing is written until every
+              # field is valid, and a clamped value is shown back to the user
+              # and the page stays open - clamping with visible feedback.
+              - lambda: lv_obj_add_flag(id(settings_kb)->obj, LV_OBJ_FLAG_HIDDEN);
+              - if:
+                  condition:
+                    lambda: |-
+                      float lat = 0, lon = 0, from = 0, until = 0;
+                      auto field = [&](lv_obj_t *ta, float lo, float hi, const char *name,
+                                       const char *fmt, float *out) -> bool {
+                        const char *t = lv_textarea_get_text(ta);
+                        char *end = nullptr;
+                        float v = strtof(t, &end);
+                        char msg[48], txt[16];
+                        if (t[0] == 0 || end == t || *end != 0) {
+                          snprintf(msg, sizeof(msg), "%s is not a number", name);
+                          lv_label_set_text(id(settings_err), msg);
+                          return false;
+                        }
+                        if (v < lo || v > hi) {
+                          v = v < lo ? lo : hi;
+                          snprintf(txt, sizeof(txt), fmt, (double) v);
+                          lv_textarea_set_text(ta, txt);
+                          snprintf(msg, sizeof(msg), "%s limited to %s", name, txt);
+                          lv_label_set_text(id(settings_err), msg);
+                          return false;
+                        }
+                        *out = v;
+                        return true;
+                      };
+                      if (!field(id(ta_lat), -90, 90, "Latitude", "%.3f", &lat)) return false;
+                      if (!field(id(ta_lon), -180, 180, "Longitude", "%.3f", &lon)) return false;
+                      if (!field(id(ta_off_from), 0, 23, "Off from", "%.0f", &from)) return false;
+                      if (!field(id(ta_off_to), 0, 23, "Off until", "%.0f", &until)) return false;
+                      auto sw = [](lv_obj_t *o, switch_::Switch *e) {
+                        if (lv_obj_has_state(o, LV_STATE_CHECKED)) e->turn_on(); else e->turn_off();
+                      };
+                      sw(id(sw_autodim), id(auto_dim));
+                      sw(id(sw_autooff), id(auto_off));
+                      sw(id(sw_alerts), id(watched_alerts));
+                      sw(id(sw_milestone), id(milestone_only));
+                      id(carousel_secs).make_call()
+                          .set_value(lv_slider_get_value(id(sl_carousel))).perform();
+                      id(obs_lat).make_call().set_value(lat).perform();
+                      id(obs_lon).make_call().set_value(lon).perform();
+                      id(off_from).make_call().set_value(from).perform();
+                      id(off_to).make_call().set_value(until).perform();
+                      return true;
+                  then:
+                    - lvgl.page.show: race_page
 
-        - label: {x: 16, y: 66, text: "\U000F00E1", text_font: mdi18, text_color: 0x7E8BB3}
-        - label: {x: 44, y: 66, text: "Auto-dim display", text_font: mono14, text_color: 0xC9D3F2}
-        - switch: {id: sw_autodim, x: 380, y: 60, width: 72, height: 32}
-        - label:
+        - button:
+            id: tab_display
             x: 16
-            y: 90
-            width: 440
-            text: "Latitude and longitude set sunrise/sunset for auto-dim only.\nThe time zone is fixed in firmware and does not follow them."
-            text_font: mono12
-            text_color: 0x7E8BB3
-
-        - label: {x: 16, y: 136, text: "\U000F0904", text_font: mdi18, text_color: 0x7E8BB3}
-        - label: {x: 44, y: 136, text: "Auto off overnight", text_font: mono14, text_color: 0xC9D3F2}
-        - switch: {id: sw_autooff, x: 380, y: 130, width: 72, height: 32}
-        - label: {x: 16, y: 174, text: "\U000F00DF", text_font: mdi18, text_color: 0x7E8BB3}
-        - label: {x: 44, y: 174, text: "Brightness", text_font: mono14, text_color: 0xC9D3F2}
-        - slider:
-            id: sl_bright
-            x: 150
-            y: 176
-            width: 300
-            height: 18
-            min_value: 1
-            max_value: 100
-            on_value:
-              # The deliberate exception (decision 38): brightness is applied
-              # LIVE so the change is visible, and Cancel restores it. The guard
-              # against the light's own on_state echo is the comparison.
-              - lambda: |-
-                  float v = (float) x / 100.0f;
-                  if (id(auto_dim).state) id(bright_day) = v;
-                  if (fabsf(id(backlight).current_values.get_brightness() - v) < 0.005f) return;
-                  auto call = id(backlight).turn_on();
-                  call.set_brightness(v);
-                  call.perform();
-
-        - label: {x: 16, y: 216, text: "\U000F051B", text_font: mdi18, text_color: 0x7E8BB3}
-        - label: {x: 44, y: 216, text: "Carousel", text_font: mono14, text_color: 0xC9D3F2}
-        - label: {id: lbl_carousel, x: 160, y: 216, text: "45 s", text_font: mono14, text_color: 0x7E8BB3}
-        - slider:
-            id: sl_carousel
-            x: 236
-            y: 218
-            width: 214
-            height: 18
-            min_value: 15
-            max_value: 120
-            on_value:
-              - lambda: f1::ui::settings_labels(id(lbl_carousel), (int) x);
-
-        - label: {x: 16, y: 258, text: "\U000F009E", text_font: mdi18, text_color: 0x7E8BB3}
-        - label: {x: 44, y: 258, text: "Watched driver alerts", text_font: mono14, text_color: 0xC9D3F2}
-        - switch: {id: sw_alerts, x: 380, y: 252, width: 72, height: 32}
-        - label: {x: 16, y: 300, text: "\U000F053A", text_font: mdi18, text_color: 0x7E8BB3}
-        - label: {x: 44, y: 300, text: "Milestones only", text_font: mono14, text_color: 0xC9D3F2}
-        - switch: {id: sw_milestone, x: 380, y: 294, width: 72, height: 32}
-
-        - button:               # "Made for ESPHome": check on demand, as well as
-            id: btn_update      # on the hourly timer
-            x: 16
-            y: 340
-            width: 210
-            height: 42
+            y: 54
+            width: 144
+            height: 34
+            radius: 8
             bg_color: 0x1A2547
             shadow_width: 0
-            radius: 8
             widgets:
               - obj:
                   align: CENTER
@@ -1393,31 +1503,437 @@ lvgl:
                   scrollable: false
                   layout: {type: FLEX, flex_flow: ROW, flex_align_cross: CENTER, pad_column: 8}
                   widgets:
-                    - label: {text: "\U000F0162", text_font: mdi18, text_color: 0x7E8BB3}
-                    - label: {text: "Check for updates", text_font: mono14, text_color: 0xC9D3F2}
+                    - label: {text: "\U000F0379", text_font: mdi18, text_color: 0xC9D3F2}
+                    - label: {text: "Display", text_font: mono14, text_color: 0xC9D3F2}
             on_click:
               - lambda: |-
-                  if (!id(wifi_comp).is_connected()) {
-                    lv_label_set_text(id(settings_note), "No network - cannot check");
-                    return;
-                  }
-                  lv_label_set_text(id(settings_note), "Checking for updates...");
-                  id(fw_update).check();
-        - label:
-            id: settings_note
+                  lv_obj_add_flag(id(settings_kb)->obj, LV_OBJ_FLAG_HIDDEN);
+                  lv_obj_t *pnl[3] = {id(pnl_display), id(pnl_race), id(pnl_location)};
+                  lv_obj_t *btn[3] = {id(tab_display), id(tab_race), id(tab_location)};
+                  f1::ui::settings_tab(pnl, btn, 0);
+        - button:
+            id: tab_race
+            x: 168
+            y: 54
+            width: 144
+            height: 34
+            radius: 8
+            bg_color: 0x1A2547
+            shadow_width: 0
+            widgets:
+              - obj:
+                  align: CENTER
+                  width: SIZE_CONTENT
+                  height: SIZE_CONTENT
+                  bg_opa: TRANSP
+                  border_width: 0
+                  pad_all: 0
+                  clickable: false
+                  scrollable: false
+                  layout: {type: FLEX, flex_flow: ROW, flex_align_cross: CENTER, pad_column: 8}
+                  widgets:
+                    - label: {text: "\U000F023C", text_font: mdi18, text_color: 0xC9D3F2}
+                    - label: {text: "Race", text_font: mono14, text_color: 0xC9D3F2}
+            on_click:
+              - lambda: |-
+                  lv_obj_add_flag(id(settings_kb)->obj, LV_OBJ_FLAG_HIDDEN);
+                  lv_obj_t *pnl[3] = {id(pnl_display), id(pnl_race), id(pnl_location)};
+                  lv_obj_t *btn[3] = {id(tab_display), id(tab_race), id(tab_location)};
+                  f1::ui::settings_tab(pnl, btn, 1);
+        - button:
+            id: tab_location
+            x: 320
+            y: 54
+            width: 144
+            height: 34
+            radius: 8
+            bg_color: 0x1A2547
+            shadow_width: 0
+            widgets:
+              - obj:
+                  align: CENTER
+                  width: SIZE_CONTENT
+                  height: SIZE_CONTENT
+                  bg_opa: TRANSP
+                  border_width: 0
+                  pad_all: 0
+                  clickable: false
+                  scrollable: false
+                  layout: {type: FLEX, flex_flow: ROW, flex_align_cross: CENTER, pad_column: 8}
+                  widgets:
+                    - label: {text: "\U000F034E", text_font: mdi18, text_color: 0xC9D3F2}
+                    - label: {text: "Location", text_font: mono14, text_color: 0xC9D3F2}
+            on_click:
+              - lambda: |-
+                  lv_obj_add_flag(id(settings_kb)->obj, LV_OBJ_FLAG_HIDDEN);
+                  lv_obj_t *pnl[3] = {id(pnl_display), id(pnl_race), id(pnl_location)};
+                  lv_obj_t *btn[3] = {id(tab_display), id(tab_race), id(tab_location)};
+                  f1::ui::settings_tab(pnl, btn, 2);
+
+        - obj:                  # 7 / UI-16a: three panels, one shown at a time
+            id: pnl_display
+            x: 0
+            y: 96
+            width: 480
+            height: 224
+            bg_opa: TRANSP
+            border_width: 0
+            pad_all: 0
+            radius: 0
+            scrollable: false
+            widgets:
+              - label: {x: 16, y: 6, text: "\U000F00E1", text_font: mdi18, text_color: 0x7E8BB3}
+              - label: {x: 44, y: 6, text: "Auto-dim display", text_font: mono14, text_color: 0xC9D3F2}
+              - switch: {id: sw_autodim, x: 380, y: 0, width: 72, height: 32}
+              - label: {x: 16, y: 56, text: "\U000F0904", text_font: mdi18, text_color: 0x7E8BB3}
+              - label: {x: 44, y: 56, text: "Auto off overnight", text_font: mono14, text_color: 0xC9D3F2}
+              - switch: {id: sw_autooff, x: 380, y: 50, width: 72, height: 32}
+              - label: {x: 16, y: 106, text: "\U000F0594", text_font: mdi18, text_color: 0x7E8BB3}
+              - label: {x: 44, y: 106, text: "Off from", text_font: mono14, text_color: 0xC9D3F2}
+              - textarea:
+                  id: ta_off_from
+                  x: 150
+                  y: 100
+                  width: 64
+                  height: 40
+                  pad_top: 5
+                  pad_bottom: 5
+                  one_line: true
+                  max_length: 2
+                  accepted_chars: "0123456789"
+                  text_font: mono14
+                  text_color: 0xEEF2FF
+                  bg_color: 0x0E1836
+                  border_color: 0x3A4E86
+                  border_width: 2
+                  on_click:
+                    - lvgl.keyboard.update: { id: settings_kb, textarea: ta_off_from }
+                    - lvgl.widget.show: settings_kb
+              - label: {x: 224, y: 106, text: "until", text_font: mono14, text_color: 0x7E8BB3}
+              - textarea:
+                  id: ta_off_to
+                  x: 290
+                  y: 100
+                  width: 64
+                  height: 40
+                  pad_top: 5
+                  pad_bottom: 5
+                  one_line: true
+                  max_length: 2
+                  accepted_chars: "0123456789"
+                  text_font: mono14
+                  text_color: 0xEEF2FF
+                  bg_color: 0x0E1836
+                  border_color: 0x3A4E86
+                  border_width: 2
+                  on_click:
+                    - lvgl.keyboard.update: { id: settings_kb, textarea: ta_off_to }
+                    - lvgl.widget.show: settings_kb
+              - label: {x: 364, y: 106, text: "local h", text_font: mono12, text_color: 0x7E8BB3}
+              - label: {x: 16, y: 162, text: "\U000F00DF", text_font: mdi18, text_color: 0x7E8BB3}
+              - label: {x: 44, y: 162, text: "Brightness", text_font: mono14, text_color: 0xC9D3F2}
+              - slider:
+                  id: sl_bright
+                  x: 150
+                  y: 164
+                  width: 300
+                  height: 18
+                  min_value: 1
+                  max_value: 100
+                  on_value:
+                    # The deliberate exception (decision 38): brightness is applied
+                    # LIVE so the change is visible, and Cancel restores it. The guard
+                    # against the light's own on_state echo is the comparison.
+                    - lambda: |-
+                        float v = (float) x / 100.0f;
+                        if (id(auto_dim).state) id(bright_day) = v;
+                        if (fabsf(id(backlight).current_values.get_brightness() - v) < 0.005f) return;
+                        auto call = id(backlight).turn_on();
+                        call.set_brightness(v);
+                        call.perform();
+
+        - obj:
+            id: pnl_race
+            x: 0
+            y: 96
+            width: 480
+            height: 224
+            hidden: true
+            bg_opa: TRANSP
+            border_width: 0
+            pad_all: 0
+            radius: 0
+            scrollable: false
+            widgets:
+              - label: {x: 16, y: 6, text: "\U000F051B", text_font: mdi18, text_color: 0x7E8BB3}
+              - label: {x: 44, y: 6, text: "Carousel", text_font: mono14, text_color: 0xC9D3F2}
+              - label: {id: lbl_carousel, x: 160, y: 6, text: "45 s", text_font: mono14, text_color: 0x7E8BB3}
+              - slider:
+                  id: sl_carousel
+                  x: 236
+                  y: 8
+                  width: 214
+                  height: 18
+                  min_value: 15
+                  max_value: 120
+                  on_value:
+                    - lambda: f1::ui::settings_labels(id(lbl_carousel), (int) x);
+              - label: {x: 16, y: 56, text: "\U000F009E", text_font: mdi18, text_color: 0x7E8BB3}
+              - label: {x: 44, y: 56, text: "Watched driver alerts", text_font: mono14, text_color: 0xC9D3F2}
+              - switch: {id: sw_alerts, x: 380, y: 50, width: 72, height: 32}
+              - label: {x: 16, y: 106, text: "\U000F053A", text_font: mdi18, text_color: 0x7E8BB3}
+              - label: {x: 44, y: 106, text: "Milestones only", text_font: mono14, text_color: 0xC9D3F2}
+              - switch: {id: sw_milestone, x: 380, y: 100, width: 72, height: 32}
+
+        - obj:
+            id: pnl_location
+            x: 0
+            y: 96
+            width: 480
+            height: 224
+            hidden: true
+            bg_opa: TRANSP
+            border_width: 0
+            pad_all: 0
+            radius: 0
+            scrollable: false
+            widgets:
+              - label: {x: 16, y: 10, text: "\U000F0F57", text_font: mdi18, text_color: 0x7E8BB3}
+              - label: {x: 44, y: 10, text: "Latitude", text_font: mono14, text_color: 0xC9D3F2}
+              - textarea:
+                  id: ta_lat
+                  x: 160
+                  y: 2
+                  width: 150
+                  height: 40
+                  pad_top: 5
+                  pad_bottom: 5
+                  one_line: true
+                  max_length: 8
+                  accepted_chars: "-.0123456789"
+                  text_font: mono14
+                  text_color: 0xEEF2FF
+                  bg_color: 0x0E1836
+                  border_color: 0x3A4E86
+                  border_width: 2
+                  on_click:
+                    - lvgl.keyboard.update: { id: settings_kb, textarea: ta_lat }
+                    - lvgl.widget.show: settings_kb
+              - label: {x: 320, y: 12, text: "N+  S-", text_font: mono12, text_color: 0x7E8BB3}
+              - label: {x: 16, y: 60, text: "\U000F0F5A", text_font: mdi18, text_color: 0x7E8BB3}
+              - label: {x: 44, y: 60, text: "Longitude", text_font: mono14, text_color: 0xC9D3F2}
+              - textarea:
+                  id: ta_lon
+                  x: 160
+                  y: 52
+                  width: 150
+                  height: 40
+                  pad_top: 5
+                  pad_bottom: 5
+                  one_line: true
+                  max_length: 8
+                  accepted_chars: "-.0123456789"
+                  text_font: mono14
+                  text_color: 0xEEF2FF
+                  bg_color: 0x0E1836
+                  border_color: 0x3A4E86
+                  border_width: 2
+                  on_click:
+                    - lvgl.keyboard.update: { id: settings_kb, textarea: ta_lon }
+                    - lvgl.widget.show: settings_kb
+              - label: {x: 320, y: 62, text: "E+  W-", text_font: mono12, text_color: 0x7E8BB3}
+              - label:
+                  x: 16
+                  y: 104
+                  width: 448
+                  text: "Latitude and longitude set sunrise/sunset for auto-dim only.\nThe time zone is fixed in firmware and does not follow them."
+                  text_font: mono12
+                  text_color: 0x7E8BB3
+              - button:         # "Made for ESPHome": check on demand, as well as
+                  id: btn_update      # on the hourly timer
+                  x: 16
+                  y: 150
+                  width: 210
+                  height: 42
+                  bg_color: 0x1A2547
+                  shadow_width: 0
+                  radius: 8
+                  widgets:
+                    - obj:
+                        align: CENTER
+                        width: SIZE_CONTENT
+                        height: SIZE_CONTENT
+                        bg_opa: TRANSP
+                        border_width: 0
+                        pad_all: 0
+                        clickable: false
+                        scrollable: false
+                        layout: {type: FLEX, flex_flow: ROW, flex_align_cross: CENTER, pad_column: 8}
+                        widgets:
+                          - label: {text: "\U000F0162", text_font: mdi18, text_color: 0x7E8BB3}
+                          - label: {text: "Check for updates", text_font: mono14, text_color: 0xC9D3F2}
+                  on_click:
+                    # UI-68: the card on the top layer shows Checking, then Up to date,
+                    # Update available (with the notes) or Couldn't check
+                    - lambda: f1::upd::check_now(id(wifi_comp).is_connected());
+
+        - label:                # Save validation feedback, outside the panels so
+            id: settings_err    # every tab can report into it
             x: 16
-            y: 394
-            width: 448
+            y: 404
+            width: 360
             text: ""
             text_font: mono12
-            text_color: 0x7E8BB3
-        - label:
+            text_color: 0xFF8A1F
+        - button:               # UI-67: About, lower right where the version used to be
+            id: btn_about
             align: BOTTOM_RIGHT
             x: -10
             y: -8
-            text: "v${fw_version}"
+            width: 104
+            height: 38
+            radius: 8
+            bg_color: 0x1A2547
+            shadow_width: 0
+            widgets:
+              - obj:
+                  align: CENTER
+                  width: SIZE_CONTENT
+                  height: SIZE_CONTENT
+                  bg_opa: TRANSP
+                  border_width: 0
+                  pad_all: 0
+                  clickable: false
+                  scrollable: false
+                  layout: {type: FLEX, flex_flow: ROW, flex_align_cross: CENTER, pad_column: 6}
+                  widgets:
+                    - label: {text: "\U000F02FD", text_font: mdi18, text_color: 0xC9D3F2}
+                    - label: {text: "About", text_font: mono14, text_color: 0xC9D3F2}
+            on_click:
+              - lambda: lv_obj_add_flag(id(settings_kb)->obj, LV_OBJ_FLAG_HIDDEN);
+              - lvgl.page.show: about_page
+        - keyboard:             # decimal degrees and hours only (UI-44b)
+            id: settings_kb
+            mode: NUMBER
+            textarea: ta_lat
+            align: BOTTOM_MID
+            width: 480
+            height: 160
+            hidden: true
+            bg_color: 0x0E1836
+            items:
+              bg_color: 0x1A2547
+              text_color: 0xC9D3F2
+              border_width: 0
+            on_ready:
+              - lvgl.widget.hide: settings_kb
+            on_cancel:
+              - lvgl.widget.hide: settings_kb
+    - id: about_page            # UI-67: Settings > About
+      skip: true
+      bg_color: 0x000000
+      bg_opa: COVER
+      scrollable: false
+      widgets:
+        - button:
+            id: about_close
+            align: TOP_RIGHT
+            x: -8
+            y: 6
+            width: 104
+            height: 38
+            radius: 8
+            bg_color: 0x1A2547
+            shadow_width: 0
+            widgets:
+              - obj:
+                  align: CENTER
+                  width: SIZE_CONTENT
+                  height: SIZE_CONTENT
+                  bg_opa: TRANSP
+                  border_width: 0
+                  pad_all: 0
+                  clickable: false
+                  scrollable: false
+                  layout: {type: FLEX, flex_flow: ROW, flex_align_cross: CENTER, pad_column: 6}
+                  widgets:
+                    - label: {text: "\U000F0156", text_font: mdi18, text_color: 0xC9D3F2}
+                    - label: {text: "Close", text_font: mono16, text_color: 0xC9D3F2}
+            on_click:
+              - lambda: id(from_about) = true;      # return to Settings as it was left
+              - lvgl.page.show: settings_page
+        - image:
+            id: about_mark
+            src: about_logo
+            x: 184
+            y: 14
+        - label:
+            id: about_name
+            x: 0
+            y: 130
+            width: 480
+            text: "F1 Tracker"
+            text_font: setup_title
+            text_color: 0xFFFFFF
+            text_align: CENTER
+        - label:
+            id: about_version
+            x: 0
+            y: 174
+            width: 480
+            text: "Version ${fw_version}"
+            text_font: mono14
+            text_color: 0xC9D3F2
+            text_align: CENTER
+        - label:
+            id: about_by
+            x: 0
+            y: 194
+            width: 480
+            text: "by Dan Morphis"
+            text_font: mono14
+            text_color: 0x7E8BB3
+            text_align: CENTER
+        - label:
+            id: about_build
+            x: 0
+            y: 216
+            width: 480
+            text: ""
+            text_font: mono12
+            text_color: 0x7E8BB3
+            text_align: CENTER
+        - label:
+            x: 16
+            y: 240
+            text: "\U000F061A"
+            text_font: mdi18
+            text_color: 0x7E8BB3
+        - label:
+            id: about_device
+            x: 44
+            y: 242
+            width: 424
+            text: ""
+            text_font: mono12
+            text_color: 0xC9D3F2
+        - label:
+            id: about_data
+            x: 16
+            y: 352
+            width: 452
+            text: "Data from\n  Jolpica, jolpi.ca  and  OpenF1, openf1.org  (CC BY-NC-SA 4.0)\n  Portraits: Wikimedia Commons, credited on each card\n  Flags: flag-icons (MIT)   Circuits: f1-circuits (MIT)"
+            text_font: mono12
+            text_color: 0x7E8BB3
+        - label:                # 3.7.5: the trademark non-affiliation notice
+            id: about_legal
+            x: 16
+            y: 436
+            width: 452
+            text: "Unofficial and not affiliated with Formula 1, the FIA or any team. Names are trademarks of their owners."
             text_font: mono12
             text_color: 0x5A6687
+
     - id: debug_page            # UI-27: long-press the gear
       skip: true
       bg_color: 0x000000
@@ -1470,25 +1986,59 @@ interval:
             if (st.to_next > 0) id(next_session_in).publish_state(st.to_next / 60.0f);
           }
           if (t.is_valid()) f1::ui::update_birthday(t.year, t.month, t.day_of_month);
-          {  // the SSID is a runtime fact now, not a compile-time one
-            const std::string ss = id(wifi_ssid_info).state;
-            lv_label_set_text(id(wifi_body), ss.empty() ? "setting up" : ss.c_str());
-          }
           if (t.is_valid()) {
             char b[12];
             // 6.7: 24 h local by default; the three-state dropdown lands at M5.
             snprintf(b, sizeof(b), "%02d:%02d", t.hour, t.minute);
             lv_label_set_text(id(race_clock), b);
           }
+  - interval: 2s                # NET-2b: the boot / Wi-Fi page. Nothing else leaves it,
+    then:                       # so this is what takes the device to its real page.
+      - lambda: |-
+          static f1::boot::Tracker tr;
+          const auto link = f1::boot::classify(id(wifi_comp).is_connected(),
+                                               id(wifi_comp).is_ap_active());
+          const auto st = f1::boot::step(tr, link, esphome::millis(),
+                                         id(wifi_page)->is_showing(),
+                                         id(settings_page)->is_showing(),
+                                         f1::app::g.st.weekend);
+          if (st.link_changed && link != f1::boot::CONNECTED)
+            lv_label_set_text(id(wifi_title), f1::boot::title_for(link));
+          if (link != f1::boot::CONNECTED) {
+            // NET-2c: the entry ESPHome selected - saved in flash by Improv, or
+            // built in. Refreshed while it shows, because it can change under us.
+            const auto sta = id(wifi_comp).get_sta().get_ssid();
+            const auto ap = id(wifi_comp).get_ap().get_ssid();
+            char b[96];
+            f1::boot::body_for(link, sta.c_str(), ap.c_str(), b, sizeof(b));
+            if (strcmp(lv_label_get_text(id(wifi_body)), b) != 0) lv_label_set_text(id(wifi_body), b);
+          }
+          // UI-68a: the update icon sits beside the gear, so only on pages that have one
+          f1::upd::set_page_ok(id(race_page)->is_showing() || id(order_page)->is_showing() ||
+                               id(circuit_page)->is_showing() || id(standings_page)->is_showing() ||
+                               id(summary_page)->is_showing());
+          switch (st.page) {
+            case f1::boot::TO_RACE:
+              id(lvgl_comp)->show_page(id(race_page)->index, LV_SCREEN_LOAD_ANIM_FADE_IN, 300); break;
+            case f1::boot::TO_CIRCUIT:
+              id(lvgl_comp)->show_page(id(circuit_page)->index, LV_SCREEN_LOAD_ANIM_FADE_IN, 300); break;
+            case f1::boot::TO_STATUS:
+              id(lvgl_comp)->show_page(id(wifi_page)->index, LV_SCREEN_LOAD_ANIM_FADE_IN, 300); break;
+            default: break;
+          }
   - interval: 1h                # "Made for ESPHome": check for a published
     then:                       # firmware update once an hour.
       - lambda: |-
-          if (id(wifi_comp).is_connected()) id(fw_update).check();
+          if (id(wifi_comp).is_connected()) f1::upd::check_quiet("hourly");
   - interval: 30s               # UI-44 / UI-44c: auto-dim follows the Sun, and
     then:                       # Auto Off blanks the panel overnight.
       - lambda: |-
           const auto t = id(sntp_time).now();
           if (!t.is_valid()) return;
+          // UI-44: the position is read from the ENTITIES every pass, never cached - the
+          // settings page, the web UI and Home Assistant can all change it.
+          id(sun_elevation).publish_state(f1::sun::elevation(
+              (double) t.timestamp, (double) id(obs_lat).state, (double) id(obs_lon).state));
           f1::display::g_state.window.enabled = id(auto_off).state;
           f1::display::g_state.window.from_hour = (uint8_t) id(off_from).state;
           f1::display::g_state.window.to_hour = (uint8_t) id(off_to).state;
@@ -1506,12 +2056,33 @@ interval:
           }
           // UI-44: skip while settings is open, so it does not fight the slider
           if (!id(auto_dim).state || id(settings_page)->is_showing()) return;
-          const float want = std::max(0.01f, id(bright_day) * f1::app::sun_factor());
+          const float want = std::max(0.01f, id(bright_day) *
+              f1::display::auto_factor((double) t.timestamp, (double) id(obs_lat).state,
+                                       (double) id(obs_lon).state, true));
           if (fabsf(id(backlight).current_values.get_brightness() - want) < 0.01f) return;
           auto call = id(backlight).turn_on();
           call.set_brightness(want);
           call.set_transition_length(3000);   // ramp: a jump reads as a fault
           call.perform();
+  - interval: 1s                # UI-67: About, refreshed each second while shown
+    then:
+      - lambda: |-
+          if (!id(about_page)->is_showing()) return;
+          char b[64];
+          snprintf(b, sizeof(b), "ESPHome %s, built %s", ESPHOME_VERSION, __DATE__);
+          lv_label_set_text(id(about_build), b);
+          static char d[360];
+          const uint32_t s = esphome::millis() / 1000;
+          const std::string ip = id(ip_addr).state, ss = id(wifi_ssid_info).state;
+          char up[24];
+          if (s >= 86400) snprintf(up, sizeof(up), "%ud %uh", (unsigned) (s / 86400), (unsigned) ((s % 86400) / 3600));
+          else snprintf(up, sizeof(up), "%uh %02um", (unsigned) (s / 3600), (unsigned) ((s % 3600) / 60));
+          snprintf(d, sizeof(d),
+                   "This device\n  Name   %s\n  IP     %s\n  Wi-Fi  %s  %d dBm\n  MAC    %s\n  Up     %s",
+                   App.get_name().c_str(), ip.empty() ? "-" : ip.c_str(),
+                   ss.empty() ? "-" : ss.c_str(), (int) id(wifi_comp).wifi_rssi(),
+                   get_mac_address_pretty().c_str(), up);
+          lv_label_set_text(id(about_device), d);
   - interval: 1s                # UI-27: debug page, only while it is showing
     then:
       - lambda: |-

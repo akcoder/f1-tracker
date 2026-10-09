@@ -156,6 +156,26 @@ inline void render(const Entry *e, int n, state::OrderMode mode) {
   set_mode(mode);
   if (n > g.built) n = g.built;
 
+  // 22 rows fill the box exactly (decision 88), so a 23rd or 24th - a larger
+  // field, or a reserve on the grid - would be clipped by the container's edge
+  // and simply not be there. When the rows are taller than the box the list
+  // scrolls instead, with room under the last row so it can be brought fully
+  // into view; when they fit it stays still and the page flip is undisturbed.
+  {
+    const int view_h = lv_obj_get_height(g.parent);
+    const bool over = n * ROW_H > view_h;
+    if (over) {
+      lv_obj_add_flag(g.parent, LV_OBJ_FLAG_SCROLLABLE);
+      lv_obj_set_scroll_dir(g.parent, LV_DIR_VER);
+      lv_obj_set_scrollbar_mode(g.parent, LV_SCROLLBAR_MODE_AUTO);
+      lv_obj_set_style_pad_bottom(g.parent, 10, 0);
+    } else {
+      lv_obj_remove_flag(g.parent, LV_OBJ_FLAG_SCROLLABLE);
+      lv_obj_set_style_pad_bottom(g.parent, 0, 0);
+      lv_obj_scroll_to_y(g.parent, 0, LV_ANIM_OFF);
+    }
+  }
+
   for (int i = 0; i < g.built; i++) {
     Row &r = g.rows[i];
     if (i >= n) { lv_obj_add_flag(r.bg, LV_OBJ_FLAG_HIDDEN); continue; }

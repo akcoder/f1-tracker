@@ -17,6 +17,10 @@ run with no network.
 | `openf1-drivers-11377.json` | `/v1/drivers?session_key=11377` | 9.2 KB |
 | `openf1-position-11377.json` | `/v1/position?session_key=11377` | 35.9 KB |
 | `openf1-racecontrol-flags-11377.json` | `/v1/race_control?session_key=11377&category=Flag` | 20.3 KB |
+| `openf1-stints-11377.json` | `/v1/stints?session_key=11377` | 8.4 KB |
+| `openf1-weather-11377.json` | `/v1/weather?session_key=11377` | 36.2 KB |
+| `openf1-safetycar-11377.json` | `/v1/race_control?session_key=11377&category=SafetyCar` | 0.9 KB |
+| `openf1-red-11377.json` | `/v1/race_control?session_key=11377&flag=RED` | 30 B — **HTTP 404** |
 
 ## What each fixture pins down
 
@@ -36,3 +40,16 @@ run with no network.
   The calendar is provisional; open question 5.
 - **`openf1-drivers-11377.json`** — `team_colour` present for every driver,
   `country_code` **null** for every driver (§3.4, decision 19).
+
+## Post-session extras (captured 2026-10-05)
+
+- **`openf1-red-11377.json`** — a filter with no matches is answered with
+  **HTTP 404** and `{"detail":"No results found."}`. A race with no red flag is
+  the normal case, so the device treats this as an empty result, not a fault
+  (decision 176).
+- **`openf1-weather-11377.json`** — two of 168 rows carry `track_temperature`
+  of exactly `0.0` with the air at 26 °C: a sensor dropout (DATA-12).
+- **`openf1-safetycar-11377.json`** — four messages, two *deployments*
+  (laps 31 and 36); the others are "in this lap".
+- **`openf1-2026-race-sessions.json`** — `session_type` is `Race` for Sprints
+  too; `session_name` separates them.

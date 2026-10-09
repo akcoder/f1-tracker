@@ -14,3 +14,10 @@ test_team
 test_watch
 tests/test_m1
 tools/.cache/
+test_extras
+test_net
+test_rollover
+*.dSYM/
+test_boot
+test_sun
+test_update

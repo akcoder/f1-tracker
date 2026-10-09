@@ -16,7 +16,7 @@ from PIL import Image, ImageDraw, ImageFont
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
 HDR = os.path.join(ROOT, "f1-tracker", "f1_circuits.h")
-OUT = os.path.join(ROOT, "reference", "mockups")
+OUT = os.path.join(ROOT, "docs", "renders")
 
 
 def parse_header():
