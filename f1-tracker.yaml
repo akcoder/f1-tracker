@@ -1261,7 +1261,7 @@ lvgl:
             id: standings_hdr
             x: 12
             y: 32
-            text: "Pos Driver     Team             Pts"
+            text: "Pos     Driver      Pts"
             text_font: mono12
             text_color: 0x7E8BB3
         - label:

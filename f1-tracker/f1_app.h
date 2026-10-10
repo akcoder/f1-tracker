@@ -59,6 +59,8 @@ struct App {
   uint32_t data_gen = 0;        // generation we have rendered
   lv_obj_t *standings_rows = nullptr;
   lv_obj_t *standings_label = nullptr;
+  lv_obj_t *st_flag[store::MAX_STANDINGS] = {nullptr};   // 8.1: a flag beside each driver
+  lv_image_dsc_t st_dsc[store::MAX_STANDINGS]{};
   // The top-5 strip's widgets, built once in setup().
   lv_obj_t *t5_bar[5] = {nullptr};
   lv_obj_t *t5_flag[5] = {nullptr};
@@ -341,6 +343,50 @@ inline void open_circuit() {
 // ---- the tick -----------------------------------------------------------
 // Pull a new snapshot only when the data task says the generation moved. A
 // fetch must never block rendering, and the lock is held for a memcpy only.
+// 8.1: a flag beside each driver in the championship table. The flag comes from the
+// compiled driver table by driverId (DATA-6); a driver not in it gets no flag (decision
+// 20: none beats a wrong one). The images are made once, as children of the label's
+// page, and placed on the label's own line pitch so they follow the text.
+inline void update_standing_flags() {
+  lv_obj_t *lbl = g.w.standings;
+  if (lbl == nullptr) return;
+  lv_obj_t *page = lv_obj_get_parent(lbl);
+  const lv_font_t *font = lv_obj_get_style_text_font(lbl, LV_PART_MAIN);
+  const int pitch = lv_font_get_line_height(font) + lv_obj_get_style_text_line_space(lbl, LV_PART_MAIN);
+  const int cw = lv_font_get_glyph_width(font, '0', '0');
+  const int x = lv_obj_get_x(lbl) + 3 * cw;
+  for (int i = 0; i < store::MAX_STANDINGS; i++) {
+    const flags::Flag *f = nullptr;
+    if (i < g.data.n_standings) {
+      const char *id = g.data.standings[i].driver_id;
+      for (int k = 0; k < drivers::N && id[0]; k++)
+        if (std::strcmp(drivers::P[k].driver_id, id) == 0) {
+          if (drivers::P[k].iso3[0]) f = flags::find(drivers::P[k].iso3);
+          break;
+        }
+    }
+    if (f == nullptr) {
+      if (g.st_flag[i] != nullptr) lv_obj_add_flag(g.st_flag[i], LV_OBJ_FLAG_HIDDEN);
+      continue;
+    }
+    if (g.st_flag[i] == nullptr) {
+      g.st_flag[i] = lv_image_create(page);
+      lv_obj_remove_flag(g.st_flag[i], LV_OBJ_FLAG_CLICKABLE);
+    }
+    auto &d = g.st_dsc[i];
+    d.header.magic = LV_IMAGE_HEADER_MAGIC;
+    d.header.cf = LV_COLOR_FORMAT_RGB565;
+    d.header.w = flags::CARD_W;
+    d.header.h = flags::CARD_H;
+    d.header.stride = flags::CARD_W * 2;
+    d.data_size = flags::CARD_W * flags::CARD_H * 2;
+    d.data = (const uint8_t *) f->card;
+    lv_image_set_src(g.st_flag[i], &d);
+    lv_obj_set_pos(g.st_flag[i], x, lv_obj_get_y(lbl) + i * pitch + (pitch - flags::CARD_H) / 2);
+    lv_obj_remove_flag(g.st_flag[i], LV_OBJ_FLAG_HIDDEN);
+  }
+}
+
 inline void refresh_data() {
   const uint32_t gen = net::snapshot(g.data);
   if (gen == g.data_gen) return;
@@ -464,15 +510,17 @@ inline void refresh_data() {
   }
 
   if (g.data.n_standings > 0 && g.w.standings) {
+    // The flag column sits between the position and the name: 6 spaces after the
+    // position leave room for a 16 px flag at the third character.
     char b[900];
     int k = 0;
     for (int i = 0; i < g.data.n_standings && k < (int) sizeof(b) - 48; i++) {
       const auto &s2 = g.data.standings[i];
-      k += std::snprintf(b + k, sizeof(b) - k, "%2d  %-10s %-14s %4d %s\n",
-                         s2.pos, s2.name, s2.team, s2.points,
-                         s2.wins ? "W" : " ");
+      k += std::snprintf(b + k, sizeof(b) - k, "%2d      %-10s %4d %s\n",
+                         s2.pos, s2.name, s2.points, s2.wins ? "W" : " ");
     }
     lv_label_set_text(g.w.standings, b);
+    update_standing_flags();
   }
 }
 

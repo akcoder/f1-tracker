@@ -420,18 +420,22 @@ def page_standings(ctx):
             "constructors_hdr", "constructors_body", "champ_line")
     img = Image.new("RGB", (W, H), BG); d = ImageDraw.Draw(img)
     d.text((10, 4), "Championship", font=FONT[16], fill=ORANGE)
-    d.text((12, 32), "Pos Driver    Pts", font=FONT[12], fill=MUTED)
+    d.text((12, 32), "Pos     Driver      Pts", font=FONT[12], fill=MUTED)
+    LH = 16          # mono12's line height; the firmware places the flags on the label's own pitch
+    cw = d.textlength("0", font=FONT[12])
     y = 52
-    for s in ctx["standings"][:17]:
-        d.text((12, y), f"{s['pos']:>2}  {s['name'][:10]:<10} {s['points']:>4}"
-               + ("  W" if s["wins"] else ""), font=FONT[12], fill=TEXT)
-        y += 21
+    for s in ctx["standings"][:22]:
+        d.text((12, y), f"{s['pos']:>2}      {s['name'][:10]:<10} {s['points']:>4}"
+               + (" W" if s["wins"] else ""), font=FONT[12], fill=TEXT)
+        if s.get("iso3") in ctx["flags"]:    # between the position and the name, by driverId
+            img.paste(ctx["flags"][s["iso3"]], (int(12 + 3 * cw), y + (LH - 12) // 2))
+        y += LH
     d.text((278, 32), "Constructors", font=FONT[12], fill=MUTED)
     y = 52
     for c in ctx["constructors"][:11]:
         d.text((278, y), f"{c['pos']:>2}  {c['name'][:12]:<12} {c['points']:>4}",
                font=FONT[12], fill=TEXT)
-        y += 21
+        y += LH
     # 8.1: blank for most of a season on purpose
     if ctx.get("champ_line"):
         d.text((12, 430), ctx["champ_line"], font=FONT[14], fill=(0xFF, 0xD5, 0x4A))
@@ -880,7 +884,9 @@ def main():
     sl = sj["MRData"]["StandingsTable"]["StandingsLists"][0]["DriverStandings"]
     standings = [dict(pos=int(x["position"]), points=int(float(x["points"])),
                       wins=int(x["wins"]), name=x["Driver"]["familyName"].upper(),
-                      team=x["Constructors"][0]["name"]) for x in sl]
+                      team=x["Constructors"][0]["name"],
+                      iso3=next((q["iso3"] for q in drv if q["id"] == x["Driver"]["driverId"]), ""))
+                 for x in sl]
 
     fa = json.load(open(os.path.join(SAMP, "jolpica-last-fastest.json")))["MRData"]["RaceTable"]["Races"][0]
     ps = json.load(open(os.path.join(SAMP, "jolpica-last-pitstops.json")))["MRData"]["RaceTable"]["Races"][0]["PitStops"]
