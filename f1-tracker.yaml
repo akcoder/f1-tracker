@@ -67,6 +67,8 @@ esphome:
     - f1-tracker/f1_jpg.h          # the portrait decoder (top-down)
     - f1-tracker/f1_photo.h        # a portrait decoding in the background, redrawn as rows arrive
     - f1-tracker/f1_detail.h
+    - f1-tracker/f1_png.h          # streaming PNG decoder (palette + transparency), for headshots
+    - f1-tracker/f1_headshot.h     # runtime headshots for drivers with no compiled portrait
     - f1-tracker/f1_net.h
     - f1-tracker/f1_app.h
     - f1-tracker/f1_carousel.h

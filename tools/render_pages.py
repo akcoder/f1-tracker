@@ -444,6 +444,38 @@ def page_driver(ctx):
     return _profile_card(ctx, p, "DRIVER · LEGEND", "page-5-driver")
 
 
+def _rookie_card(ctx, name, photo_rows=206):
+    """A driver with no compiled portrait: the card as f1_ui.h draws it with a fetched headshot.
+    The picture is a STAND-IN (a plain silhouette drawn here): the real one is the F1 media
+    server's, fetched by the device, and is not kept in this repository."""
+    img = Image.new("RGB", (W, H), BG); d = ImageDraw.Draw(img)
+    _card_head(img, d, ctx, "Driver", "Arvid Lindblad", "GBR")
+    px, py, pw, ph_ = box(ctx["geo"], "card_photo")
+    ph_img = Image.new("RGB", (206, 206), (0, 0, 0))
+    pd = ImageDraw.Draw(ph_img)
+    for r in range(0, 206):                                          # a soft studio gradient behind
+        v = int(40 + 50 * (1 - r / 206))
+        pd.line([(0, r), (205, r)], fill=(v // 2, v // 2, v))
+    pd.ellipse([68, 28, 138, 112], fill=(205, 170, 140))              # head
+    pd.rounded_rectangle([34, 118, 172, 230], 40, fill=(30, 50, 110))  # shoulders
+    pd.rectangle([92, 100, 114, 126], fill=(205, 170, 140))           # neck
+    d.rectangle([px, py, px + 205, py + 205], fill=(0, 0, 0))
+    img.paste(ph_img.crop((0, 0, 206, photo_rows)), (px, py))
+    # the text beside it, as f1_ui.h lays it out: x 282, y 60, 190 wide
+    d.multiline_text((282, 60), "#41  LIN\n\nNew this season", font=FONT[12], fill=MUTED, spacing=4)
+    footer(d, "photo: formula1.com"); gear(d)
+    return img, name
+
+
+def page_rookie(ctx):
+    return _rookie_card(ctx, "page-5c-rookie")
+
+
+def page_rookie_loading(ctx):
+    """The headshot arriving: the first rows, top-down."""
+    return _rookie_card(ctx, "page-5d-rookie-loading", photo_rows=84)
+
+
 def page_driver_loading(ctx):
     """Part way through the decode: 128 of the 320 rows, top-down (f1_photo.h)."""
     p = next(x for x in ctx["drivers"] if x["id"] == "max_verstappen")
@@ -1259,7 +1291,7 @@ def main():
     print(f"geometry OK: map {my}-{my+mh}, top5 {ty}-{ty+th}, "
           f"banner {by}-{by+bh}, gear 432+")
 
-    pages = [page_wifi_loading, page_wifi_connecting, page_wifi_ap, page_race, page_order, page_circuit, page_driver, page_driver_loading, page_legend,
+    pages = [page_wifi_loading, page_wifi_connecting, page_wifi_ap, page_race, page_order, page_circuit, page_driver, page_driver_loading, page_rookie, page_rookie_loading, page_legend,
              page_standings, page_summary, page_settings, page_settings_race,
              page_settings_location, page_about, page_about_cars, page_boot_cars, page_boot_strip, page_overtake, page_debug, page_offseason,
              overlay_detail, overlay_detail_loading, overlay_alert, overlay_milestone,

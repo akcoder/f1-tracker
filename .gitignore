@@ -25,3 +25,5 @@ REQUIREMENTS.private.md
 tests/.tjpgd/
 tests/test_jpg
 tests/test_anim
+tests/test_png
+tests/test_headshot
