@@ -54,6 +54,7 @@ esphome:
     - f1-tracker/f1_sun.h
     - f1-tracker/f1_updlogic.h
     - f1-tracker/f1_update.h
+    - f1-tracker/f1_cars.h         # generated: tools/gen_cars.py
     - f1-tracker/f1_animlogic.h
     - f1-tracker/f1_anim.h         # animated logos: start lights and a car lapping the circuit
     - f1-tracker/f1_map.h

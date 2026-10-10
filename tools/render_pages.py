@@ -765,7 +765,7 @@ def page_settings_location(ctx):
 
 
 def anim_consts():
-    """The animation's geometry and timing, read from f1_anim.h / f1_animlogic.h."""
+    """The animation's constants, read from f1_anim.h / f1_animlogic.h."""
     a = _txt("f1_anim.h"); b = _txt("f1_animlogic.h")
     c = {}
     for src in (a, b):
@@ -781,10 +781,9 @@ def anim_consts():
     if m:
         for k, v in enumerate(m.group(1).split(",")):
             c["CAR_COL%d" % k] = int(v.strip(), 16)
-    c["OUT_MS"] = c["N_LIGHTS"] * c["STEP_MS"] + c["HOLD_MS"]
-    need = ("BOOT_LAMP_D", "BOOT_LAMP_GAP", "BOOT_LAMP_Y", "ABOUT_LAMP_D", "ABOUT_LAMP_GAP",
-            "ABOUT_LAMP_DY", "CAR_D", "LAMP_OFF", "LAMP_ON", "STEP_MS", "HOLD_MS", "LAP_MS", "N_LIGHTS",
-            "N_TRAIL", "TRAIL_LAG", "BOOT_LOGO", "ABOUT_LOGO", "ABOUT_PERIOD_MS", "CAR_COL0")
+    c["OUT_MS"] = c["N_LIGHTS"] * c["STEP_MS"] + c["HOLD_MS"] if {"N_LIGHTS", "STEP_MS", "HOLD_MS"} <= set(c) else 0
+    need = ("N_CARS", "CAR_GAP", "HEADINGS", "LAP_MS", "BOOT_LOGO", "ABOUT_LOGO", "CAR_COL0",
+            "BOOT_LAMP_D", "BOOT_LAMP_GAP", "BOOT_LAMP_Y", "LAMP_OFF", "LAMP_ON", "N_LIGHTS", "STEP_MS", "HOLD_MS")
     missing = [k for k in need if k not in c]
     if missing:
         raise DriftError(f"f1_anim.h / f1_animlogic.h no longer define {missing}")
@@ -814,35 +813,61 @@ def _lap_at(track, frac):
     return (pts[i - 1][0] + (pts[i][0] - pts[i - 1][0]) * u, pts[i - 1][1] + (pts[i][1] - pts[i - 1][1]) * u)
 
 
+def _car_sprites():
+    """The alpha masks of f1_cars.h: {"LARGE"|"SMALL": [Image per heading]}."""
+    src = _txt("f1_cars.h")
+    sizes = {m.group(1): int(m.group(2)) for m in re.finditer(r"SZ_(LARGE|SMALL) = (\d+)", src)}
+    out = {}
+    for name, n in sizes.items():
+        body = src[src.index(f"{name}[STEPS]"):]
+        body = body[:body.index("};")]
+        vals = [int(v) for v in re.findall(r"\b\d+\b", body[body.index("{"):])]
+        out[name] = [Image.frombytes("L", (n, n), bytes(vals[i * n * n:(i + 1) * n * n]))
+                     for i in range(len(vals) // (n * n))]
+    return out
+
+
+def _heading(track, frac, steps):
+    """animlogic::heading(): the sprite that points along the track."""
+    x0, y0 = _lap_at(track, frac - 0.004)
+    x1, y1 = _lap_at(track, frac + 0.004)
+    deg = math.degrees(math.atan2(x1 - x0, -(y1 - y0)))
+    return round(deg / (360.0 / steps)) % steps
+
+
 def _hex(v): return ((v >> 16) & 255, (v >> 8) & 255, v & 255)
 
 
-def _anim(img, c, logo_xy, size, lamp_d, lamp_gap, lamp_cy, t_ms, about):
-    """Draw the start lights and the car at `t_ms` into the sequence, as f1_anim.h does."""
+def _anim(img, c, logo_xy, size, t_ms, lights=False):
+    """Draw the pack (and, on the boot page, the start lights) at `t_ms` after the page
+    opened, as f1_anim.h does."""
     d = ImageDraw.Draw(img)
-    lt = t_ms % c["ABOUT_PERIOD_MS"] if about else t_ms
-    step, n = c["STEP_MS"], int(c["N_LIGHTS"])
-    lit = 0 if lt < step or lt >= c["OUT_MS"] else min(n, lt // step)
-    if 0 <= lt < c["OUT_MS"] + 500:
-        span = (n - 1) * lamp_gap
-        for i in range(n):
-            cx = 240 - span / 2 + i * lamp_gap
-            col = _hex(c["LAMP_ON"] if i < lit else c["LAMP_OFF"])
-            d.ellipse([cx - lamp_d / 2, lamp_cy - lamp_d / 2, cx + lamp_d / 2, lamp_cy + lamp_d / 2], fill=col)
+    if lights:
+        step, n = c["STEP_MS"], int(c["N_LIGHTS"])
+        lit = 0 if t_ms < step or t_ms >= c["OUT_MS"] else min(n, t_ms // step)
+        if 0 <= t_ms < c["OUT_MS"] + 500:
+            span = (n - 1) * c["BOOT_LAMP_GAP"]
+            r = c["BOOT_LAMP_D"] / 2
+            for i in range(n):
+                cx = 240 - span / 2 + i * c["BOOT_LAMP_GAP"]
+                d.ellipse([cx - r, c["BOOT_LAMP_Y"] - r, cx + r, c["BOOT_LAMP_Y"] + r],
+                          fill=_hex(c["LAMP_ON"] if i < lit else c["LAMP_OFF"]))
     track = _lap(size)
     f = (t_ms % c["LAP_MS"]) / c["LAP_MS"]
-    cols = [c["CAR_COL%d" % k] for k in range(int(c["N_TRAIL"]) + 1)]
-    for k in range(int(c["N_TRAIL"]), -1, -1):                 # tail first, the head on top
-        x, y = _lap_at(track, f - k * c["TRAIL_LAG"])
-        r = (c["CAR_D"] - 2 * k) / 2
-        d.ellipse([logo_xy[0] + x - r, logo_xy[1] + y - r, logo_xy[0] + x + r, logo_xy[1] + y + r],
-                  fill=_hex(cols[k]))
+    sprites = _car_sprites()["LARGE" if size >= 150 else "SMALL"]
+    for k in range(int(c["N_CARS"]) - 1, -1, -1):             # the last car first, the leader on top
+        fk = f - k * c["CAR_GAP"]
+        x, y = _lap_at(track, fk)
+        mask = sprites[_heading(track, fk, int(c["HEADINGS"]))]
+        n = mask.width
+        img.paste(Image.new("RGB", (n, n), _hex(c["CAR_COL%d" % k])),
+                  (int(round(logo_xy[0] + x)) - n // 2, int(round(logo_xy[1] + y)) - n // 2), mask)
 
 
 def _anim_boot(ctx, t_ms):
     c = anim_consts()
     img, _ = page_wifi(ctx, "connecting")
-    _anim(img, c, ((W - 200) // 2, 40), 200, c["BOOT_LAMP_D"], c["BOOT_LAMP_GAP"], c["BOOT_LAMP_Y"], t_ms, False)
+    _anim(img, c, ((W - 200) // 2, 40), 200, t_ms, lights=True)
     return img
 
 
@@ -850,12 +875,12 @@ def _anim_about(ctx, t_ms):
     c = anim_consts()
     img, _ = page_about(ctx)
     mx, my, _, _ = box(ctx["geo"], "about_mark")
-    _anim(img, c, (mx, my), 112, c["ABOUT_LAMP_D"], c["ABOUT_LAMP_GAP"], my + 56 + c["ABOUT_LAMP_DY"], t_ms, True)
+    _anim(img, c, (mx, my), 112, t_ms)
     return img
 
 
-def page_boot_lights(ctx):
-    return _anim_boot(ctx, 2100), "page-1d-boot-lights"
+def page_boot_cars(ctx):
+    return _anim_boot(ctx, 2100), "page-1d-boot-cars"
 
 
 def page_boot_strip(ctx):
@@ -866,11 +891,11 @@ def page_boot_strip(ctx):
     out = Image.new("RGB", (360 * 4 + 12, 420), (0x20, 0x20, 0x20))
     for i, f in enumerate(frames):
         out.paste(f, (i * 364, 0))
-    return out, "boot-lights-strip"
+    return out, "boot-cars-strip"
 
 
-def page_about_lights(ctx):
-    return _anim_about(ctx, 3300), "page-12b-about-lights"
+def page_about_cars(ctx):
+    return _anim_about(ctx, 1500), "page-12b-about-cars"
 
 
 def page_debug(ctx):
@@ -1006,14 +1031,13 @@ def page_offseason(ctx):
 
 
 def animation_gifs(ctx, step_ms=50):
-    """boot-lights.gif and about-lights.gif: the animations as the firmware plays them
-    (f1_anim.h), frame by frame from the same constants. Slow, so only with --gif."""
+    """boot-cars.gif and about-cars.gif: one lap of the pack, looping, as f1_anim.h plays it
+    (the same constants and sprites); the boot one opens with the start lights, which fit
+    inside the first lap. Slow, so only with --gif."""
     c = anim_consts()
-    jobs = (("boot-lights", _anim_boot, int(c["OUT_MS"] + 500 + c["LAP_MS"] * 0.4)),
-            ("about-lights", _anim_about, int(c["ABOUT_PERIOD_MS"])))
-    for name, fn, total in jobs:
-        frames = [fn(ctx, t).quantize(colors=48, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.NONE)
-                  for t in range(0, total, step_ms)]
+    for name, fn in (("boot-cars", _anim_boot), ("about-cars", _anim_about)):
+        frames = [fn(ctx, t).quantize(colors=32, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.NONE)
+                  for t in range(0, int(c["LAP_MS"]), step_ms)]
         path = os.path.join(OUT, name + ".gif")
         frames[0].save(path, save_all=True, append_images=frames[1:], duration=step_ms, loop=0,
                        optimize=True, disposal=1)
@@ -1116,7 +1140,7 @@ def main():
 
     pages = [page_wifi_loading, page_wifi_connecting, page_wifi_ap, page_race, page_order, page_circuit, page_driver, page_driver_loading, page_legend,
              page_standings, page_summary, page_settings, page_settings_race,
-             page_settings_location, page_about, page_about_lights, page_boot_lights, page_boot_strip, page_debug, page_offseason,
+             page_settings_location, page_about, page_about_cars, page_boot_cars, page_boot_strip, page_debug, page_offseason,
              overlay_detail, overlay_detail_loading, overlay_alert, overlay_milestone,
              page_race_with_icon, overlay_update_checking, overlay_update_available,
              overlay_update_installing, overlay_update_failed]
