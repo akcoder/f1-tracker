@@ -1043,14 +1043,38 @@ def page_offseason(ctx):
 def animation_gifs(ctx, step_ms=50):
     """boot-cars.gif and about-cars.gif: one lap of the pack, looping, as f1_anim.h plays it
     (the same constants and sprites); the boot one opens with the start lights, which fit
-    inside the first lap. Slow, so only with --gif."""
+    inside the first lap. Slow, so only with --gif.
+
+    ONE palette for every frame. A palette per frame (the quantizer's default) drops the
+    orange start/finish tick from some frames and keeps it in others, so the line flashes."""
     c = anim_consts()
     for name, fn in (("boot-cars", _anim_boot), ("about-cars", _anim_about)):
-        frames = [fn(ctx, t).quantize(colors=32, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.NONE)
-                  for t in range(0, int(c["LAP_MS"]), step_ms)]
+        rgb = [fn(ctx, t) for t in range(0, int(c["LAP_MS"]), step_ms)]
+        # the palette comes from a spread of frames plus a swatch of every colour that must survive
+        keep = [c["LAMP_ON"], c["LAMP_OFF"]] + [c["CAR_COL%d" % k] for k in range(int(c["N_CARS"]))] + \
+               [0xFF8A1F, 0xF2F5FC, 0x121C33, 0xFFFFFF, 0x000000, 0xB0B0B0]
+        sheet = Image.new("RGB", (W, H * 3 + 16), (0, 0, 0))
+        for i, k in enumerate((0, len(rgb) // 3, 2 * len(rgb) // 3)):
+            sheet.paste(rgb[k], (0, i * H))
+        sw = ImageDraw.Draw(sheet)
+        for i, col in enumerate(keep):
+            sw.rectangle([i * 16, H * 3, i * 16 + 15, H * 3 + 15], fill=_hex(col))
+        pal = sheet.quantize(colors=48, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.NONE)
+        # the quantizer can still lose a small colour (the About logo's tick is ~180 px of a
+        # 230,000-px frame): pin every must-keep colour into the palette exactly
+        flat = pal.getpalette()[:48 * 3]
+        used = set()
+        for col in keep:
+            want = _hex(col)
+            best = min((i for i in range(48) if i not in used),
+                       key=lambda i: sum((flat[i * 3 + j] - want[j]) ** 2 for j in range(3)))
+            flat[best * 3:best * 3 + 3] = want
+            used.add(best)
+        pal.putpalette(flat + [0] * (768 - len(flat)))
+        frames = [f.quantize(palette=pal, dither=Image.Dither.NONE) for f in rgb]
         path = os.path.join(OUT, name + ".gif")
         frames[0].save(path, save_all=True, append_images=frames[1:], duration=step_ms, loop=0,
-                       optimize=True, disposal=1)
+                       optimize=False, disposal=1)
         print(f"  {name}.gif  {len(frames)} frames, {os.path.getsize(path) // 1024} KB")
 
 
