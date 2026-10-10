@@ -24,42 +24,11 @@ int main() {
         "the gantry shows for the sequence and a moment after");
   CHECK(GANTRY_END_MS < LAP_MS, "the whole sequence fits in the first lap, so a looping render repeats cleanly");
 
-  // smoothing: the outline the cars drive is the logo's, rounded - it turns less sharply
-  // than the raw trace anywhere, and keeps its size
-  {
-    const auto *m = find_circuit("it-1922");
-    auto worst_turn = [](const Track &t) {
-      float w = 0;
-      for (int i = 0; i + 2 < t.n - 1; i++) {
-        const float ax = t.x[i + 1] - t.x[i], ay = t.y[i + 1] - t.y[i];
-        const float bx = t.x[i + 2] - t.x[i + 1], by = t.y[i + 2] - t.y[i + 1];
-        const float la = std::hypot(ax, ay), lb = std::hypot(bx, by);
-        if (la < 1e-3f || lb < 1e-3f) continue;
-        float c = (ax * bx + ay * by) / (la * lb);
-        c = std::fmax(-1.0f, std::fmin(1.0f, c));
-        w = std::fmax(w, std::acos(c));
-      }
-      return w;
-    };
-    Track sm;
-    build(sm, *m, 200);
-    // the raw points, scaled the same way
-    Track raw; raw.n = m->n_pts + 1;
-    const auto fit = f1::map::fit_box(*m, 200, 200, 32.0f);
-    for (int i = 0; i < m->n_pts; i++) f1::map::point_at(*m, i, fit, raw.x[i], raw.y[i]);
-    raw.x[m->n_pts] = raw.x[0]; raw.y[m->n_pts] = raw.y[0];
-    CHECK(worst_turn(sm) < worst_turn(raw), "smoothed: the sharpest turn between segments is gentler (%.2f vs %.2f rad)",
-          worst_turn(sm), worst_turn(raw));
-    CHECK(worst_turn(sm) < 0.5f, "smoothed: no kink over 0.5 rad between neighbouring segments (%.2f)", worst_turn(sm));
-  }
-  // the track: Monza, as the 200 px and 112 px logos lay it out
-  const auto *c = find_circuit("it-1922");
-  CHECK(c != nullptr, "the logo's circuit exists");
-  if (!c) return 1;
+  // the track, as the 200 px and 112 px logos lay it out
   for (int size : {200, 112}) {
     Track t;
-    CHECK(build(t, *c, size), "built at %d", size);
-    CHECK(t.n == c->n_pts + 1, "closed: %d points + the first again (%d)", c->n_pts, t.n);
+    CHECK(build(t, size), "built at %d", size);
+    CHECK(t.n == f1::logomark::N + 1, "closed: %d points + the first again (%d)", f1::logomark::N, t.n);
     float minx = 1e9, maxx = -1e9, miny = 1e9, maxy = -1e9;
     for (int i = 0; i < t.n; i++) {
       minx = std::fmin(minx, t.x[i]); maxx = std::fmax(maxx, t.x[i]);
@@ -99,10 +68,32 @@ int main() {
     }
     CHECK(off < 0.01f, "the car is on the line (%.4f px off)", off);
   }
+  // the outline is the hand-smoothed Monza: it only bends the way it is already turning (a
+  // bump is a left-right-left wobble), and nowhere sharper than a real corner
+  {
+    Track sm;
+    build(sm, 200);
+    float prev = 0, worst = 0;
+    int zig = 0;
+    for (int i = 0; i + 2 < sm.n - 1; i++) {
+      const float ax = sm.x[i + 1] - sm.x[i], ay = sm.y[i + 1] - sm.y[i];
+      const float bx = sm.x[i + 2] - sm.x[i + 1], by = sm.y[i + 2] - sm.y[i + 1];
+      const float turn = std::atan2(ax * by - ay * bx, ax * bx + ay * by);     // signed
+      worst = std::fmax(worst, std::fabs(turn));
+      if ((turn > 0.12f && prev < -0.12f) || (turn < -0.12f && prev > 0.12f)) zig++;
+      prev = turn;
+    }
+    CHECK(zig == 0, "no left-right wobble in the outline (%d)", zig);
+    CHECK(worst < 0.9f, "no turn over 0.9 rad between neighbouring segments (%.2f)", worst);
+    // evenly spaced (the generator resamples by arc length), so the cars' speed is even
+    float lo = 1e9f, hi = 0;
+    for (int i = 1; i < sm.n; i++) { const float d = sm.cum[i] - sm.cum[i - 1]; lo = std::fmin(lo, d); hi = std::fmax(hi, d); }
+    CHECK(hi < 1.15f * lo, "points evenly spaced (%.2f..%.2f px)", lo, hi);
+  }
+
   // headings: the sprite points the way the track runs, and turns smoothly round the lap
   {
-    const auto *m = find_circuit("it-1922");
-    Track t; build(t, *m, 200);
+    Track t; build(t, 200);
     int prev = heading(t, 0.0f), big = 0;
     for (int i = 1; i <= 2000; i++) {
       const int h = heading(t, i / 2000.0f);

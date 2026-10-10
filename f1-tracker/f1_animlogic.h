@@ -3,14 +3,13 @@
 // logo's own circuit, on the About page the cars alone. Pure functions and geometry, free
 // of LVGL, so the timing and the path can be tested on the host; f1_anim.h draws them.
 //
-// The logo IS the Monza trace from f1_circuits.h (tools/gen_logo.py lays it out with a
-// 16 % margin), so the car follows the very points the logo was drawn from.
+// The cars follow f1_logomark.h, the very points tools/gen_logo.py draws the logo's outline
+// from (the hand-smoothed Monza of reference/monza-smoothed.svg, laid out with a 16 % margin).
 #include <cmath>
 #include <cstdint>
 #include <cstring>
 
-#include "f1_circuits.h"
-#include "f1_map.h"
+#include "f1_logomark.h"
 
 namespace f1 {
 namespace animlogic {
@@ -33,7 +32,6 @@ inline bool gantry_visible(int32_t t) { return t >= 0 && t < GANTRY_END_MS; }
 
 // ---- the cars ---------------------------------------------------------------
 inline constexpr int MAX_PTS = 160;
-inline constexpr int SMOOTH_PASSES = 24;        // = tools/gen_logo.py SMOOTH_PASSES: the same rounding as the logo
 inline constexpr int32_t LAP_MS = 5000;
 inline constexpr int N_CARS = 3;                 // a small pack, nose to tail
 inline constexpr float CAR_GAP = 0.075f;         // of a lap, between cars
@@ -45,32 +43,20 @@ struct Track {
   float total = 0;
 };
 
-inline const circuits::Circuit *find_circuit(const char *id) {
-  for (int i = 0; i < circuits::N; i++)
-    if (std::strcmp(circuits::C[i].id, id) == 0) return &circuits::C[i];
-  return nullptr;
-}
-
-// The circuit as the logo of `size` px draws it (margin 16 %), the lap closed.
-inline bool build(Track &t, const circuits::Circuit &c, int size) {
+// The outline as the logo of `size` px draws it (margin 16 %), the lap closed.
+inline bool build(Track &t, int size) {
   t.n = 0;
   t.total = 0;
-  const int n = c.n_pts < MAX_PTS ? c.n_pts : MAX_PTS;
-  if (n < 3) return false;
-  const auto fit = map::fit_box(c, size, size, 0.16f * (float) size);
-  for (int i = 0; i < n; i++) map::point_at(c, i, fit, t.x[i], t.y[i]);
-  // The logo's outline is smoothed (gen_logo.smooth): each point moves toward the average
-  // of its neighbours round the lap, so the cars drive the line the logo shows.
-  {
-    float nx[MAX_PTS], ny[MAX_PTS];
-    for (int pass = 0; pass < SMOOTH_PASSES; pass++) {
-      for (int i = 0; i < n; i++) {
-        const int a = (i + n - 1) % n, b = (i + 1) % n;
-        nx[i] = 0.25f * t.x[a] + 0.5f * t.x[i] + 0.25f * t.x[b];
-        ny[i] = 0.25f * t.y[a] + 0.5f * t.y[i] + 0.25f * t.y[b];
-      }
-      for (int i = 0; i < n; i++) { t.x[i] = nx[i]; t.y[i] = ny[i]; }
-    }
+  constexpr int n = logomark::N;
+  static_assert(n >= 3 && n <= MAX_PTS, "the logo outline must fit the track");
+  const float pad = 0.16f * (float) size;
+  const float hw = logomark::HALF_W > 0 ? (float) logomark::HALF_W : 1.0f;
+  const float hh = logomark::HALF_H > 0 ? (float) logomark::HALF_H : 1.0f;
+  const float sx = ((float) size - 2.0f * pad) / (2.0f * hw), sy = ((float) size - 2.0f * pad) / (2.0f * hh);
+  const float k = sx < sy ? sx : sy;
+  for (int i = 0; i < n; i++) {
+    t.x[i] = (float) size * 0.5f + (float) logomark::PTS[i][0] * k;
+    t.y[i] = (float) size * 0.5f - (float) logomark::PTS[i][1] * k;
   }
   t.x[n] = t.x[0];
   t.y[n] = t.y[0];

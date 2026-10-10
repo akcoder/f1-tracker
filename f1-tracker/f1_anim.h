@@ -120,8 +120,7 @@ inline void step(Scene &s) {
 
 inline void make(Scene &s, lv_obj_t *screen, lv_obj_t *logo, int size, bool lights) {
   if (screen == nullptr || logo == nullptr) return;
-  const auto *c = animlogic::find_circuit("it-1922");     // the circuit the logo is made from
-  if (c == nullptr || !animlogic::build(s.track, *c, size)) return;
+  if (!animlogic::build(s.track, size)) return;               // the logo's own outline
   s.screen = screen; s.logo = logo; s.size = size; s.lights = lights;
   if (lights)
     for (int i = 0; i < animlogic::N_LIGHTS; i++) s.lamp[i] = disc(screen, BOOT_LAMP_D, LAMP_OFF);
