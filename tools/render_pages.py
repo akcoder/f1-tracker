@@ -63,6 +63,17 @@ def flags():
     return out
 
 
+def team_iso3():
+    """The demonym -> ISO3 table of f1_store.h team_iso3(), so the render uses the firmware's own."""
+    s = _txt("f1_store.h")
+    body = s[s.index("inline const char *team_iso3"):]
+    body = body[:body.index("return \"\";   // decision 20")]
+    return dict(re.findall(r'\{"([^"]+)", "([A-Z]{3})"\}', body))
+
+
+TEAM_ISO3 = team_iso3()
+
+
 def profiles(fn):
     s = _txt(fn)
     rows = re.findall(r'\{"([a-z_0-9]+)", "([^"]*)", "([^"]*)", "([^"]*)", "([^"]*)", '
@@ -433,8 +444,10 @@ def page_standings(ctx):
     d.text((278, 32), "Constructors", font=FONT[12], fill=MUTED)
     y = 52
     for c in ctx["constructors"][:11]:
-        d.text((278, y), f"{c['pos']:>2}  {c['name'][:12]:<12} {c['points']:>4}",
+        d.text((278, y), f"{c['pos']:>2}      {c['name'][:13]:<13} {c['points']:>4}",
                font=FONT[12], fill=TEXT)
+        if c.get("iso3") in ctx["flags"]:    # the team's nationality flag (store.h team_iso3)
+            img.paste(ctx["flags"][c["iso3"]], (int(278 + 3 * cw), y + (LH - 12) // 2))
         y += LH
     # 8.1: blank for most of a season on purpose
     if ctx.get("champ_line"):
@@ -755,27 +768,53 @@ def page_debug(ctx):
     return img, "page-10-debug"
 
 
-def overlay_detail(ctx):
-    require(ctx["geo"], "overlay-detail-card", "detail_panel", "detail_title",
-            "detail_body", "detail_flag")
+def _detail_card(ctx, name, photo_rows):
+    """The detail card with the portrait beside the text. `photo_rows` of the 160 are
+    decoded; the rest are black, the card's colour - as on the device while it decodes."""
+    require(ctx["geo"], name, "detail_panel", "detail_title", "detail_body", "detail_flag",
+            "detail_photo", "detail_credit")
+    G = ctx["geo"]
     img, _ = page_order(ctx)
     d = ImageDraw.Draw(img, "RGBA")
     d.rectangle([0, 0, W, H], fill=(0, 0, 0, 150))
     d.rounded_rectangle([20, 40, 460, 440], 12, fill=PANEL, outline=BORDER, width=2)
+    px0, py0 = 20, 40                       # the panel's origin: every child is relative to it
     p = next(x for x in ctx["drivers"] if x["id"] == "max_verstappen")
-    d.text((36, 52), f"{p['given']} {p['family']}", font=FONT[18], fill=ORANGE)
+    d.text((px0 + 16, py0 + 12), f"{p['given']} {p['family']}", font=FONT[18], fill=ORANGE)
     if p["iso3"] in ctx["flags"]:
         img.paste(ctx["flags"][p["iso3"]].resize((32, 24), Image.NEAREST), (412, 56))
+    # the text keeps to 280 px beside the portrait (f1_detail.h TEXT_W_PHOTO), mono14 = 8.4 px/char
+    cols = int(280 // 8.4)
     body = (f"#{p['number']}  {p['code']}   Red Bull Racing\n\n"
             f"{'Starts (provisional)':<20} P8\n"
             f"{'Gap':<20} +5.848\n\n"
             f"{'Career starts':<20} {p['starts']}\n"
             f"{'Wins':<20} {p['wins']}\n"
             f"{'Poles':<20} {p['poles']}\n"
-            f"{'World titles':<20} {p['titles']}\n\n" + "\n".join(textwrap.wrap(p["line"], 48)))
-    d.multiline_text((36, 90), body, font=FONT[14], fill=TEXT, spacing=5)
+            f"{'World titles':<20} {p['titles']}\n\n" + "\n".join(textwrap.wrap(p["line"], cols)))
+    bx, by, _, _ = box(G, "detail_body", px0, py0)
+    d.multiline_text((bx, by), body, font=FONT[14], fill=TEXT, spacing=5)
+    # the portrait: half size, a 2x2 box average of the 240x320 JPEG (f1_jpg.h)
+    jpg = ctx["por"][0].get(p["id"])
+    fx, fy, _, _ = box(G, "detail_photo", px0, py0)
+    if jpg:
+        full = Image.open(io.BytesIO(jpg)).convert("RGB").resize((120, 160), Image.BOX)
+        d.rectangle([fx, fy, fx + 119, fy + 159], fill=(0, 0, 0))      # the buffer starts black
+        img.paste(full.crop((0, 0, 120, photo_rows)), (fx, fy))
+        cx, cy, cw, _ = box(G, "detail_credit", px0, py0)
+        credit = textwrap.wrap("photo: " + ctx["por"][1][p["id"]], int(cw // 7.2))
+        d.multiline_text((cx, cy), "\n".join(credit), font=FONT[12], fill=MUTED, spacing=2)
     d.text((240, 420), "tap anywhere to close", font=FONT[12], fill=DIM, anchor="mm")
-    return img, "overlay-detail-card"
+    return img, name
+
+
+def overlay_detail(ctx):
+    return _detail_card(ctx, "overlay-detail-card", 160)
+
+
+def overlay_detail_loading(ctx):
+    """Part way through the decode: the rows done so far, top-down (f1_jpg.h)."""
+    return _detail_card(ctx, "overlay-detail-card-loading", 64)
 
 
 def overlay_alert(ctx):
@@ -878,7 +917,9 @@ def main():
     cj = json.load(open(os.path.join(SAMP, "jolpica-constructor-standings.json")))
     cl = cj["MRData"]["StandingsTable"]["StandingsLists"][0]["ConstructorStandings"]
     constructors = [dict(pos=int(x["position"]), points=int(float(x["points"])),
-                         name=x["Constructor"]["name"]) for x in cl]
+                         name=x["Constructor"]["name"],
+                         iso3=TEAM_ISO3.get(x["Constructor"].get("nationality", ""), ""))
+                    for x in cl]
 
     sj = json.load(open(os.path.join(SAMP, "jolpica-driver-standings.json")))
     sl = sj["MRData"]["StandingsTable"]["StandingsLists"][0]["DriverStandings"]
@@ -931,7 +972,7 @@ def main():
     pages = [page_wifi_loading, page_wifi_connecting, page_wifi_ap, page_race, page_order, page_circuit, page_driver, page_legend,
              page_standings, page_summary, page_settings, page_settings_race,
              page_settings_location, page_about, page_debug, page_offseason,
-             overlay_detail, overlay_alert, overlay_milestone,
+             overlay_detail, overlay_detail_loading, overlay_alert, overlay_milestone,
              page_race_with_icon, overlay_update_checking, overlay_update_available,
              overlay_update_installing, overlay_update_failed]
     made = []

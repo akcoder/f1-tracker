@@ -22,3 +22,5 @@ test_boot
 test_sun
 test_update
 REQUIREMENTS.private.md
+tests/.tjpgd/
+tests/test_jpg
