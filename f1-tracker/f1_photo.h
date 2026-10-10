@@ -12,6 +12,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
+#include "f1_headshot.h"
 #include "f1_jpg.h"
 #include "f1_portraits.h"
 
@@ -32,6 +33,9 @@ struct Photo {
   volatile bool cancel = false;
   int shown = -1;
   const portraits::Portrait *p = nullptr;
+  // A picture the network task is decoding into its own buffer (f1_headshot.h): shown from
+  // that buffer as its rows arrive. Then there is no decode task of ours.
+  const std::atomic<int> *rows_src = nullptr, *state_src = nullptr;
 };
 
 inline void on_rows(int done, void *ctx) {
@@ -51,8 +55,16 @@ inline void task(void *arg) {
 }
 inline void tick(lv_timer_t *t) {
   auto *ph = static_cast<Photo *>(lv_timer_get_user_data(t));
-  const int r = ph->rows.load();
+  const int r = ph->rows_src ? ph->rows_src->load() : ph->rows.load();
   if (r != ph->shown) { ph->shown = r; if (ph->img) lv_obj_invalidate(ph->img); }
+  if (ph->rows_src) {                                   // a headshot the network task is fetching
+    const int st = ph->state_src->load();
+    if (st == headshot::READY || st == headshot::FAILED) {
+      if (st == headshot::FAILED && ph->img) lv_obj_add_flag(ph->img, LV_OBJ_FLAG_HIDDEN);
+      if (ph->timer) { lv_timer_delete(ph->timer); ph->timer = nullptr; }
+    }
+    return;
+  }
   if (!ph->running.load() && r >= ph->h && ph->timer) { lv_timer_delete(ph->timer); ph->timer = nullptr; }
 }
 
@@ -62,6 +74,7 @@ inline void stop(Photo &ph) {
   for (int i = 0; i < 40 && ph.running.load(); i++) vTaskDelay(pdMS_TO_TICKS(5));
   if (ph.timer) { lv_timer_delete(ph.timer); ph.timer = nullptr; }
   if (ph.img) lv_obj_add_flag(ph.img, LV_OBJ_FLAG_HIDDEN);
+  ph.rows_src = ph.state_src = nullptr;
 }
 
 // Show `p` in ph.img, top-down. False = no picture (none, no memory, no task): the
@@ -93,6 +106,27 @@ inline bool start(Photo &ph, const portraits::Portrait *p) {
     stop(ph);
     return false;
   }
+  return true;
+}
+
+// Show a headshot the network task is fetching into `slot` (f1_headshot.h), rows as they arrive.
+// False = nothing to show.
+inline bool show_external(Photo &ph, headshot::Slot *slot) {
+  stop(ph);
+  if (slot == nullptr || slot->buf == nullptr || ph.img == nullptr) return false;
+  ph.dsc.header.magic = LV_IMAGE_HEADER_MAGIC;
+  ph.dsc.header.cf = LV_COLOR_FORMAT_RGB565;
+  ph.dsc.header.w = headshot::W;
+  ph.dsc.header.h = headshot::H;
+  ph.dsc.header.stride = headshot::W * 2;
+  ph.dsc.data_size = (uint32_t) headshot::W * headshot::H * 2;
+  ph.dsc.data = (const uint8_t *) slot->buf;
+  lv_image_set_src(ph.img, &ph.dsc);
+  ph.rows_src = &slot->rows;
+  ph.state_src = &slot->state;
+  ph.shown = -1;
+  lv_obj_remove_flag(ph.img, LV_OBJ_FLAG_HIDDEN);
+  if (slot->state.load() != headshot::READY) ph.timer = lv_timer_create(tick, 40, &ph);
   return true;
 }
 

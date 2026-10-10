@@ -34,6 +34,7 @@ inline constexpr int MAX_ROUNDS = 26;
 inline constexpr int MAX_ENTRIES = 24;
 inline constexpr int MAX_STANDINGS = 24;
 inline constexpr int MAX_CONSTRUCTORS = 12;
+inline constexpr int MAX_HEADSHOTS = 24;
 
 struct Standing {
   int pos = 0;
@@ -128,6 +129,15 @@ struct RosterDriver {
   int number = 0;
 };
 
+// A driver's headshot on the F1 media server (OpenF1's `headshot_url`), keyed by the
+// three-letter code. Only used for a driver with no compiled portrait (a rookie): see
+// f1_headshot.h. Only the part after the server's fixed prefix is kept (about 60 bytes
+// instead of 170); headshot_full_url() puts the prefix back.
+struct Headshot {
+  char code[8] = {0};
+  char path[96] = {0};
+};
+
 struct Store {
   // A fetched calendar supersedes the compiled floor (DATA-3). Rounds are kept
   // in the same shape the state machine already reads.
@@ -150,6 +160,8 @@ struct Store {
   Extras extras;
   RosterDriver roster[MAX_ROSTER];
   int n_roster = 0;
+  Headshot headshots[MAX_HEADSHOTS];
+  int n_headshots = 0;
   uint16_t roster_season = 0;
   uint32_t parse_now = 0;       // UTC, set by the caller before parse_sessions
   uint32_t generation = 0;      // bumped on every successful parse, so the UI
@@ -603,6 +615,61 @@ inline bool parse_stints(const char *s, size_t n, Store &out) {
   }
   if (x.n_stints == 0) return false;
   x.have_stints = true;
+  out.generation++;
+  return true;
+}
+
+// The F1 media server serves a driver's headshot at several widths, named in the URL:
+// .../1col/image.png is 93 px, 2col 206 px, 3col 319 px. The device wants 2col (206x206,
+// ~15 KB). Only that server's driver-image folder is trusted: any other address is refused,
+// so a changed or poisoned reply cannot point the device anywhere else. On success `path`
+// holds what follows the prefix, at 2col.
+inline constexpr char HEADSHOT_PREFIX[] =
+    "https://media.formula1.com/d_driver_fallback_image.png/content/dam/fom-website/drivers/";
+
+inline bool headshot_path(const char *in, char *path, size_t cap) {
+  const size_t pl = sizeof(HEADSHOT_PREFIX) - 1;
+  if (in == nullptr || std::strncmp(in, HEADSHOT_PREFIX, pl) != 0) return false;
+  const char *rest = in + pl;
+  const char *col = std::strstr(rest, ".transform/");
+  if (col == nullptr || std::strstr(rest, "..") != nullptr) return false;
+  const char *w = col + sizeof(".transform/") - 1;                   // "1col/image.png"
+  const char *slash = std::strchr(w, '/');
+  if (slash == nullptr || slash - w > 8) return false;
+  const int n = std::snprintf(path, cap, "%.*s2col%s", (int) (w - rest), rest, slash);
+  return n > 0 && (size_t) n < cap;
+}
+
+inline bool headshot_full_url(const Headshot &h, char *out, size_t cap) {
+  const int n = std::snprintf(out, cap, "%s%s", HEADSHOT_PREFIX, h.path);
+  return n > 0 && (size_t) n < cap;
+}
+
+inline const Headshot *find_headshot(const Store &st, const char *code) {
+  if (code == nullptr || !*code) return nullptr;
+  for (int i = 0; i < st.n_headshots; i++)
+    if (std::strcmp(st.headshots[i].code, code) == 0) return &st.headshots[i];
+  return nullptr;
+}
+
+// OpenF1 /drivers: one record per driver with name_acronym and headshot_url.
+inline bool parse_headshots(const char *s, size_t n, Store &out) {
+  const size_t arr = root_array(s, n);
+  if (arr == json::NPOS) return false;
+  const int nr = json::array_len(s, arr, n);
+  if (nr <= 0) return false;
+  int kept = 0;
+  for (int i = 0; i < nr && kept < MAX_HEADSHOTS; i++) {
+    const size_t o = json::array_at(s, arr, n, i);
+    Headshot h;
+    char raw[260];
+    if (!json::get_str(s, o, n, "name_acronym", h.code, sizeof(h.code)) || !h.code[0]) continue;
+    if (!json::get_str(s, o, n, "headshot_url", raw, sizeof(raw))) continue;
+    if (!headshot_path(raw, h.path, sizeof(h.path))) continue;
+    out.headshots[kept++] = h;
+  }
+  if (kept == 0) return false;
+  out.n_headshots = kept;
   out.generation++;
   return true;
 }

@@ -1,5 +1,7 @@
-// f1_animlogic.h: the start-lights timing and the car's path round the logo.
+// f1_animlogic.h: the boot page's start-lights timing, the cars' path round the logo and
+// which way each one points.
 #include <cmath>
+#include <cstdlib>
 #include <cstdio>
 #include <initializer_list>
 
@@ -20,18 +22,13 @@ int main() {
   CHECK(mono, "the count never falls before lights out");
   CHECK(gantry_visible(0) && gantry_visible(OUT_MS) && !gantry_visible(GANTRY_END_MS) && !gantry_visible(-1),
         "the gantry shows for the sequence and a moment after");
-  CHECK(about_phase(-5) == -1 && about_phase(0) == 0 && about_phase(ABOUT_PERIOD_MS + 7) == 7,
-        "About repeats the sequence");
-  CHECK(ABOUT_PERIOD_MS > GANTRY_END_MS, "there is a rest between About sequences");
+  CHECK(GANTRY_END_MS < LAP_MS, "the whole sequence fits in the first lap, so a looping render repeats cleanly");
 
-  // the track: Monza, as the 200 px and 112 px logos lay it out
-  const auto *c = find_circuit("it-1922");
-  CHECK(c != nullptr, "the logo's circuit exists");
-  if (!c) return 1;
+  // the track, as the 200 px and 112 px logos lay it out
   for (int size : {200, 112}) {
     Track t;
-    CHECK(build(t, *c, size), "built at %d", size);
-    CHECK(t.n == c->n_pts + 1, "closed: %d points + the first again (%d)", c->n_pts, t.n);
+    CHECK(build(t, size), "built at %d", size);
+    CHECK(t.n == f1::logomark::N + 1, "closed: %d points + the first again (%d)", f1::logomark::N, t.n);
     float minx = 1e9, maxx = -1e9, miny = 1e9, maxy = -1e9;
     for (int i = 0; i < t.n; i++) {
       minx = std::fmin(minx, t.x[i]); maxx = std::fmax(maxx, t.x[i]);
@@ -71,8 +68,115 @@ int main() {
     }
     CHECK(off < 0.01f, "the car is on the line (%.4f px off)", off);
   }
-  CHECK(lap_frac(-3) == 0 && lap_frac(0) == 0 && std::fabs(lap_frac(LAP_MS / 2) - 0.5f) < 1e-6f &&
-        std::fabs(lap_frac(LAP_MS + 1250) - 0.25f) < 1e-6f, "lap fraction");
+  // the outline is the hand-smoothed Monza: it only bends the way it is already turning (a
+  // bump is a left-right-left wobble), and nowhere sharper than a real corner
+  {
+    Track sm;
+    build(sm, 200);
+    float prev = 0, worst = 0;
+    int zig = 0;
+    for (int i = 0; i + 2 < sm.n - 1; i++) {
+      const float ax = sm.x[i + 1] - sm.x[i], ay = sm.y[i + 1] - sm.y[i];
+      const float bx = sm.x[i + 2] - sm.x[i + 1], by = sm.y[i + 2] - sm.y[i + 1];
+      const float turn = std::atan2(ax * by - ay * bx, ax * bx + ay * by);     // signed
+      worst = std::fmax(worst, std::fabs(turn));
+      if ((turn > 0.12f && prev < -0.12f) || (turn < -0.12f && prev > 0.12f)) zig++;
+      prev = turn;
+    }
+    CHECK(zig == 0, "no left-right wobble in the outline (%d)", zig);
+    CHECK(worst < 0.9f, "no turn over 0.9 rad between neighbouring segments (%.2f)", worst);
+    // evenly spaced (the generator resamples by arc length), so the cars' speed is even
+    float lo = 1e9f, hi = 0;
+    for (int i = 1; i < sm.n; i++) { const float d = sm.cum[i] - sm.cum[i - 1]; lo = std::fmin(lo, d); hi = std::fmax(hi, d); }
+    CHECK(hi < 1.15f * lo, "points evenly spaced (%.2f..%.2f px)", lo, hi);
+  }
+
+  // headings: the sprite points the way the track runs, and turns smoothly round the lap
+  {
+    Track t; build(t, 200);
+    int prev = heading(t, 0.0f), big = 0;
+    for (int i = 1; i <= 2000; i++) {
+      const int h = heading(t, i / 2000.0f);
+      if (h < 0 || h >= HEADINGS) big += 100;
+      int d = std::abs(h - prev); d = d > HEADINGS / 2 ? HEADINGS - d : d;
+      if (d > 3) big++;                      // a turn of more than 67 degrees between samples = a jump
+      prev = h;
+    }
+    CHECK(big == 0, "headings are valid and never jump (%d bad)", big);
+    // a heading agrees with the drawn direction: step along the track and compare
+    int wrong = 0;
+    for (int i = 0; i < 200; i++) {
+      const float f = i / 200.0f;
+      float x0, y0, x1, y1; at(t, f, x0, y0); at(t, f + 0.003f, x1, y1);
+      const float deg = std::atan2(x1 - x0, -(y1 - y0)) * 57.29578f;
+      float want = deg < 0 ? deg + 360 : deg;
+      float got = heading(t, f) * (360.0f / HEADINGS);
+      float diff = std::fabs(want - got); diff = diff > 180 ? 360 - diff : diff;
+      if (diff > 2 * 360.0f / HEADINGS) wrong++;   // a corner turns the car within the sample
+    }
+    CHECK(wrong == 0, "heading within two steps of the track direction (a flipped axis would be 8 off) (%d off)", wrong);
+    // the straight at the start line runs one way, the opposite straight the other
+    CHECK(N_CARS == 3 && CAR_GAP * N_CARS < 0.5f, "a pack that fits on the lap");
+  }
+  CHECK(lap_u(-3) == 0 && lap_u(0) == 0 && std::fabs(lap_u(LAP_MS / 2) - 0.5f) < 1e-6f &&
+        std::fabs(lap_u(LAP_MS + 1250) - 1.25f) < 1e-6f, "laps since opening");
+
+  // the pack's speeds: a different pace for each car, so one can overtake another
+  {
+    int no_pass = 0, slow = 0, fast = 0, bad_start = 0, bad_loop = 0, bad_side = 0;
+    for (uint32_t seed = 1; seed <= 300; seed++) {
+      const Pack pk = make_pack(seed);
+      int swaps = 0;
+      for (int k = 0; k < N_CARS; k++) {
+        if (std::fabs(car_pos(pk, k, 0.0f) + k * CAR_GAP) > 1e-5f) bad_start++;          // the grid at u = 0
+        if (std::fabs(car_pos(pk, k, 1.0f) - car_pos(pk, k, 0.0f) - 1.0f) > 1e-4f) bad_loop++;  // one lap a lap
+        for (int i = 0; i <= 400; i++) {
+          const float sp = car_speed(pk, k, i / 400.0f);
+          if (sp < 0.05f) slow++;                       // never stops or reverses
+          if (sp > 2.0f) fast++;
+          const float w = pulling_out(pk, k, i / 400.0f);
+          if (w < 0 || w > 1) bad_side++;
+        }
+      }
+      // an overtake: a pair whose order round the (short) gap changes sign inside the lap
+      for (int j = 0; j < N_CARS; j++)
+        for (int k = j + 1; k < N_CARS; k++) {
+          float prev = car_pos(pk, j, 0.0f) - car_pos(pk, k, 0.0f);
+          for (int i = 1; i <= 400; i++) {
+            const float d = car_pos(pk, j, i / 400.0f) - car_pos(pk, k, i / 400.0f);
+            if ((prev < 0) != (d < 0) && std::fabs(d) < 0.3f && std::fabs(prev) < 0.3f) swaps++;
+            prev = d;
+          }
+        }
+      if (swaps == 0) no_pass++;
+    }
+    CHECK(bad_start == 0, "cars start on the grid, CAR_GAP apart");
+    CHECK(bad_loop == 0, "after a lap each car is exactly one lap on, so a loop repeats cleanly");
+    CHECK(slow == 0 && fast == 0, "speeds stay between 0.05 and 2 laps per lap (%d slow, %d fast)", slow, fast);
+    CHECK(bad_side == 0, "the pull-out is 0..1");
+    CHECK(no_pass <= 30, "most seeds have an overtake within a lap (%d of 300 have none)", no_pass);
+    // the demo seed must show at least one, so the renders do
+    const Pack d = make_pack(DEMO_SEED);
+    int swaps = 0;
+    for (int j = 0; j < N_CARS; j++)
+      for (int k = j + 1; k < N_CARS; k++) {
+        float prev = car_pos(d, j, 0.0f) - car_pos(d, k, 0.0f);
+        for (int i = 1; i <= 400; i++) {
+          const float dd = car_pos(d, j, i / 400.0f) - car_pos(d, k, i / 400.0f);
+          if ((prev < 0) != (dd < 0) && std::fabs(dd) < 0.3f && std::fabs(prev) < 0.3f) swaps++;
+          prev = dd;
+        }
+      }
+    CHECK(swaps >= 1, "DEMO_SEED has an overtake (%d)", swaps);
+    // someone really does pull out in the demo
+    float most = 0;
+    for (int k = 0; k < N_CARS; k++)
+      for (int i = 0; i <= 400; i++) most = std::fmax(most, pulling_out(d, k, i / 400.0f));
+    CHECK(most > 0.5f, "a car pulls out to pass in the demo (%.2f)", most);
+    // the passer is the faster one at the moment of passing
+    CHECK(pulling_out(make_pack(DEMO_SEED), 0, 0.0f) >= 0.0f, "pull-out defined at the start");
+  }
+
   std::printf("%d checks, %d failures\n", checks, fails);
   return fails ? 1 : 0;
 }

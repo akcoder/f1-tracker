@@ -149,5 +149,7 @@ from Jolpica data carry **CC BY-NC-SA 4.0** instead — see
 [`reference/CREDITS.md`](reference/CREDITS.md).
 
 Not affiliated with, endorsed by, or connected to Formula 1. *F1*, *FORMULA 1*,
-*FIA* and *GRAND PRIX* are trademarks of their respective owners. Personal,
-non-commercial use.
+*FIA* and *GRAND PRIX* are trademarks of their respective owners; the F1 logo on
+the boot and About screens (`reference/logo/f1-formula-1.svg`) is a registered
+trademark of Formula One Licensing B.V., shown to identify the sport this tracks,
+not to suggest any connection. Personal, non-commercial use.

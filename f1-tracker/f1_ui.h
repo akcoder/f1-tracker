@@ -64,6 +64,8 @@ struct State {
   int staged_attempts = 0;
   lv_image_dsc_t flag_dsc{};
   const portraits::Portrait *staged_photo = nullptr;
+  headshot::Slot *staged_hs = nullptr;   // its picture, being fetched (f1_headshot.h)
+  char staged_headshot[8] = {0};   // a driver with no compiled portrait: fetch theirs (f1_headshot.h)
   photo::Photo card_photo{240, 320};                // the carousel card's portrait, full size
   char staged_badge[12] = {0};
   char staged_title[48] = {0};
@@ -228,6 +230,7 @@ inline void compose_profile(const P &p, bool legend_badge, uint16_t season) {
                   (unsigned) p.titles, p.titles > 1 ? "s" : "");
   g.staged_iso3 = p.iso3[0] ? p.iso3 : nullptr;
   g.staged_photo = portraits::find(p.driver_id);
+  if (g.staged_photo == nullptr && p.code[0]) std::snprintf(g.staged_headshot, sizeof(g.staged_headshot), "%s", p.code);
 }
 
 // 5.6.2: the curated line, appended only where one exists. Drivers have none;
@@ -245,6 +248,7 @@ inline bool prepare(const carousel::Card &c) {
   g.staged_birthday = false;
   g.staged_circuit = nullptr;
   g.staged_photo = nullptr;
+  g.staged_headshot[0] = '\0';
   g.staged_iso3 = nullptr;
   g.staged_badge[0] = g.staged_title[0] = g.staged_body[0] = g.staged_credit[0] = '\0';
 
@@ -320,6 +324,7 @@ inline bool prepare(const carousel::Card &c) {
         g.staged_birthday = false;
         g.staged_iso3 = r->iso3[0] ? r->iso3 : nullptr;
         g.staged_photo = nullptr;
+        std::snprintf(g.staged_headshot, sizeof(g.staged_headshot), "%s", r->code);
         return true;
       }
       // SLOT_RETIRED: in the compiled table but not in this season's roster, so
@@ -378,7 +383,7 @@ inline void commit() {
     // (24,56 - 240x320), or fills the width when there is none. Without this the
     // text lay across the picture.
     if (g.staged_circuit) { lv_obj_set_pos(g.w.body, 12, 300); lv_obj_set_width(g.w.body, 456); }
-    else if (g.staged_photo) { lv_obj_set_pos(g.w.body, 282, 60); lv_obj_set_width(g.w.body, 190); }
+    else if (g.staged_photo || g.staged_hs) { lv_obj_set_pos(g.w.body, 282, 60); lv_obj_set_width(g.w.body, 190); }
     else { lv_obj_set_pos(g.w.body, 12, 60); lv_obj_set_width(g.w.body, 456); }
   }
 
@@ -415,6 +420,10 @@ inline void commit() {
                g.staged_photo->credit);
       lv_label_set_text(g.w.credit, g.staged_credit);
       lv_obj_remove_flag(g.w.credit, LV_OBJ_FLAG_HIDDEN);
+    } else if (!is_circuit && g.staged_hs) {
+      // the F1 media server's own picture: say where it is from
+      lv_label_set_text(g.w.credit, "photo: formula1.com");
+      lv_obj_remove_flag(g.w.credit, LV_OBJ_FLAG_HIDDEN);
     } else {
       lv_obj_add_flag(g.w.credit, LV_OBJ_FLAG_HIDDEN);
     }
@@ -430,10 +439,21 @@ inline void commit() {
       if (!photo::start(g.card_photo, g.staged_photo)) {
         lv_obj_add_flag(g.w.credit, LV_OBJ_FLAG_HIDDEN);   // no photo, so no credit
       }
+    } else if (!is_circuit && g.staged_hs) {
+      // a headshot from the F1 media server: its rows appear as the download decodes
+      if (!photo::show_external(g.card_photo, g.staged_hs)) lv_obj_add_flag(g.w.credit, LV_OBJ_FLAG_HIDDEN);
     } else {
       photo::stop(g.card_photo);
     }
   }
+}
+
+// A driver with no compiled portrait: ask for theirs now, during the previous card's dwell,
+// so the download is under way (or done) when the card comes up. nullptr = none to show.
+inline void stage_headshot() {
+  g.staged_hs = nullptr;
+  if (!g.staged_circuit && !g.staged_photo && g.staged_headshot[0])
+    g.staged_hs = headshot::want(g.staged_headshot, lv_tick_get());
 }
 
 // Resolve the NEXT card ahead of time, during the current card's dwell. Called
@@ -445,13 +465,13 @@ inline void prepare_next() {
   // Bounded: a content filter that admits nothing must not spin forever.
   for (int tries = 0; tries < carousel::N_TYPES * 4; tries++) {
     if (!g.rot.next(c)) return;
-    if (prepare(c)) { g.staged = c; g.staged_ready = true; g.staged_attempts = 0; return; }
+    if (prepare(c)) { stage_headshot(); g.staged = c; g.staged_ready = true; g.staged_attempts = 0; return; }
   }
   g.staged_attempts++;
 }
 
 inline void show_card(const carousel::Card &c) {
-  if (prepare(c)) commit();
+  if (prepare(c)) { stage_headshot(); commit(); }
 }
 
 inline void advance(uint32_t now_ms, bool force = false) {

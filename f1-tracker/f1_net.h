@@ -22,6 +22,9 @@
 #include "freertos/task.h"
 #include "esp_timer.h"
 #include <ctime>
+
+#include "f1_headshot.h"
+#include "f1_png.h"
 #endif
 
 namespace f1 {
@@ -80,7 +83,7 @@ struct Session {
 // CONFIG_SPIRAM_XIP_FROM_PSRAM that crypto runs on the same bus the RGB panel
 // refills from - the measured cause of "lvgl took a long time" warnings. Two
 // hosts means two handles.
-inline Session g_jolpica, g_openf1;
+inline Session g_jolpica, g_openf1, g_media;      // g_media: media.formula1.com, the headshots
 inline char *g_body = nullptr;
 inline size_t g_body_len = 0;
 inline SemaphoreHandle_t g_lock = nullptr;
@@ -171,6 +174,60 @@ inline size_t fetch(Session &s, const char *url, uint32_t now_ms) {
   return total;
 }
 
+// A headshot, decoded as it downloads (f1_png.h) into the slot's PSRAM buffer, the rows
+// published as they finish so the card can show them top-down. true = a whole picture.
+inline void headshot_row(uint16_t *, int y, void *ctx) {
+  static_cast<headshot::Slot *>(ctx)->rows.store(y + 1);
+}
+
+inline bool fetch_headshot(const char *url, headshot::Slot &sl) {
+  Session &s = g_media;
+  if (s.h == nullptr) {
+    esp_http_client_config_t cfg = {};
+    cfg.url = url;
+    cfg.crt_bundle_attach = esp_crt_bundle_attach;
+    cfg.timeout_ms = 15000;
+    cfg.buffer_size = HTTP_RX_BUFFER;
+    cfg.keep_alive_enable = true;
+    s.h = esp_http_client_init(&cfg);
+    if (s.h == nullptr) { g_stats.last_fault = HTTP_ERROR; return false; }
+  } else {
+    esp_http_client_set_url(s.h, url);
+  }
+  if (esp_http_client_open(s.h, 0) != ESP_OK) {
+    esp_http_client_cleanup(s.h); s.h = nullptr;
+    g_stats.last_fault = TIMEOUT;
+    return false;
+  }
+  esp_http_client_fetch_headers(s.h);
+  const int status = esp_http_client_get_status_code(s.h);
+  g_stats.last_status = (uint16_t) status;
+  bool ok = status == 200;
+  png::Decoder dec;
+  if (ok) {
+    dec.on_row = headshot_row;
+    dec.row_ctx = &sl;
+    ok = dec.begin(sl.buf, headshot::W, headshot::H, 0x000000);
+  }
+  static uint8_t chunk[2048];
+  int r;
+  while (ok && (r = esp_http_client_read(s.h, (char *) chunk, sizeof(chunk))) > 0) {
+    ok = dec.feed(chunk, (size_t) r);
+    if (g_paused) { ok = false; break; }            // an OTA started: let go
+  }
+  const bool complete = esp_http_client_is_complete_data_received(s.h);
+  esp_http_client_close(s.h);
+  if (!complete || !ok) {                           // out of step: the handle cannot be reused
+    esp_http_client_cleanup(s.h); s.h = nullptr;
+  }
+  if (!ok || !dec.done) {
+    ESP_LOGW(TAG, "headshot %s: %s", sl.code, dec.error ? dec.error : "incomplete");
+    if (g_stats.last_fault == OK) g_stats.last_fault = HTTP_ERROR;
+    return false;
+  }
+  return true;
+}
+
 inline void pause() { g_paused = true; }
 inline void resume() { g_paused = false; }
 
@@ -202,7 +259,7 @@ inline void ota_error() {}
 // board, which is why the schedule is now pure and has its own host test.
 enum Res : uint8_t {
   RES_CALENDAR, RES_ROSTER, RES_QUALI, RES_RESULTS, RES_STANDINGS,
-  RES_CONSTRUCTORS, RES_SUMMARY, RES_EXTRAS, RES_N, RES_NONE = 255
+  RES_CONSTRUCTORS, RES_SUMMARY, RES_EXTRAS, RES_HEADSHOTS, RES_N, RES_NONE = 255
 };
 
 inline constexpr uint32_t RETRY_AFTER_FAIL_S = 60;   // 3.7.4: never a tight retry
@@ -237,6 +294,7 @@ struct Plan {
   bool want_summary = false;      // 8.1: fastest lap + pit stops, Jolpica only
   bool want_constructors = false;
   bool want_extras = false;       // 8.1: OpenF1 tyres, weather, incidents
+  bool want_headshots = false;    // the URLs of the headshots (f1_headshot.h): one OpenF1 request
   bool openf1_blocked = false;
 };
 
@@ -244,7 +302,7 @@ struct Plan {
 // the post-session extras (store::extras_pending). Fetched ONCE per race (3.6.2).
 inline Plan plan_for(const state::Calendar &cal, const state::Status &st,
                      uint32_t now_utc, const Clock &clk, uint32_t now_ms,
-                     bool extras_pending) {
+                     bool extras_pending, bool headshots_wanted = false) {
   Plan p;
   const auto iv = state::intervals_for(st.weekend);
   p.openf1_blocked = state::any_window_open(cal, now_utc);
@@ -254,6 +312,9 @@ inline Plan plan_for(const state::Calendar &cal, const state::Status &st,
   // The roster rides the calendar's cadence: a season changes once a year, so
   // this costs one 5.6 KB request per interval and follows a rollover by itself.
   p.want_roster = clk.due(RES_ROSTER, j, now_ms);
+  // OpenF1 again, so never inside a live window (NET-14). Only when a card is waiting for a
+  // picture, and at most every six hours.
+  p.want_headshots = headshots_wanted && !p.openf1_blocked && clk.due(RES_HEADSHOTS, 6 * 3600, now_ms);
 
   switch (st.weekend) {
     case state::RACE_WEEK:
@@ -310,6 +371,7 @@ inline Res pick(const Plan &p) {
   if (p.want_constructors) return RES_CONSTRUCTORS;
   if (p.want_summary) return RES_SUMMARY;
   if (p.want_extras) return RES_EXTRAS;
+  if (p.want_headshots) return RES_HEADSHOTS;
   return RES_NONE;
 }
 
@@ -381,11 +443,13 @@ inline void task_body(void *) {
     }
     const uint32_t utc = (uint32_t) ::time(nullptr);   // ESPHome has its own time:: namespace
     const state::Status st = state::evaluate(cal, utc, utc > 1700000000u);
-    const Plan p = plan_for(cal, st, utc, clk, now_ms, store::extras_pending(g_front));
+    const Plan p = plan_for(cal, st, utc, clk, now_ms, store::extras_pending(g_front),
+                            headshot::list_wanted(g_front.n_headshots));
     const Res r = pick(p);
     bool did = r != RES_NONE;
     bool ok = false;
     bool recheck = false;           // an extras re-resolve that may make no progress
+    bool media = false;             // this loop fetched a headshot: its failure must not back off the APIs
     bool (*fn)(const char *, size_t, store::Store &) = nullptr;
     Session *sess = &g_jolpica;
     uint32_t *stamp = &g_stats.jolpica_ok_ms;
@@ -444,7 +508,33 @@ inline void task_body(void *) {
         }
         break;
       }
+      case RES_HEADSHOTS:
+        // the URLs of the headshots a card is waiting for (f1_headshot.h): one OpenF1 request
+        std::snprintf(url, sizeof(url), "%s/drivers?session_key=latest", OPENF1);
+        sess = &g_openf1; stamp = &g_stats.openf1_ok_ms;
+        fn = store::parse_headshots; break;
       default: break;
+    }
+
+    // Nothing else is due: fetch the next headshot a card is waiting for. Outside any OpenF1
+    // live window, like everything optional (NET-14), and a picture is a big TLS download.
+    if (r == RES_NONE && !p.openf1_blocked) {
+      if (headshot::Slot *sl = headshot::next_job()) {
+        char hurl[200];
+        bool have = false, listed = false;
+        lock();
+        if (const store::Headshot *hs = store::find_headshot(g_front, sl->code))
+          have = store::headshot_full_url(*hs, hurl, sizeof(hurl));
+        listed = g_front.n_headshots > 0;
+        unlock();
+        if (have) {
+          did = true; media = true;
+          ok = fetch_headshot(hurl, *sl);
+          headshot::finish(*sl, ok, now_ms);
+        } else if (listed) {
+          headshot::finish(*sl, false, now_ms);   // OpenF1 does not list this driver: no picture
+        }
+      }
     }
 
     if (fn != nullptr) {
@@ -477,7 +567,9 @@ inline void task_body(void *) {
 
     // 3.7.4: back off HARD on a rate limit or a bad request shape; a network
     // failure gets a shorter wait, but never a tight loop.
-    if (did && !ok) {
+    if (media) {
+      // a headshot failing is that card's business (it retries in ten minutes, f1_headshot.h)
+    } else if (did && !ok) {
       if (g_stats.last_fault == RATE_LIMITED) backoff_ms = now_ms + 10 * 60 * 1000;
       else if (g_stats.last_fault == HTTP_ERROR) backoff_ms = now_ms + 5 * 60 * 1000;
       else backoff_ms = now_ms + 30 * 1000;

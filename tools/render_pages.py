@@ -253,8 +253,17 @@ FONT = {}
 
 
 # ---------------------------------------------------------------- pages
+def _title(img, d, cx, cy):
+    """The title row, as on the device: the F1 logo, 12 px, then "Tracker", centred on cx."""
+    mark = Image.open(os.path.join(ROOT, "reference", "logo", "f1-wordmark.png"))
+    tw = d.textlength("Tracker", font=FONT[34])
+    x0 = cx - (mark.width + 12 + tw) / 2
+    img.paste(mark, (int(round(x0)), int(round(cy - mark.height / 2))))
+    d.text((x0 + mark.width + 12, cy), "Tracker", font=FONT[34], fill=WHITE, anchor="lm")
+
+
 def page_wifi(ctx, mode="connecting"):
-    require(ctx["geo"], "page-1-wifi", "boot_mark", "boot_name", "wifi_title", "wifi_body")
+    require(ctx["geo"], "page-1-wifi", "boot_mark", "boot_title", "boot_f1", "boot_name", "wifi_title", "wifi_body")
     img = Image.new("RGB", (W, H), BG); d = ImageDraw.Draw(img)
     # the real generated mark, not a placeholder
     mark = os.path.join(ROOT, "reference", "logo", "boot-200.png")
@@ -262,7 +271,7 @@ def page_wifi(ctx, mode="connecting"):
     top = 40
     if os.path.exists(mark):
         img.paste(Image.open(mark), ((W - 200) // 2, top))
-    d.text((240, top + 200 + 10 + 20), "F1 Tracker", font=FONT[34], fill=WHITE, anchor="mm")
+    _title(img, d, 240, top + 200 + 10 + 20)
     title, body = {
         "loading":    ("Loading", ""),
         "connecting": ("Connecting to Wi-Fi", "home-ssid"),
@@ -433,6 +442,38 @@ def _profile_card(ctx, p, badge, name, photo_rows=320):
 def page_driver(ctx):
     p = next(x for x in ctx["drivers"] if x["id"] == "max_verstappen")
     return _profile_card(ctx, p, "DRIVER · LEGEND", "page-5-driver")
+
+
+def _rookie_card(ctx, name, photo_rows=206):
+    """A driver with no compiled portrait: the card as f1_ui.h draws it with a fetched headshot.
+    The picture is a STAND-IN (a plain silhouette drawn here): the real one is the F1 media
+    server's, fetched by the device, and is not kept in this repository."""
+    img = Image.new("RGB", (W, H), BG); d = ImageDraw.Draw(img)
+    _card_head(img, d, ctx, "Driver", "Arvid Lindblad", "GBR")
+    px, py, pw, ph_ = box(ctx["geo"], "card_photo")
+    ph_img = Image.new("RGB", (206, 206), (0, 0, 0))
+    pd = ImageDraw.Draw(ph_img)
+    for r in range(0, 206):                                          # a soft studio gradient behind
+        v = int(40 + 50 * (1 - r / 206))
+        pd.line([(0, r), (205, r)], fill=(v // 2, v // 2, v))
+    pd.ellipse([68, 28, 138, 112], fill=(205, 170, 140))              # head
+    pd.rounded_rectangle([34, 118, 172, 230], 40, fill=(30, 50, 110))  # shoulders
+    pd.rectangle([92, 100, 114, 126], fill=(205, 170, 140))           # neck
+    d.rectangle([px, py, px + 205, py + 205], fill=(0, 0, 0))
+    img.paste(ph_img.crop((0, 0, 206, photo_rows)), (px, py))
+    # the text beside it, as f1_ui.h lays it out: x 282, y 60, 190 wide
+    d.multiline_text((282, 60), "#41  LIN\n\nNew this season", font=FONT[12], fill=MUTED, spacing=4)
+    footer(d, "photo: formula1.com"); gear(d)
+    return img, name
+
+
+def page_rookie(ctx):
+    return _rookie_card(ctx, "page-5c-rookie")
+
+
+def page_rookie_loading(ctx):
+    """The headshot arriving: the first rows, top-down."""
+    return _rookie_card(ctx, "page-5d-rookie-loading", photo_rows=84)
 
 
 def page_driver_loading(ctx):
@@ -653,7 +694,7 @@ def page_race_with_icon(ctx):
 
 def page_about(ctx):
     G = ctx["geo"]
-    require(G, "page-12-about", "about_close", "about_mark", "about_name", "about_version",
+    require(G, "page-12-about", "about_close", "about_mark", "about_title", "about_f1", "about_name", "about_version",
             "about_by", "about_build", "about_device", "about_data", "about_legal")
     img = Image.new("RGB", (W, H), BG); d = ImageDraw.Draw(img)
     mark = os.path.join(ROOT, "reference", "logo", "boot-200.png")
@@ -668,7 +709,8 @@ def page_about(ctx):
     def centred(wid, text, size, fill):
         x, y, w, h = box(G, wid)
         d.text((x + w // 2, y), text, font=FONT[size], fill=fill, anchor="ma")
-    centred("about_name", "F1 Tracker", 34, WHITE)
+    tx, ty, tw, th = box(G, "about_title")
+    _title(img, d, tx + tw // 2, ty + th // 2)
     centred("about_version", "Version 0.1.0", 14, TEXT)
     centred("about_by", "by Dan Morphis", 14, MUTED)
     centred("about_build", "ESPHome 2026.9.1, built Oct  8 2026", 12, MUTED)
@@ -687,7 +729,7 @@ def page_about(ctx):
         font=FONT[12], fill=MUTED, spacing=5)
     x, y, w, h = box(G, "about_legal")
     d.multiline_text((x, y),
-        "Unofficial and not affiliated with Formula 1, the FIA or\nany team. Names are trademarks of their owners.",
+        "Unofficial and not affiliated with Formula 1, the FIA or any\nteam. The F1 logo and names are trademarks of their owners.",
         font=FONT[12], fill=DIM, spacing=5)
     return img, "page-12-about"
 
@@ -765,7 +807,7 @@ def page_settings_location(ctx):
 
 
 def anim_consts():
-    """The animation's geometry and timing, read from f1_anim.h / f1_animlogic.h."""
+    """The animation's constants, read from f1_anim.h / f1_animlogic.h."""
     a = _txt("f1_anim.h"); b = _txt("f1_animlogic.h")
     c = {}
     for src in (a, b):
@@ -781,10 +823,10 @@ def anim_consts():
     if m:
         for k, v in enumerate(m.group(1).split(",")):
             c["CAR_COL%d" % k] = int(v.strip(), 16)
-    c["OUT_MS"] = c["N_LIGHTS"] * c["STEP_MS"] + c["HOLD_MS"]
-    need = ("BOOT_LAMP_D", "BOOT_LAMP_GAP", "BOOT_LAMP_Y", "ABOUT_LAMP_D", "ABOUT_LAMP_GAP",
-            "ABOUT_LAMP_DY", "CAR_D", "LAMP_OFF", "LAMP_ON", "STEP_MS", "HOLD_MS", "LAP_MS", "N_LIGHTS",
-            "N_TRAIL", "TRAIL_LAG", "BOOT_LOGO", "ABOUT_LOGO", "ABOUT_PERIOD_MS", "CAR_COL0")
+    c["OUT_MS"] = c["N_LIGHTS"] * c["STEP_MS"] + c["HOLD_MS"] if {"N_LIGHTS", "STEP_MS", "HOLD_MS"} <= set(c) else 0
+    need = ("N_CARS", "CAR_GAP", "HEADINGS", "LAP_MS", "BOOT_LOGO", "ABOUT_LOGO", "CAR_COL0",
+            "DEMO_SEED", "SWING_MIN", "SWING_MAX", "SIDE_PX_PER_100", "PASS_ZONE",
+            "BOOT_LAMP_D", "BOOT_LAMP_GAP", "BOOT_LAMP_Y", "LAMP_OFF", "LAMP_ON", "N_LIGHTS", "STEP_MS", "HOLD_MS")
     missing = [k for k in need if k not in c]
     if missing:
         raise DriftError(f"f1_anim.h / f1_animlogic.h no longer define {missing}")
@@ -814,35 +856,111 @@ def _lap_at(track, frac):
     return (pts[i - 1][0] + (pts[i][0] - pts[i - 1][0]) * u, pts[i - 1][1] + (pts[i][1] - pts[i - 1][1]) * u)
 
 
+def _car_sprites():
+    """The alpha masks of f1_cars.h: {"LARGE"|"SMALL": [Image per heading]}."""
+    src = _txt("f1_cars.h")
+    sizes = {m.group(1): int(m.group(2)) for m in re.finditer(r"SZ_(LARGE|SMALL) = (\d+)", src)}
+    out = {}
+    for name, n in sizes.items():
+        body = src[src.index(f"{name}[STEPS]"):]
+        body = body[:body.index("};")]
+        vals = [int(v) for v in re.findall(r"\b\d+\b", body[body.index("{"):])]
+        out[name] = [Image.frombytes("L", (n, n), bytes(vals[i * n * n:(i + 1) * n * n]))
+                     for i in range(len(vals) // (n * n))]
+    return out
+
+
+def _heading(track, frac, steps):
+    """animlogic::heading(): the sprite that points along the track."""
+    x0, y0 = _lap_at(track, frac - 0.004)
+    x1, y1 = _lap_at(track, frac + 0.004)
+    deg = math.degrees(math.atan2(x1 - x0, -(y1 - y0)))
+    return round(deg / (360.0 / steps)) % steps
+
+
+class Pack:
+    """animlogic::Pack - the cars' speeds, from a seed. The same xorshift and the same maths as
+    f1_animlogic.h, so the renders show what the device draws for that seed."""
+    def __init__(self, c, seed):
+        self.c = c
+        x = (seed * 2654435761 + 0x9E3779B9) & 0xFFFFFFFF or 1
+        def nxt():
+            nonlocal x
+            x ^= (x << 13) & 0xFFFFFFFF; x ^= x >> 17; x ^= (x << 5) & 0xFFFFFFFF
+            return x
+        for _ in range(4): nxt()
+        self.n, self.a, self.phase = [], [], []
+        for _ in range(int(c["N_CARS"])):
+            self.n.append(1 + nxt() % 2)
+            self.a.append(c["SWING_MIN"] + (c["SWING_MAX"] - c["SWING_MIN"]) * (nxt() % 1000) / 999.0)
+            self.phase.append((nxt() % 1000) / 1000.0)
+
+    def swing(self, k, u):
+        return self.a[k] * math.sin(2 * math.pi * (self.n[k] * u + self.phase[k])) / (2 * math.pi * self.n[k])
+
+    def pos(self, k, u):
+        return u - k * self.c["CAR_GAP"] + self.swing(k, u) - self.swing(k, 0.0)
+
+    def speed(self, k, u):
+        return 1.0 + self.a[k] * math.cos(2 * math.pi * (self.n[k] * u + self.phase[k]))
+
+    def pulling_out(self, k, u):
+        w = 0.0
+        for j in range(len(self.n)):
+            if j == k: continue
+            d = self.pos(k, u) - self.pos(j, u)
+            d -= math.floor(d + 0.5)
+            if abs(d) < self.c["PASS_ZONE"] and self.speed(k, u) > self.speed(j, u):
+                w = max(w, 1.0 - abs(d) / self.c["PASS_ZONE"])
+        return w
+
+
 def _hex(v): return ((v >> 16) & 255, (v >> 8) & 255, v & 255)
 
 
-def _anim(img, c, logo_xy, size, lamp_d, lamp_gap, lamp_cy, t_ms, about):
-    """Draw the start lights and the car at `t_ms` into the sequence, as f1_anim.h does."""
+def _anim(img, c, logo_xy, size, t_ms, lights=False):
+    """Draw the pack (and, on the boot page, the start lights) at `t_ms` after the page
+    opened, as f1_anim.h does."""
     d = ImageDraw.Draw(img)
-    lt = t_ms % c["ABOUT_PERIOD_MS"] if about else t_ms
-    step, n = c["STEP_MS"], int(c["N_LIGHTS"])
-    lit = 0 if lt < step or lt >= c["OUT_MS"] else min(n, lt // step)
-    if 0 <= lt < c["OUT_MS"] + 500:
-        span = (n - 1) * lamp_gap
-        for i in range(n):
-            cx = 240 - span / 2 + i * lamp_gap
-            col = _hex(c["LAMP_ON"] if i < lit else c["LAMP_OFF"])
-            d.ellipse([cx - lamp_d / 2, lamp_cy - lamp_d / 2, cx + lamp_d / 2, lamp_cy + lamp_d / 2], fill=col)
+    if lights:
+        step, n = c["STEP_MS"], int(c["N_LIGHTS"])
+        lit = 0 if t_ms < step or t_ms >= c["OUT_MS"] else min(n, t_ms // step)
+        if 0 <= t_ms < c["OUT_MS"] + 500:
+            span = (n - 1) * c["BOOT_LAMP_GAP"]
+            r = c["BOOT_LAMP_D"] / 2
+            for i in range(n):
+                cx = 240 - span / 2 + i * c["BOOT_LAMP_GAP"]
+                d.ellipse([cx - r, c["BOOT_LAMP_Y"] - r, cx + r, c["BOOT_LAMP_Y"] + r],
+                          fill=_hex(c["LAMP_ON"] if i < lit else c["LAMP_OFF"]))
     track = _lap(size)
     f = (t_ms % c["LAP_MS"]) / c["LAP_MS"]
-    cols = [c["CAR_COL%d" % k] for k in range(int(c["N_TRAIL"]) + 1)]
-    for k in range(int(c["N_TRAIL"]), -1, -1):                 # tail first, the head on top
-        x, y = _lap_at(track, f - k * c["TRAIL_LAG"])
-        r = (c["CAR_D"] - 2 * k) / 2
-        d.ellipse([logo_xy[0] + x - r, logo_xy[1] + y - r, logo_xy[0] + x + r, logo_xy[1] + y + r],
-                  fill=_hex(cols[k]))
+    sprites = _car_sprites()["LARGE" if size >= 150 else "SMALL"]
+    pack = Pack(c, int(c["DEMO_SEED"]))
+    u = t_ms / c["LAP_MS"] if t_ms > 0 else 0.0
+    side = c["SIDE_PX_PER_100"] * size / 100.0
+    order = []
+    for k in range(int(c["N_CARS"])):
+        fk = pack.pos(k, u)
+        x, y = _lap_at(track, fk)
+        w = pack.pulling_out(k, u)
+        if w > 0:                                            # the passer steps out to its left
+            x2, y2 = _lap_at(track, fk + 0.004)
+            dx, dy = x2 - x, y2 - y
+            l = math.hypot(dx, dy)
+            if l > 1e-4:
+                x += dy / l * side * w; y -= dx / l * side * w
+        order.append((w > 0, k, x, y, fk))
+    for passing, k, x, y, fk in sorted(order):               # the car passing is drawn over the one it passes
+        mask = sprites[_heading(track, fk, int(c["HEADINGS"]))]
+        n = mask.width
+        img.paste(Image.new("RGB", (n, n), _hex(c["CAR_COL%d" % k])),
+                  (int(round(logo_xy[0] + x)) - n // 2, int(round(logo_xy[1] + y)) - n // 2), mask)
 
 
 def _anim_boot(ctx, t_ms):
     c = anim_consts()
     img, _ = page_wifi(ctx, "connecting")
-    _anim(img, c, ((W - 200) // 2, 40), 200, c["BOOT_LAMP_D"], c["BOOT_LAMP_GAP"], c["BOOT_LAMP_Y"], t_ms, False)
+    _anim(img, c, ((W - 200) // 2, 40), 200, t_ms, lights=True)
     return img
 
 
@@ -850,12 +968,12 @@ def _anim_about(ctx, t_ms):
     c = anim_consts()
     img, _ = page_about(ctx)
     mx, my, _, _ = box(ctx["geo"], "about_mark")
-    _anim(img, c, (mx, my), 112, c["ABOUT_LAMP_D"], c["ABOUT_LAMP_GAP"], my + 56 + c["ABOUT_LAMP_DY"], t_ms, True)
+    _anim(img, c, (mx, my), 112, t_ms)
     return img
 
 
-def page_boot_lights(ctx):
-    return _anim_boot(ctx, 2100), "page-1d-boot-lights"
+def page_boot_cars(ctx):
+    return _anim_boot(ctx, 2100), "page-1d-boot-cars"
 
 
 def page_boot_strip(ctx):
@@ -866,11 +984,47 @@ def page_boot_strip(ctx):
     out = Image.new("RGB", (360 * 4 + 12, 420), (0x20, 0x20, 0x20))
     for i, f in enumerate(frames):
         out.paste(f, (i * 364, 0))
-    return out, "boot-lights-strip"
+    return out, "boot-cars-strip"
 
 
-def page_about_lights(ctx):
-    return _anim_about(ctx, 3300), "page-12b-about-lights"
+def _pass_moments(c):
+    """The first overtake in the demo seed: (time ms, the passer, the passed)."""
+    pack = Pack(c, int(c["DEMO_SEED"]))
+    n = int(c["N_CARS"]); lap = c["LAP_MS"]
+    for i in range(1, 4000):
+        u0, u1 = (i - 1) / 4000, i / 4000
+        for j in range(n):
+            for k in range(n):
+                if j == k: continue
+                d0 = pack.pos(j, u0) - pack.pos(k, u0); d1 = pack.pos(j, u1) - pack.pos(k, u1)
+                if d0 < 0 <= d1 and abs(d0) < 0.3 and abs(d1) < 0.3:     # j was behind k, now ahead
+                    return u1 * lap, j, k
+    raise DriftError("the demo seed has no overtake - choose another DEMO_SEED")
+
+
+def page_overtake(ctx):
+    """An overtake on the logo, zoomed: the pair a moment before, alongside, level and past."""
+    c = anim_consts()
+    t, j, k = _pass_moments(c)
+    pack = Pack(c, int(c["DEMO_SEED"]))
+    track = _lap(200)
+    lap = c["LAP_MS"]
+    frames = []
+    for dt in (-0.07, -0.03, 0.0, 0.05):
+        tt = max(1, int(t + dt * lap))
+        # follow the pair: the window sits on the midpoint of the two cars at that moment
+        mxp, myp = _lap_at(track, (pack.pos(j, tt / lap) + pack.pos(k, tt / lap)) / 2)
+        cx, cy = (W - 200) // 2 + mxp, 40 + myp
+        img = _anim_boot(ctx, tt)
+        frames.append(img.crop((int(cx - 45), int(cy - 45), int(cx + 45), int(cy + 45))).resize((360, 360), Image.LANCZOS))
+    out = Image.new("RGB", (360 * 4 + 12, 360), (0x20, 0x20, 0x20))
+    for i, f in enumerate(frames):
+        out.paste(f, (i * 364, 0))
+    return out, "boot-cars-overtake"
+
+
+def page_about_cars(ctx):
+    return _anim_about(ctx, 1500), "page-12b-about-cars"
 
 
 def page_debug(ctx):
@@ -1005,11 +1159,50 @@ def page_offseason(ctx):
     return img, "page-11-offseason"
 
 
+def animation_gifs(ctx, step_ms=50):
+    """boot-cars.gif and about-cars.gif: one lap of the pack, looping, as f1_anim.h plays it
+    (the same constants and sprites); the boot one opens with the start lights, which fit
+    inside the first lap. Slow, so only with --gif.
+
+    ONE palette for every frame. A palette per frame (the quantizer's default) drops the
+    orange start/finish tick from some frames and keeps it in others, so the line flashes."""
+    c = anim_consts()
+    for name, fn in (("boot-cars", _anim_boot), ("about-cars", _anim_about)):
+        rgb = [fn(ctx, t) for t in range(0, int(c["LAP_MS"]), step_ms)]
+        # the palette comes from a spread of frames plus a swatch of every colour that must survive
+        keep = [c["LAMP_ON"], c["LAMP_OFF"]] + [c["CAR_COL%d" % k] for k in range(int(c["N_CARS"]))] + \
+               [0xFF8A1F, 0xF2F5FC, 0x121C33, 0xFFFFFF, 0x000000, 0xB0B0B0]
+        sheet = Image.new("RGB", (W, H * 3 + 16), (0, 0, 0))
+        for i, k in enumerate((0, len(rgb) // 3, 2 * len(rgb) // 3)):
+            sheet.paste(rgb[k], (0, i * H))
+        sw = ImageDraw.Draw(sheet)
+        for i, col in enumerate(keep):
+            sw.rectangle([i * 16, H * 3, i * 16 + 15, H * 3 + 15], fill=_hex(col))
+        pal = sheet.quantize(colors=48, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.NONE)
+        # the quantizer can still lose a small colour (the About logo's tick is ~180 px of a
+        # 230,000-px frame): pin every must-keep colour into the palette exactly
+        flat = pal.getpalette()[:48 * 3]
+        used = set()
+        for col in keep:
+            want = _hex(col)
+            best = min((i for i in range(48) if i not in used),
+                       key=lambda i: sum((flat[i * 3 + j] - want[j]) ** 2 for j in range(3)))
+            flat[best * 3:best * 3 + 3] = want
+            used.add(best)
+        pal.putpalette(flat + [0] * (768 - len(flat)))
+        frames = [f.quantize(palette=pal, dither=Image.Dither.NONE) for f in rgb]
+        path = os.path.join(OUT, name + ".gif")
+        frames[0].save(path, save_all=True, append_images=frames[1:], duration=step_ms, loop=0,
+                       optimize=False, disposal=1)
+        print(f"  {name}.gif  {len(frames)} frames, {os.path.getsize(path) // 1024} KB")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--font", default="/tmp/RobotoMono.ttf")
     ap.add_argument("--sans", default=None)
     ap.add_argument("--out", default=None, help="output directory (default docs/renders)")
+    ap.add_argument("--gif", action="store_true", help="also write the boot and About animations as GIFs (slow)")
     a = ap.parse_args()
     for sz in (10, 12, 14, 15, 16, 18, 22, 24, 34):
         FONT[sz] = ImageFont.truetype(a.font, sz)
@@ -1098,12 +1291,14 @@ def main():
     print(f"geometry OK: map {my}-{my+mh}, top5 {ty}-{ty+th}, "
           f"banner {by}-{by+bh}, gear 432+")
 
-    pages = [page_wifi_loading, page_wifi_connecting, page_wifi_ap, page_race, page_order, page_circuit, page_driver, page_driver_loading, page_legend,
+    pages = [page_wifi_loading, page_wifi_connecting, page_wifi_ap, page_race, page_order, page_circuit, page_driver, page_driver_loading, page_rookie, page_rookie_loading, page_legend,
              page_standings, page_summary, page_settings, page_settings_race,
-             page_settings_location, page_about, page_about_lights, page_boot_lights, page_boot_strip, page_debug, page_offseason,
+             page_settings_location, page_about, page_about_cars, page_boot_cars, page_boot_strip, page_overtake, page_debug, page_offseason,
              overlay_detail, overlay_detail_loading, overlay_alert, overlay_milestone,
              page_race_with_icon, overlay_update_checking, overlay_update_available,
              overlay_update_installing, overlay_update_failed]
+    if a.gif:
+        animation_gifs(ctx)
     made = []
     for fn in pages:
         try:

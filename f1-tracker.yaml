@@ -54,6 +54,8 @@ esphome:
     - f1-tracker/f1_sun.h
     - f1-tracker/f1_updlogic.h
     - f1-tracker/f1_update.h
+    - f1-tracker/f1_cars.h         # generated: tools/gen_cars.py
+    - f1-tracker/f1_logomark.h     # generated: tools/gen_logo.py, the logo outline the cars follow
     - f1-tracker/f1_animlogic.h
     - f1-tracker/f1_anim.h         # animated logos: start lights and a car lapping the circuit
     - f1-tracker/f1_map.h
@@ -65,6 +67,8 @@ esphome:
     - f1-tracker/f1_jpg.h          # the portrait decoder (top-down)
     - f1-tracker/f1_photo.h        # a portrait decoding in the background, redrawn as rows arrive
     - f1-tracker/f1_detail.h
+    - f1-tracker/f1_png.h          # streaming PNG decoder (palette + transparency), for headshots
+    - f1-tracker/f1_headshot.h     # runtime headshots for drivers with no compiled portrait
     - f1-tracker/f1_net.h
     - f1-tracker/f1_app.h
     - f1-tracker/f1_carousel.h
@@ -439,6 +443,9 @@ image:
     id: about_logo                        # firmware is built, not scaled by LVGL
     type: RGB565
     resize: 112x112
+  - file: reference/logo/f1-wordmark.png  # the F1 logo, the title's first word (tools/gen_logo.py)
+    id: f1_mark
+    type: RGB565
 
 font:
   - file: "gfonts://Roboto Mono"
@@ -976,15 +983,27 @@ lvgl:
               - image:
                   id: boot_mark
                   src: boot_logo
-              - label:
-                  id: boot_name           # the device's name, plainly (3.7.5)
-                  text: "F1 Tracker"
-                  text_font: setup_title
-                  text_color: 0xFFFFFF
+              - obj:                      # the title: the F1 logo, then "Tracker"
+                  id: boot_title
                   width: 380
-                  text_align: CENTER
+                  height: SIZE_CONTENT
+                  bg_opa: TRANSP
+                  border_width: 0
                   pad_top: 10
                   pad_bottom: 8
+                  pad_left: 0
+                  pad_right: 0
+                  scrollable: false
+                  layout: {type: FLEX, flex_flow: ROW, flex_align_main: CENTER, flex_align_cross: CENTER, pad_column: 12}
+                  widgets:
+                    - image:
+                        id: boot_f1
+                        src: f1_mark
+                    - label:
+                        id: boot_name           # the device's name, plainly (3.7.5)
+                        text: "Tracker"
+                        text_font: setup_title
+                        text_color: 0xFFFFFF
               - label:
                   id: wifi_title
                   text: "Loading"         # BOOT-2: until start-up ends; then the Wi-Fi status
@@ -1803,15 +1822,26 @@ lvgl:
             src: about_logo
             x: 184
             y: 14
-        - label:
-            id: about_name
+        - obj:                  # the title: the F1 logo, then "Tracker"
+            id: about_title
             x: 0
             y: 130
             width: 480
-            text: "F1 Tracker"
-            text_font: setup_title
-            text_color: 0xFFFFFF
-            text_align: CENTER
+            height: 40
+            bg_opa: TRANSP
+            border_width: 0
+            pad_all: 0
+            scrollable: false
+            layout: {type: FLEX, flex_flow: ROW, flex_align_main: CENTER, flex_align_cross: CENTER, pad_column: 12}
+            widgets:
+              - image:
+                  id: about_f1
+                  src: f1_mark
+              - label:
+                  id: about_name
+                  text: "Tracker"
+                  text_font: setup_title
+                  text_color: 0xFFFFFF
         - label:
             id: about_version
             x: 0
@@ -1866,7 +1896,7 @@ lvgl:
             x: 16
             y: 436
             width: 452
-            text: "Unofficial and not affiliated with Formula 1, the FIA or any team. Names are trademarks of their owners."
+            text: "Unofficial and not affiliated with Formula 1, the FIA or any team. The F1 logo and names are trademarks of their owners."
             text_font: mono12
             text_color: 0x5A6687
 

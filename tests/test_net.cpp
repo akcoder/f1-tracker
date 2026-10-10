@@ -218,6 +218,29 @@ static void test_extras_gating() {
   okf(net::plan_for(cal(), post, t, failed, 300 * 1000u, true).want_extras, "...then retries");
 }
 
+static void test_headshots() {
+  std::printf("the headshot URL list (one OpenF1 request, never in a live window)\n");
+  const uint32_t race = g_store.rounds[0].start[calendar::RACE];
+  net::Clock clk;
+  const auto live = state::evaluate(cal(), race + 600, true);
+  okf(!net::plan_for(cal(), live, race + 600, clk, 0, false, true).want_headshots, "inside the window: never");
+  const uint32_t t = first_post_session();
+  const auto post = state::evaluate(cal(), t, true);
+  okf(net::plan_for(cal(), post, t, clk, 0, false, true).want_headshots, "a card is waiting, window closed: wanted");
+  okf(!net::plan_for(cal(), post, t, clk, 0, false, false).want_headshots, "nothing waiting: not asked for");
+  // it is the lowest priority: a due calendar goes first, and it never starves the others
+  const auto p = net::plan_for(cal(), post, t, clk, 0, false, true);
+  okf(net::pick(p) != net::RES_HEADSHOTS, "other resources go first (picked %d)", (int) net::pick(p));
+  net::Clock quiet;
+  for (int r = 0; r < net::RES_N; r++) quiet.stamp((net::Res) r, 0);
+  quiet.have[net::RES_HEADSHOTS] = false;
+  okf(net::pick(net::plan_for(cal(), post, t, quiet, 1000, false, true)) == net::RES_HEADSHOTS,
+      "with everything else fresh, the list is what is fetched");
+  net::Clock done = quiet; done.stamp(net::RES_HEADSHOTS, 0);
+  okf(!net::plan_for(cal(), post, t, done, 3600 * 1000u, false, true).want_headshots, "fetched an hour ago: not again");
+  okf(net::plan_for(cal(), post, t, done, 6 * 3600 * 1000u + 1, false, true).want_headshots, "six hours on: if a card still waits, again");
+}
+
 static void test_pending() {
   std::printf("extras_pending\n");
   store::Store s;
@@ -244,6 +267,7 @@ int main() {
   test_failures();
   test_extras_gating();
   test_pending();
+  test_headshots();
   std::printf("\n%d checks, %d failures\n\n", checks, failures);
   return failures ? 1 : 0;
 }
