@@ -793,6 +793,7 @@ def anim_consts():
             c["CAR_COL%d" % k] = int(v.strip(), 16)
     c["OUT_MS"] = c["N_LIGHTS"] * c["STEP_MS"] + c["HOLD_MS"] if {"N_LIGHTS", "STEP_MS", "HOLD_MS"} <= set(c) else 0
     need = ("N_CARS", "CAR_GAP", "HEADINGS", "LAP_MS", "BOOT_LOGO", "ABOUT_LOGO", "CAR_COL0",
+            "DEMO_SEED", "SWING_MIN", "SWING_MAX", "SIDE_PX_PER_100", "PASS_ZONE",
             "BOOT_LAMP_D", "BOOT_LAMP_GAP", "BOOT_LAMP_Y", "LAMP_OFF", "LAMP_ON", "N_LIGHTS", "STEP_MS", "HOLD_MS")
     missing = [k for k in need if k not in c]
     if missing:
@@ -845,6 +846,43 @@ def _heading(track, frac, steps):
     return round(deg / (360.0 / steps)) % steps
 
 
+class Pack:
+    """animlogic::Pack - the cars' speeds, from a seed. The same xorshift and the same maths as
+    f1_animlogic.h, so the renders show what the device draws for that seed."""
+    def __init__(self, c, seed):
+        self.c = c
+        x = (seed * 2654435761 + 0x9E3779B9) & 0xFFFFFFFF or 1
+        def nxt():
+            nonlocal x
+            x ^= (x << 13) & 0xFFFFFFFF; x ^= x >> 17; x ^= (x << 5) & 0xFFFFFFFF
+            return x
+        for _ in range(4): nxt()
+        self.n, self.a, self.phase = [], [], []
+        for _ in range(int(c["N_CARS"])):
+            self.n.append(1 + nxt() % 2)
+            self.a.append(c["SWING_MIN"] + (c["SWING_MAX"] - c["SWING_MIN"]) * (nxt() % 1000) / 999.0)
+            self.phase.append((nxt() % 1000) / 1000.0)
+
+    def swing(self, k, u):
+        return self.a[k] * math.sin(2 * math.pi * (self.n[k] * u + self.phase[k])) / (2 * math.pi * self.n[k])
+
+    def pos(self, k, u):
+        return u - k * self.c["CAR_GAP"] + self.swing(k, u) - self.swing(k, 0.0)
+
+    def speed(self, k, u):
+        return 1.0 + self.a[k] * math.cos(2 * math.pi * (self.n[k] * u + self.phase[k]))
+
+    def pulling_out(self, k, u):
+        w = 0.0
+        for j in range(len(self.n)):
+            if j == k: continue
+            d = self.pos(k, u) - self.pos(j, u)
+            d -= math.floor(d + 0.5)
+            if abs(d) < self.c["PASS_ZONE"] and self.speed(k, u) > self.speed(j, u):
+                w = max(w, 1.0 - abs(d) / self.c["PASS_ZONE"])
+        return w
+
+
 def _hex(v): return ((v >> 16) & 255, (v >> 8) & 255, v & 255)
 
 
@@ -865,9 +903,22 @@ def _anim(img, c, logo_xy, size, t_ms, lights=False):
     track = _lap(size)
     f = (t_ms % c["LAP_MS"]) / c["LAP_MS"]
     sprites = _car_sprites()["LARGE" if size >= 150 else "SMALL"]
-    for k in range(int(c["N_CARS"]) - 1, -1, -1):             # the last car first, the leader on top
-        fk = f - k * c["CAR_GAP"]
+    pack = Pack(c, int(c["DEMO_SEED"]))
+    u = t_ms / c["LAP_MS"] if t_ms > 0 else 0.0
+    side = c["SIDE_PX_PER_100"] * size / 100.0
+    order = []
+    for k in range(int(c["N_CARS"])):
+        fk = pack.pos(k, u)
         x, y = _lap_at(track, fk)
+        w = pack.pulling_out(k, u)
+        if w > 0:                                            # the passer steps out to its left
+            x2, y2 = _lap_at(track, fk + 0.004)
+            dx, dy = x2 - x, y2 - y
+            l = math.hypot(dx, dy)
+            if l > 1e-4:
+                x += dy / l * side * w; y -= dx / l * side * w
+        order.append((w > 0, k, x, y, fk))
+    for passing, k, x, y, fk in sorted(order):               # the car passing is drawn over the one it passes
         mask = sprites[_heading(track, fk, int(c["HEADINGS"]))]
         n = mask.width
         img.paste(Image.new("RGB", (n, n), _hex(c["CAR_COL%d" % k])),
@@ -902,6 +953,42 @@ def page_boot_strip(ctx):
     for i, f in enumerate(frames):
         out.paste(f, (i * 364, 0))
     return out, "boot-cars-strip"
+
+
+def _pass_moments(c):
+    """The first overtake in the demo seed: (time ms, the passer, the passed)."""
+    pack = Pack(c, int(c["DEMO_SEED"]))
+    n = int(c["N_CARS"]); lap = c["LAP_MS"]
+    for i in range(1, 4000):
+        u0, u1 = (i - 1) / 4000, i / 4000
+        for j in range(n):
+            for k in range(n):
+                if j == k: continue
+                d0 = pack.pos(j, u0) - pack.pos(k, u0); d1 = pack.pos(j, u1) - pack.pos(k, u1)
+                if d0 < 0 <= d1 and abs(d0) < 0.3 and abs(d1) < 0.3:     # j was behind k, now ahead
+                    return u1 * lap, j, k
+    raise DriftError("the demo seed has no overtake - choose another DEMO_SEED")
+
+
+def page_overtake(ctx):
+    """An overtake on the logo, zoomed: the pair a moment before, alongside, level and past."""
+    c = anim_consts()
+    t, j, k = _pass_moments(c)
+    pack = Pack(c, int(c["DEMO_SEED"]))
+    track = _lap(200)
+    lap = c["LAP_MS"]
+    frames = []
+    for dt in (-0.07, -0.03, 0.0, 0.05):
+        tt = max(1, int(t + dt * lap))
+        # follow the pair: the window sits on the midpoint of the two cars at that moment
+        mxp, myp = _lap_at(track, (pack.pos(j, tt / lap) + pack.pos(k, tt / lap)) / 2)
+        cx, cy = (W - 200) // 2 + mxp, 40 + myp
+        img = _anim_boot(ctx, tt)
+        frames.append(img.crop((int(cx - 45), int(cy - 45), int(cx + 45), int(cy + 45))).resize((360, 360), Image.LANCZOS))
+    out = Image.new("RGB", (360 * 4 + 12, 360), (0x20, 0x20, 0x20))
+    for i, f in enumerate(frames):
+        out.paste(f, (i * 364, 0))
+    return out, "boot-cars-overtake"
 
 
 def page_about_cars(ctx):
@@ -1174,7 +1261,7 @@ def main():
 
     pages = [page_wifi_loading, page_wifi_connecting, page_wifi_ap, page_race, page_order, page_circuit, page_driver, page_driver_loading, page_legend,
              page_standings, page_summary, page_settings, page_settings_race,
-             page_settings_location, page_about, page_about_cars, page_boot_cars, page_boot_strip, page_debug, page_offseason,
+             page_settings_location, page_about, page_about_cars, page_boot_cars, page_boot_strip, page_overtake, page_debug, page_offseason,
              overlay_detail, overlay_detail_loading, overlay_alert, overlay_milestone,
              page_race_with_icon, overlay_update_checking, overlay_update_available,
              overlay_update_installing, overlay_update_failed]

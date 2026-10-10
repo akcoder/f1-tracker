@@ -118,8 +118,65 @@ int main() {
     // the straight at the start line runs one way, the opposite straight the other
     CHECK(N_CARS == 3 && CAR_GAP * N_CARS < 0.5f, "a pack that fits on the lap");
   }
-  CHECK(lap_frac(-3) == 0 && lap_frac(0) == 0 && std::fabs(lap_frac(LAP_MS / 2) - 0.5f) < 1e-6f &&
-        std::fabs(lap_frac(LAP_MS + 1250) - 0.25f) < 1e-6f, "lap fraction");
+  CHECK(lap_u(-3) == 0 && lap_u(0) == 0 && std::fabs(lap_u(LAP_MS / 2) - 0.5f) < 1e-6f &&
+        std::fabs(lap_u(LAP_MS + 1250) - 1.25f) < 1e-6f, "laps since opening");
+
+  // the pack's speeds: a different pace for each car, so one can overtake another
+  {
+    int no_pass = 0, slow = 0, fast = 0, bad_start = 0, bad_loop = 0, bad_side = 0;
+    for (uint32_t seed = 1; seed <= 300; seed++) {
+      const Pack pk = make_pack(seed);
+      int swaps = 0;
+      for (int k = 0; k < N_CARS; k++) {
+        if (std::fabs(car_pos(pk, k, 0.0f) + k * CAR_GAP) > 1e-5f) bad_start++;          // the grid at u = 0
+        if (std::fabs(car_pos(pk, k, 1.0f) - car_pos(pk, k, 0.0f) - 1.0f) > 1e-4f) bad_loop++;  // one lap a lap
+        for (int i = 0; i <= 400; i++) {
+          const float sp = car_speed(pk, k, i / 400.0f);
+          if (sp < 0.05f) slow++;                       // never stops or reverses
+          if (sp > 2.0f) fast++;
+          const float w = pulling_out(pk, k, i / 400.0f);
+          if (w < 0 || w > 1) bad_side++;
+        }
+      }
+      // an overtake: a pair whose order round the (short) gap changes sign inside the lap
+      for (int j = 0; j < N_CARS; j++)
+        for (int k = j + 1; k < N_CARS; k++) {
+          float prev = car_pos(pk, j, 0.0f) - car_pos(pk, k, 0.0f);
+          for (int i = 1; i <= 400; i++) {
+            const float d = car_pos(pk, j, i / 400.0f) - car_pos(pk, k, i / 400.0f);
+            if ((prev < 0) != (d < 0) && std::fabs(d) < 0.3f && std::fabs(prev) < 0.3f) swaps++;
+            prev = d;
+          }
+        }
+      if (swaps == 0) no_pass++;
+    }
+    CHECK(bad_start == 0, "cars start on the grid, CAR_GAP apart");
+    CHECK(bad_loop == 0, "after a lap each car is exactly one lap on, so a loop repeats cleanly");
+    CHECK(slow == 0 && fast == 0, "speeds stay between 0.05 and 2 laps per lap (%d slow, %d fast)", slow, fast);
+    CHECK(bad_side == 0, "the pull-out is 0..1");
+    CHECK(no_pass <= 30, "most seeds have an overtake within a lap (%d of 300 have none)", no_pass);
+    // the demo seed must show at least one, so the renders do
+    const Pack d = make_pack(DEMO_SEED);
+    int swaps = 0;
+    for (int j = 0; j < N_CARS; j++)
+      for (int k = j + 1; k < N_CARS; k++) {
+        float prev = car_pos(d, j, 0.0f) - car_pos(d, k, 0.0f);
+        for (int i = 1; i <= 400; i++) {
+          const float dd = car_pos(d, j, i / 400.0f) - car_pos(d, k, i / 400.0f);
+          if ((prev < 0) != (dd < 0) && std::fabs(dd) < 0.3f && std::fabs(prev) < 0.3f) swaps++;
+          prev = dd;
+        }
+      }
+    CHECK(swaps >= 1, "DEMO_SEED has an overtake (%d)", swaps);
+    // someone really does pull out in the demo
+    float most = 0;
+    for (int k = 0; k < N_CARS; k++)
+      for (int i = 0; i <= 400; i++) most = std::fmax(most, pulling_out(d, k, i / 400.0f));
+    CHECK(most > 0.5f, "a car pulls out to pass in the demo (%.2f)", most);
+    // the passer is the faster one at the moment of passing
+    CHECK(pulling_out(make_pack(DEMO_SEED), 0, 0.0f) >= 0.0f, "pull-out defined at the start");
+  }
+
   std::printf("%d checks, %d failures\n", checks, fails);
   return fails ? 1 : 0;
 }

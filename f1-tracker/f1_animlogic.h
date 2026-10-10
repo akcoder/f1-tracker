@@ -93,9 +93,75 @@ inline int heading(const Track &t, float frac) {
   return ((k % HEADINGS) + HEADINGS) % HEADINGS;
 }
 
-// Where the lap is `t` ms after the page opened.
-inline float lap_frac(int32_t t) {
-  return t <= 0 ? 0.0f : (float) (t % LAP_MS) / (float) LAP_MS;
+// ---- the pack's speeds -----------------------------------------------------
+// Every car averages one lap per LAP_MS but speeds up and slows down on the way: its
+// position (in laps) is   u - k*CAR_GAP + w_k(u) - w_k(0),   u = t / LAP_MS,   with
+//   w_k(u) = a_k * sin(2 pi (n_k u + phase_k)) / (2 pi n_k),
+// so its speed is 1 + a_k cos(...), always positive (a_k < 1). n_k is a whole number of
+// swings per lap, so after one lap each car is exactly one lap further on (a looping render
+// repeats cleanly) and at u = 0 the cars stand on the grid, CAR_GAP apart. The swings differ
+// per car, so one gains on the one ahead, draws alongside and goes past. The numbers come
+// from a seed (the device picks one each time the page opens; the renders use DEMO_SEED).
+inline constexpr uint32_t DEMO_SEED = 7;
+inline constexpr float SWING_MIN = 0.62f, SWING_MAX = 0.93f;    // a_k
+inline constexpr float SIDE_PX_PER_100 = 4.0f;                  // the passer's sideways step, px per 100 px of logo
+inline constexpr float PASS_ZONE = 0.045f;                      // laps: closer than this, the faster car pulls out
+
+struct Pack {
+  float a[N_CARS] = {0}, phase[N_CARS] = {0};
+  int n[N_CARS] = {1, 1, 1};
+};
+
+inline uint32_t xorshift(uint32_t &x) {
+  x ^= x << 13; x ^= x >> 17; x ^= x << 5;
+  return x;
+}
+
+inline Pack make_pack(uint32_t seed) {
+  Pack p;
+  uint32_t x = seed * 2654435761u + 0x9E3779B9u;
+  if (x == 0) x = 1;
+  for (int i = 0; i < 4; i++) xorshift(x);                       // churn a small seed
+  for (int k = 0; k < N_CARS; k++) {
+    p.n[k] = 1 + (int) (xorshift(x) % 2);                         // 1 or 2 swings a lap
+    p.a[k] = SWING_MIN + (SWING_MAX - SWING_MIN) * (float) (xorshift(x) % 1000) / 999.0f;
+    p.phase[k] = (float) (xorshift(x) % 1000) / 1000.0f;
+  }
+  return p;
+}
+
+inline float swing(const Pack &p, int k, float u) {
+  const float tau = 6.28318531f * (float) p.n[k];
+  return p.a[k] * std::sin(6.28318531f * ((float) p.n[k] * u + p.phase[k])) / tau;
+}
+
+// Car k's position round the lap, in laps, `u` laps after the page opened (u = t / LAP_MS).
+inline float car_pos(const Pack &p, int k, float u) {
+  return u - (float) k * CAR_GAP + swing(p, k, u) - swing(p, k, 0.0f);
+}
+
+// Its speed, in laps per lap-time (the mean is 1).
+inline float car_speed(const Pack &p, int k, float u) {
+  return 1.0f + p.a[k] * std::cos(6.28318531f * ((float) p.n[k] * u + p.phase[k]));
+}
+
+// Laps since the page opened, for a time `t` ms after it (0 before).
+inline float lap_u(int32_t t) { return t <= 0 ? 0.0f : (float) t / (float) LAP_MS; }
+
+// How far car k has pulled out to pass, 0..1: while it is the faster of two cars within
+// PASS_ZONE of each other, 1 alongside, 0 at the edge of the zone. The step is to the left
+// of its direction of travel.
+inline float pulling_out(const Pack &p, int k, float u) {
+  float w = 0;
+  for (int j = 0; j < N_CARS; j++) {
+    if (j == k) continue;
+    float d = car_pos(p, k, u) - car_pos(p, j, u);
+    d -= std::floor(d + 0.5f);                                    // the shortest way round the lap
+    const float ad = std::fabs(d);
+    if (ad < PASS_ZONE && car_speed(p, k, u) > car_speed(p, j, u))
+      w = std::fmax(w, 1.0f - ad / PASS_ZONE);
+  }
+  return w;
 }
 
 }  // namespace animlogic

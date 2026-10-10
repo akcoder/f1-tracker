@@ -34,6 +34,7 @@ struct Scene {
   int shown_lit = -2;
   lv_image_dsc_t sprite[animlogic::HEADINGS]{};      // the alpha masks of f1_cars.h, one per heading
   int car_px = 0;                                    // sprite size
+  animlogic::Pack pack;                              // this opening's speeds
   int shown_head[animlogic::N_CARS] = {-1, -1, -1};
   bool active = false, ready = false;
   uint32_t t0 = 0;
@@ -77,6 +78,7 @@ inline void begin(Scene &s) {
   for (int &h : s.shown_head) h = -1;
   s.shown_lit = -2;
   s.t0 = lv_tick_get();
+  s.pack = animlogic::make_pack(s.t0 ^ (s.t0 << 7));    // different speeds each time the page opens
   s.active = true;
 }
 
@@ -105,16 +107,25 @@ inline void step(Scene &s) {
     }
   }
 
-  // the pack, each car turned to the way the track runs under it
-  const float f = animlogic::lap_frac(t);
+  // the pack: each car at its own pace, turned to the way the track runs under it; the
+  // faster of two close cars pulls out to the side to pass
+  const float u = animlogic::lap_u(t);
+  const float side = animlogic::SIDE_PX_PER_100 * (float) s.size / 100.0f;
   for (int k = 0; k < animlogic::N_CARS; k++) {
-    const float fk = f - k * animlogic::CAR_GAP;
-    float x, y;
+    const float fk = animlogic::car_pos(s.pack, k, u);
+    float x, y, x2, y2;
     animlogic::at(s.track, fk, x, y);
     const int h = animlogic::heading(s.track, fk);
     if (h != s.shown_head[k]) { lv_image_set_src(s.car[k], &s.sprite[h]); s.shown_head[k] = h; }
+    const float w = animlogic::pulling_out(s.pack, k, u);
+    if (w > 0) {                                           // to the left of the direction of travel
+      animlogic::at(s.track, fk + 0.004f, x2, y2);
+      const float dx = x2 - x, dy = y2 - y, l = std::sqrt(dx * dx + dy * dy);
+      if (l > 1e-4f) { x += dy / l * side * w; y -= dx / l * side * w; }
+    }
     lv_obj_set_pos(s.car[k], s.lx + (int) lroundf(x) - s.car_px / 2, s.ly + (int) lroundf(y) - s.car_px / 2);
     lv_obj_remove_flag(s.car[k], LV_OBJ_FLAG_HIDDEN);
+    if (w > 0) lv_obj_move_foreground(s.car[k]);            // the car passing is drawn over the one it passes
   }
 }
 
