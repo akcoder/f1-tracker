@@ -34,6 +34,7 @@ ORANGE = (0xFF, 0x8A, 0x1F)
 # wants it on a different ground.
 DEEP = (0x00, 0x00, 0x00)
 TRACE = "it-1922"          # Monza
+PROJECT_URL = "https://github.com/akcoder/f1-tracker"
 SS = 4                     # supersample then box-filter: smooth edges without a rasteriser
 
 
@@ -107,12 +108,16 @@ def header_svg():
     px, py = -dy / m, dx / m
     L = 2.6
     tick = f"M{ax - px * L:.2f} {ay - py * L:.2f} L{ax + px * L:.2f} {ay + py * L:.2f}"
-    return ('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40">'
-            '<circle cx="20" cy="20" r="19" fill="#121C33"/>'
-            f'<path d="{pathd}" fill="none" stroke="#F2F5FC" stroke-width="2.5" '
-            'stroke-linejoin="round" stroke-linecap="round"/>'
-            f'<path d="{tick}" stroke="#FF8A1F" stroke-width="2.9" stroke-linecap="butt"/>'
-            '</svg>')
+    svg = ('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40">'
+           '<circle cx="20" cy="20" r="19" fill="#121C33"/>'
+           f'<path d="{pathd}" fill="none" stroke="#F2F5FC" stroke-width="2.5" '
+           'stroke-linejoin="round" stroke-linecap="round"/>'
+           f'<path d="{tick}" stroke="#FF8A1F" stroke-width="2.9" stroke-linecap="butt"/>'
+           '</svg>')
+    # The badge links to the project page. The string lands inside the app's JS template
+    # literal, so no backtick and no ${ may appear in it.
+    return (f'<a href="{PROJECT_URL}" target="_blank" rel="noopener" '
+            'title="F1 Tracker on GitHub" style="display:block;line-height:0">' + svg + '</a>')
 
 
 def main():

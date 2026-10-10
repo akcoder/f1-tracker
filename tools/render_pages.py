@@ -764,6 +764,115 @@ def page_settings_location(ctx):
     return img, "page-9c-settings-location"
 
 
+def anim_consts():
+    """The animation's geometry and timing, read from f1_anim.h / f1_animlogic.h."""
+    a = _txt("f1_anim.h"); b = _txt("f1_animlogic.h")
+    c = {}
+    for src in (a, b):
+        for m in re.finditer(r"constexpr (?:int32_t|int|uint32_t|float) ([^;]+);", src):
+            for part in m.group(1).split(","):
+                k, _, v = part.partition("=")
+                v = v.strip().rstrip("f")
+                try:
+                    c[k.strip()] = int(v, 0) if v.lower().startswith("0x") or v.lstrip("-").isdigit() else float(v)
+                except ValueError:
+                    pass
+    m = re.search(r"CAR_COL\[[^\]]*\] = \{([^}]*)\}", a)
+    if m:
+        for k, v in enumerate(m.group(1).split(",")):
+            c["CAR_COL%d" % k] = int(v.strip(), 16)
+    c["OUT_MS"] = c["N_LIGHTS"] * c["STEP_MS"] + c["HOLD_MS"]
+    need = ("BOOT_LAMP_D", "BOOT_LAMP_GAP", "BOOT_LAMP_Y", "ABOUT_LAMP_D", "ABOUT_LAMP_GAP",
+            "ABOUT_LAMP_DY", "CAR_D", "LAMP_OFF", "LAMP_ON", "STEP_MS", "HOLD_MS", "LAP_MS", "N_LIGHTS",
+            "N_TRAIL", "TRAIL_LAG", "BOOT_LOGO", "ABOUT_LOGO", "ABOUT_PERIOD_MS", "CAR_COL0")
+    missing = [k for k in need if k not in c]
+    if missing:
+        raise DriftError(f"f1_anim.h / f1_animlogic.h no longer define {missing}")
+    return c
+
+
+def _lap(size):
+    """The Monza trace as the logo lays it out (gen_logo.layout), closed, with arc lengths."""
+    sys.path.insert(0, os.path.join(ROOT, "tools"))
+    import gen_logo
+    pts = gen_logo.layout(float(size)); pts.append(pts[0])
+    cum = [0.0]
+    for (x0, y0), (x1, y1) in zip(pts, pts[1:]):
+        cum.append(cum[-1] + math.hypot(x1 - x0, y1 - y0))
+    return pts, cum
+
+
+def _lap_at(track, frac):
+    pts, cum = track
+    frac -= math.floor(frac)
+    sdist = frac * cum[-1]
+    i = 1
+    while i < len(pts) - 1 and cum[i] < sdist:
+        i += 1
+    seg = cum[i] - cum[i - 1]
+    u = (sdist - cum[i - 1]) / seg if seg else 0
+    return (pts[i - 1][0] + (pts[i][0] - pts[i - 1][0]) * u, pts[i - 1][1] + (pts[i][1] - pts[i - 1][1]) * u)
+
+
+def _hex(v): return ((v >> 16) & 255, (v >> 8) & 255, v & 255)
+
+
+def _anim(img, c, logo_xy, size, lamp_d, lamp_gap, lamp_cy, t_ms, about):
+    """Draw the start lights and the car at `t_ms` into the sequence, as f1_anim.h does."""
+    d = ImageDraw.Draw(img)
+    lt = t_ms % c["ABOUT_PERIOD_MS"] if about else t_ms
+    step, n = c["STEP_MS"], int(c["N_LIGHTS"])
+    lit = 0 if lt < step or lt >= c["OUT_MS"] else min(n, lt // step)
+    if 0 <= lt < c["OUT_MS"] + 500:
+        span = (n - 1) * lamp_gap
+        for i in range(n):
+            cx = 240 - span / 2 + i * lamp_gap
+            col = _hex(c["LAMP_ON"] if i < lit else c["LAMP_OFF"])
+            d.ellipse([cx - lamp_d / 2, lamp_cy - lamp_d / 2, cx + lamp_d / 2, lamp_cy + lamp_d / 2], fill=col)
+    track = _lap(size)
+    f = (t_ms % c["LAP_MS"]) / c["LAP_MS"]
+    cols = [c["CAR_COL%d" % k] for k in range(int(c["N_TRAIL"]) + 1)]
+    for k in range(int(c["N_TRAIL"]), -1, -1):                 # tail first, the head on top
+        x, y = _lap_at(track, f - k * c["TRAIL_LAG"])
+        r = (c["CAR_D"] - 2 * k) / 2
+        d.ellipse([logo_xy[0] + x - r, logo_xy[1] + y - r, logo_xy[0] + x + r, logo_xy[1] + y + r],
+                  fill=_hex(cols[k]))
+
+
+def _anim_boot(ctx, t_ms):
+    c = anim_consts()
+    img, _ = page_wifi(ctx, "connecting")
+    _anim(img, c, ((W - 200) // 2, 40), 200, c["BOOT_LAMP_D"], c["BOOT_LAMP_GAP"], c["BOOT_LAMP_Y"], t_ms, False)
+    return img
+
+
+def _anim_about(ctx, t_ms):
+    c = anim_consts()
+    img, _ = page_about(ctx)
+    mx, my, _, _ = box(ctx["geo"], "about_mark")
+    _anim(img, c, (mx, my), 112, c["ABOUT_LAMP_D"], c["ABOUT_LAMP_GAP"], my + 56 + c["ABOUT_LAMP_DY"], t_ms, True)
+    return img
+
+
+def page_boot_lights(ctx):
+    return _anim_boot(ctx, 2100), "page-1d-boot-lights"
+
+
+def page_boot_strip(ctx):
+    """Four moments of the boot sequence side by side: 1 light, 3, 5, then lights out."""
+    c = anim_consts()
+    ts = [c["STEP_MS"] * 1 + 100, c["STEP_MS"] * 3 + 100, c["STEP_MS"] * 5 + 400, c["OUT_MS"] + 250]
+    frames = [_anim_boot(ctx, t).crop((60, 20, 420, 440)) for t in ts]
+    out = Image.new("RGB", (360 * 4 + 12, 420), (0x20, 0x20, 0x20))
+    for i, f in enumerate(frames):
+        out.paste(f, (i * 364, 0))
+    return out, "boot-lights-strip"
+
+
+def page_about_lights(ctx):
+    return _anim_about(ctx, 3300), "page-12b-about-lights"
+
+
 def page_debug(ctx):
     require(ctx["geo"], "page-10-debug", "debug_label")
     img = Image.new("RGB", (W, H), BG); d = ImageDraw.Draw(img)
@@ -991,7 +1100,7 @@ def main():
 
     pages = [page_wifi_loading, page_wifi_connecting, page_wifi_ap, page_race, page_order, page_circuit, page_driver, page_driver_loading, page_legend,
              page_standings, page_summary, page_settings, page_settings_race,
-             page_settings_location, page_about, page_debug, page_offseason,
+             page_settings_location, page_about, page_about_lights, page_boot_lights, page_boot_strip, page_debug, page_offseason,
              overlay_detail, overlay_detail_loading, overlay_alert, overlay_milestone,
              page_race_with_icon, overlay_update_checking, overlay_update_available,
              overlay_update_installing, overlay_update_failed]

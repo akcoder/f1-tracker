@@ -24,3 +24,4 @@ test_update
 REQUIREMENTS.private.md
 tests/.tjpgd/
 tests/test_jpg
+tests/test_anim

@@ -2,7 +2,7 @@
 CXX      ?= c++
 CXXFLAGS ?= -std=c++17 -O1 -g -Wall -Wextra -Werror -Wno-unused-parameter
 HDRS     := $(wildcard ../f1-tracker/*.h)
-BINS     := test_m1 test_state test_json test_watch test_birthday test_display test_champ test_team test_extras test_rollover test_net test_boot test_sun test_update
+BINS     := test_m1 test_state test_json test_watch test_birthday test_display test_champ test_team test_extras test_rollover test_net test_boot test_sun test_update test_anim
 
 # test_jpg needs LVGL's TJpgDec from an ESPHome build (see the end of this file)
 TJPG_SRC := $(firstword $(wildcard ../.esphome/build/f1-tracker/managed_components/lvgl__lvgl/src/libs/tjpgd))
@@ -71,3 +71,6 @@ test_update: test_update.cpp $(HDRS)
 test_jpg: test_jpg.cpp ../f1-tracker/f1_jpg.h ../f1-tracker/f1_portraits.h .tjpgd/tjpgd.c
 	$(CC) -O1 -DLV_USE_TJPGD=1 -c -o .tjpgd/tjpgd.o .tjpgd/tjpgd.c
 	$(CXX) $(CXXFLAGS) -DLV_USE_TJPGD=1 -I.tjpgd -o $@ test_jpg.cpp .tjpgd/tjpgd.o
+
+test_anim: test_anim.cpp $(HDRS)
+	$(CXX) $(CXXFLAGS) -o $@ $<
