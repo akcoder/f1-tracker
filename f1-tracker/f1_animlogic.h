@@ -33,6 +33,7 @@ inline bool gantry_visible(int32_t t) { return t >= 0 && t < GANTRY_END_MS; }
 
 // ---- the cars ---------------------------------------------------------------
 inline constexpr int MAX_PTS = 160;
+inline constexpr int SMOOTH_PASSES = 24;        // = tools/gen_logo.py SMOOTH_PASSES: the same rounding as the logo
 inline constexpr int32_t LAP_MS = 5000;
 inline constexpr int N_CARS = 3;                 // a small pack, nose to tail
 inline constexpr float CAR_GAP = 0.075f;         // of a lap, between cars
@@ -58,6 +59,19 @@ inline bool build(Track &t, const circuits::Circuit &c, int size) {
   if (n < 3) return false;
   const auto fit = map::fit_box(c, size, size, 0.16f * (float) size);
   for (int i = 0; i < n; i++) map::point_at(c, i, fit, t.x[i], t.y[i]);
+  // The logo's outline is smoothed (gen_logo.smooth): each point moves toward the average
+  // of its neighbours round the lap, so the cars drive the line the logo shows.
+  {
+    float nx[MAX_PTS], ny[MAX_PTS];
+    for (int pass = 0; pass < SMOOTH_PASSES; pass++) {
+      for (int i = 0; i < n; i++) {
+        const int a = (i + n - 1) % n, b = (i + 1) % n;
+        nx[i] = 0.25f * t.x[a] + 0.5f * t.x[i] + 0.25f * t.x[b];
+        ny[i] = 0.25f * t.y[a] + 0.5f * t.y[i] + 0.25f * t.y[b];
+      }
+      for (int i = 0; i < n; i++) { t.x[i] = nx[i]; t.y[i] = ny[i]; }
+    }
+  }
   t.x[n] = t.x[0];
   t.y[n] = t.y[0];
   t.n = n + 1;

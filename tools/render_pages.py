@@ -253,8 +253,17 @@ FONT = {}
 
 
 # ---------------------------------------------------------------- pages
+def _title(img, d, cx, cy):
+    """The title row, as on the device: the F1 logo, 12 px, then "Tracker", centred on cx."""
+    mark = Image.open(os.path.join(ROOT, "reference", "logo", "f1-wordmark.png"))
+    tw = d.textlength("Tracker", font=FONT[34])
+    x0 = cx - (mark.width + 12 + tw) / 2
+    img.paste(mark, (int(round(x0)), int(round(cy - mark.height / 2))))
+    d.text((x0 + mark.width + 12, cy), "Tracker", font=FONT[34], fill=WHITE, anchor="lm")
+
+
 def page_wifi(ctx, mode="connecting"):
-    require(ctx["geo"], "page-1-wifi", "boot_mark", "boot_name", "wifi_title", "wifi_body")
+    require(ctx["geo"], "page-1-wifi", "boot_mark", "boot_title", "boot_f1", "boot_name", "wifi_title", "wifi_body")
     img = Image.new("RGB", (W, H), BG); d = ImageDraw.Draw(img)
     # the real generated mark, not a placeholder
     mark = os.path.join(ROOT, "reference", "logo", "boot-200.png")
@@ -262,7 +271,7 @@ def page_wifi(ctx, mode="connecting"):
     top = 40
     if os.path.exists(mark):
         img.paste(Image.open(mark), ((W - 200) // 2, top))
-    d.text((240, top + 200 + 10 + 20), "F1 Tracker", font=FONT[34], fill=WHITE, anchor="mm")
+    _title(img, d, 240, top + 200 + 10 + 20)
     title, body = {
         "loading":    ("Loading", ""),
         "connecting": ("Connecting to Wi-Fi", "home-ssid"),
@@ -653,7 +662,7 @@ def page_race_with_icon(ctx):
 
 def page_about(ctx):
     G = ctx["geo"]
-    require(G, "page-12-about", "about_close", "about_mark", "about_name", "about_version",
+    require(G, "page-12-about", "about_close", "about_mark", "about_title", "about_f1", "about_name", "about_version",
             "about_by", "about_build", "about_device", "about_data", "about_legal")
     img = Image.new("RGB", (W, H), BG); d = ImageDraw.Draw(img)
     mark = os.path.join(ROOT, "reference", "logo", "boot-200.png")
@@ -668,7 +677,8 @@ def page_about(ctx):
     def centred(wid, text, size, fill):
         x, y, w, h = box(G, wid)
         d.text((x + w // 2, y), text, font=FONT[size], fill=fill, anchor="ma")
-    centred("about_name", "F1 Tracker", 34, WHITE)
+    tx, ty, tw, th = box(G, "about_title")
+    _title(img, d, tx + tw // 2, ty + th // 2)
     centred("about_version", "Version 0.1.0", 14, TEXT)
     centred("about_by", "by Dan Morphis", 14, MUTED)
     centred("about_build", "ESPHome 2026.9.1, built Oct  8 2026", 12, MUTED)
@@ -687,7 +697,7 @@ def page_about(ctx):
         font=FONT[12], fill=MUTED, spacing=5)
     x, y, w, h = box(G, "about_legal")
     d.multiline_text((x, y),
-        "Unofficial and not affiliated with Formula 1, the FIA or\nany team. Names are trademarks of their owners.",
+        "Unofficial and not affiliated with Formula 1, the FIA or any\nteam. The F1 logo and names are trademarks of their owners.",
         font=FONT[12], fill=DIM, spacing=5)
     return img, "page-12-about"
 

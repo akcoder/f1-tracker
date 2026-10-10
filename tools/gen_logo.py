@@ -19,7 +19,7 @@ Outputs:
 
   python3 tools/gen_logo.py
 """
-import math, os, re, sys
+import math, os, re, subprocess, sys
 from PIL import Image, ImageDraw
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -49,8 +49,25 @@ def trace_points(tid):
     raise KeyError(tid)
 
 
+SMOOTH_PASSES = 24     # f1_animlogic.h SMOOTH_PASSES must match: the cars follow this line
+
+
+def smooth(pts, passes=SMOOTH_PASSES):
+    """Round the traced outline: each point moves towards the average of its neighbours
+    (weights 1/4, 1/2, 1/4, round the closed lap), `passes` times. The OSM-derived trace has
+    small jogs and kinks that read as bumps at logo size; this takes them out without adding
+    points, so the firmware can do the very same thing to the cars' path."""
+    p = [(float(x), float(y)) for x, y in pts]
+    n = len(p)
+    for _ in range(passes):
+        p = [(0.25 * p[i - 1][0] + 0.5 * p[i][0] + 0.25 * p[(i + 1) % n][0],
+              0.25 * p[i - 1][1] + 0.5 * p[i][1] + 0.25 * p[(i + 1) % n][1]) for i in range(n)]
+    return p
+
+
 def layout(size, pad=0.16):
     ps, hw, hh = trace_points(TRACE)
+    ps = smooth(ps)
     k = min((size - 2 * pad * size) / (2 * max(hw, 1)),
             (size - 2 * pad * size) / (2 * max(hh, 1)))
     return [(size / 2 + x * k, size / 2 - y * k) for x, y in ps]
@@ -65,7 +82,10 @@ def render(S, disc=True, transparent=False):
         d.ellipse([0, 0, s - 1, s - 1], fill=NAVY + ((255,) if transparent else ()))
     p = layout(s)
     w = max(2, int(s * 0.062))
-    d.line(p + [p[0]], fill=WHITE + ((255,) if transparent else ()), width=w, joint="curve")
+    ink = WHITE + ((255,) if transparent else ())
+    d.line(p + [p[0]], fill=ink, width=w, joint="curve")
+    for x, y in p:                       # a round pen: no notch where two segments meet
+        d.ellipse([x - w / 2, y - w / 2, x + w / 2, y + w / 2], fill=ink)
     ax, ay = p[0]; bx, by = p[1]
     dx, dy = bx - ax, by - ay
     m = math.hypot(dx, dy) or 1.0
@@ -115,8 +135,31 @@ def header_svg():
             '</svg>')
 
 
+WORDMARK_H = 36        # px; the title font is 34 px
+
+
+def wordmark():
+    """The F1 logo, as the title's first word on the boot and About pages: reference/logo/
+    f1-formula-1.svg (downloaded from logowik.com; a registered trademark of Formula One
+    Licensing B.V., used here by the project owner's choice - decision 44), cropped to its
+    ink and scaled to WORDMARK_H on black, the page colour. Needs rsvg-convert."""
+    src = os.path.join(OUT, "f1-formula-1.svg")
+    big = os.path.join("/tmp", "f1-formula-1-big.png")
+    try:
+        subprocess.run(["rsvg-convert", "-z", "4", "-b", "black", "-o", big, src], check=True)
+    except (OSError, subprocess.CalledProcessError):
+        print("  f1-wordmark.png        skipped (rsvg-convert not found)")
+        return
+    im = Image.open(big).convert("RGB")
+    im = im.crop(im.getbbox())
+    w = round(im.width * WORDMARK_H / im.height)
+    im.resize((w, WORDMARK_H), Image.LANCZOS).save(os.path.join(OUT, "f1-wordmark.png"))
+    print(f"  f1-wordmark.png        {w}x{WORDMARK_H}")
+
+
 def main():
     os.makedirs(OUT, exist_ok=True)
+    wordmark()
     sizes = [("f1-tracker-512.png", 512), ("boot-200.png", 200),
              ("web-64.png", 64), ("favicon-32.png", 32), ("favicon-16.png", 16)]
     for name, S in sizes:
