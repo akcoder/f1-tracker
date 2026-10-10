@@ -486,10 +486,11 @@ def _icon_button(d, G, wid, label, cp, size):
 def _settings_frame(ctx, page, tab, ids):
     """Header, the tab row and the panel origin - all read from the YAML."""
     G = ctx["geo"]
-    require(G, page, "tab_display", "tab_race", "tab_location", "btn_about",
+    require(G, page, "tab_display", "tab_race", "tab_location", "btn_about", "btn_update",
+            "settings_title",
             "pnl_display", "pnl_race", "pnl_location", "settings_err", *ids)
     img = Image.new("RGB", (W, H), BG); d = ImageDraw.Draw(img)
-    d.text((16, 14), "Settings", font=FONT[16], fill=ORANGE)
+    d.text((16, 14), ("DISPLAY", "RACE", "LOCATION")[tab], font=FONT[16], fill=ORANGE)   # names the open tab
     for x, w, col, lab in ((238, 110, (0x1A, 0x25, 0x47), "Cancel"),
                            (356, 110, BORDER, "Save")):
         d.rounded_rectangle([x, 8, x + w, 46], 6, fill=col)
@@ -498,20 +499,16 @@ def _settings_frame(ctx, page, tab, ids):
     mdi_path = os.path.join(ROOT, "tools", ".cache", "mdi.ttf")     # the firmware's MDI 7.4.47
     if os.path.exists(mdi_path):
         mdi = ImageFont.truetype(mdi_path, 18)
-    for i, (wid, lab, cp) in enumerate((("tab_display", "Display", 0xF0379),
-                                        ("tab_race", "Race", 0xF023C),
-                                        ("tab_location", "Location", 0xF034E))):
+    for i, (wid, cp) in enumerate((("tab_display", 0xF0379), ("tab_race", 0xF023C),
+                                   ("tab_location", 0xF034E))):
         x, y, w, h = box(G, wid)
         d.rounded_rectangle([x, y, x + w, y + h], 8, fill=BORDER if i == tab else (0x1A, 0x25, 0x47))
-        # icon, 8 px, label - centred as a pair, as the FLEX row does on the device
-        tw = d.textlength(lab, font=FONT[14])
-        iw = 18 if mdi else 0
-        gap = 8 if mdi else 0
-        x0 = x + (w - (iw + gap + tw)) / 2
-        if mdi:
-            d.text((x0, y + h // 2), chr(cp), font=mdi, fill=TEXT, anchor="lm")
-        d.text((x0 + iw + gap, y + h // 2), lab, font=FONT[14], fill=TEXT, anchor="lm")
-    _icon_button(d, G, "btn_about", "About", 0xF02FD, 14)
+        if mdi:      # icon only, centred (sky-tracker UI-16a)
+            d.text((x + w / 2, y + h / 2), chr(cp), font=mdi, fill=TEXT, anchor="mm")
+    for wid, lab in (("btn_update", "Upgrade Check"), ("btn_about", "About")):
+        x, y, w, h = box(G, wid)
+        d.rounded_rectangle([x, y, x + w, y + h], 8, fill=(0x1A, 0x25, 0x47))
+        d.text((x + w / 2, y + h / 2), lab, font=FONT[16], fill=TEXT, anchor="mm")
     px, py, pw, ph = box(G, ("pnl_display", "pnl_race", "pnl_location")[tab])
     return img, d, px, py
 
@@ -592,7 +589,7 @@ def _card(mode):
         line("Updating firmware", 16, 22, WHITE); line("Downloading", l1y, 16, (0xDC, 0xE4, 0xF8))
         line("Keep the power on", l2y, 16, (0xFF, 0xB5, 0x47))
         bx, by = x0 + (cw - c["BAR_W"]) // 2, y0 + c["BAR_Y"]
-        d.rounded_rectangle([bx, by, bx + c["BAR_W"], by + c["BAR_H"]], 8, fill=(0x22, 0x30, 0x5A))
+        d.rounded_rectangle([bx, by, bx + c["BAR_W"], by + c["BAR_H"]], 8, fill=(0x1A, 0x25, 0x47))
         d.rounded_rectangle([bx, by, bx + int(c["BAR_W"] * 0.42), by + c["BAR_H"]], 8, fill=BORDER)
         name = "overlay-update-installing"
     else:
@@ -698,7 +695,7 @@ def page_settings_race(ctx):
 def page_settings_location(ctx):
     G = ctx["geo"]
     img, d, px, py = _settings_frame(ctx, "page-9c-settings-location", 2,
-        ("ta_lat", "ta_lon", "btn_update", "settings_kb"))
+        ("ta_lat", "ta_lon", "settings_kb"))
     _row_icon(d, px, py, 10, 0xF0F57); d.text((px + 44, py + 10), "Latitude", font=FONT[14], fill=TEXT)
     _field(d, px, py, "ta_lat", G, "61.580")
     d.text((px + 320, py + 12), "N+  S-", font=FONT[12], fill=MUTED)
@@ -709,9 +706,6 @@ def page_settings_location(ctx):
         "Latitude and longitude set sunrise/sunset for auto-dim only.\n"
         "The time zone is fixed in firmware and does not follow them.",
         font=FONT[12], fill=MUTED, spacing=3)
-    x, y, w, h = box(G, "btn_update", px, py)
-    d.rounded_rectangle([x, y, x + w, y + h], 8, fill=(0x1A, 0x25, 0x47))
-    _pair(d, x, y, w, h, "Check for updates", 0xF0162, 14)
     # The keyboard covers the lower third while a field is being edited; draw it
     # so a panel row that slides under it shows up here rather than on a device.
     kx, ky, kw, kh = box(G, "settings_kb")

@@ -517,7 +517,10 @@ inline void settings_labels(lv_obj_t *lbl, int seconds) {
 
 // Settings tabs (7 / UI-16a): one panel visible at a time. The selected tab's
 // button takes the accent colour so the current panel is never ambiguous.
-inline void settings_tab(lv_obj_t *const pnl[3], lv_obj_t *const btn[3], int sel) {
+inline void settings_tab(lv_obj_t *const pnl[3], lv_obj_t *const btn[3], int sel,
+                         lv_obj_t *title = nullptr) {
+  static const char *const NAMES[3] = {"DISPLAY", "RACE", "LOCATION"};   // sky-tracker UI-16a
+  if (title != nullptr && sel >= 0 && sel < 3) lv_label_set_text(title, NAMES[sel]);
   for (int i = 0; i < 3; i++) {
     if (pnl[i] == nullptr || btn[i] == nullptr) continue;
     if (i == sel) lv_obj_remove_flag(pnl[i], LV_OBJ_FLAG_HIDDEN);
