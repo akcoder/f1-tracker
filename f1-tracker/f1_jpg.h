@@ -90,7 +90,7 @@ inline f1jpg_rom::out_ret_t out(f1jpg_rom::JDEC *jd, void *bitmap, f1jpg_rom::JR
 // a larger one is centred and cropped. The caller owns `dst` (tw*th pixels).
 inline const char *decode_half(const uint8_t *jpg, size_t len, uint16_t *dst, int tw, int th,
                                const Progress *pr = nullptr) {
-  static uint8_t pool[4096] __attribute__((aligned(4)));   // TJpgDec's work area (~3.1 KB)
+  uint8_t pool[4096] __attribute__((aligned(4)));   // TJpgDec's work area (~3.1 KB), on the caller's stack: two decodes can overlap
   Src s{jpg, len, 0, dst, tw, th, 0, 0, pr};
   f1jpg_rom::JDEC jd;
   std::memset(&jd, 0, sizeof(jd));
@@ -101,6 +101,43 @@ inline const char *decode_half(const uint8_t *jpg, size_t len, uint16_t *dst, in
   s.offx = (hw - tw) / 2;
   s.offy = (hh - th) / 2;
   r = f1jpg_rom::jd_decomp(&jd, out, 0);
+  if (pr && pr->cancel && *pr->cancel) return "cancelled";
+  if (r == 0 && pr && pr->rows) pr->rows(th, pr->ctx);
+  return r == 0 ? nullptr : "corrupt JPEG data";
+}
+
+
+// The picture 1:1 (the carousel card's 240x320 portrait). Same contract as decode_half.
+inline f1jpg_rom::out_ret_t out_full(f1jpg_rom::JDEC *jd, void *bitmap, f1jpg_rom::JRECT *r) {
+  Src *s = (Src *) jd->device;
+  const uint8_t *px = (const uint8_t *) bitmap;
+  for (int y = r->top; y <= r->bottom; y++) {
+    const int ty = y - s->offy;
+    for (int x = r->left; x <= r->right; x++, px += 3) {
+      const int tx = x - s->offx;
+      if (ty < 0 || ty >= s->th || tx < 0 || tx >= s->tw) continue;
+      s->dst[(size_t) ty * s->tw + tx] =
+          (uint16_t) ((px[0] >> 3) << 11 | (px[1] >> 2) << 5 | (px[2] >> 3));
+    }
+  }
+  if (s->pr && s->pr->rows && r->right + 1 >= (int) jd->width)
+    s->pr->rows(std::max(0, std::min(s->th, r->bottom + 1 - s->offy)), s->pr->ctx);
+  if (s->pr && s->pr->cancel && *s->pr->cancel) return 0;
+  return 1;
+}
+
+inline const char *decode_full(const uint8_t *jpg, size_t len, uint16_t *dst, int tw, int th,
+                               const Progress *pr = nullptr) {
+  uint8_t pool[4096] __attribute__((aligned(4)));
+  Src s{jpg, len, 0, dst, tw, th, 0, 0, pr};
+  f1jpg_rom::JDEC jd;
+  std::memset(&jd, 0, sizeof(jd));
+  f1jpg_rom::JRESULT r = f1jpg_rom::jd_prepare(&jd, in, pool, sizeof(pool), &s);
+  if (r != 0) return r == 8 || r == 7 ? "unsupported JPEG (progressive?)" : "not a readable JPEG";
+  if ((int) jd.width < tw || (int) jd.height < th) return "picture smaller than expected";
+  s.offx = ((int) jd.width - tw) / 2;
+  s.offy = ((int) jd.height - th) / 2;
+  r = f1jpg_rom::jd_decomp(&jd, out_full, 0);
   if (pr && pr->cancel && *pr->cancel) return "cancelled";
   if (r == 0 && pr && pr->rows) pr->rows(th, pr->ctx);
   return r == 0 ? nullptr : "corrupt JPEG data";

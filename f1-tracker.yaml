@@ -60,7 +60,8 @@ esphome:
     - f1-tracker/f1_json.h
     - f1-tracker/f1_store.h
     - f1-tracker/f1_order.h
-    - f1-tracker/f1_jpg.h          # the portrait, decoded top-down on the detail card
+    - f1-tracker/f1_jpg.h          # the portrait decoder (top-down)
+    - f1-tracker/f1_photo.h        # a portrait decoding in the background, redrawn as rows arrive
     - f1-tracker/f1_detail.h
     - f1-tracker/f1_net.h
     - f1-tracker/f1_app.h
@@ -1222,7 +1223,7 @@ lvgl:
             id: card_photo      # on a person with no attributable image (RACE-13e).
             src: pixel_img
             x: 24
-            y: 86
+            y: 56
             hidden: true
         - image:                # nationality / circuit country flag (6.6)
             id: card_flag

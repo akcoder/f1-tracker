@@ -81,6 +81,49 @@ int main() {
   CHECK(e2 != nullptr && std::strcmp(e2, "cancelled") == 0, "cancel gives 'cancelled', got %s", e2 ? e2 : "null");
   CHECK(cc.n < 20, "stopped soon after the cancel, %d reports", cc.n);
 
+  // The 1:1 decode (the carousel card): every portrait fills 240x320, bands never go
+  // backwards, the rows reported are final, and it cancels.
+  {
+    constexpr int FW = 240, FH = 320;
+    int bad = 0;
+    for (int i = 0; i < portraits::N; i++) {
+      const auto &p = portraits::P[i];
+      std::vector<uint16_t> a((size_t) FW * FH, SENTINEL), b((size_t) FW * FH, 0xEDCB);
+      if (jpg::decode_full(p.jpeg, p.len, a.data(), FW, FH) != nullptr ||
+          jpg::decode_full(p.jpeg, p.len, b.data(), FW, FH) != nullptr) { bad++; continue; }
+      for (size_t k = 0; k < a.size(); k++) if (a[k] != b[k]) { bad++; break; }
+    }
+    CHECK(bad == 0, "full decode: %d of %d portraits failed or left pixels unwritten", bad, portraits::N);
+
+    struct T { std::vector<int> rows; std::vector<std::vector<uint16_t>> snaps; const uint16_t *buf; } tt;
+    std::vector<uint16_t> fb((size_t) FW * FH, SENTINEL), fr((size_t) FW * FH, SENTINEL);
+    tt.buf = fb.data();
+    CHECK(jpg::decode_full(v->jpeg, v->len, fr.data(), FW, FH) == nullptr, "full reference");
+    jpg::Progress pf;
+    pf.ctx = &tt;
+    pf.rows = [](int done, void *c) { auto *t = (T *) c; t->rows.push_back(done);
+                                       t->snaps.emplace_back(t->buf, t->buf + (size_t) FW * FH); };
+    CHECK(jpg::decode_full(v->jpeg, v->len, fb.data(), FW, FH, &pf) == nullptr, "full progressive");
+    CHECK(fb == fr, "full: progressive result equals the plain decode");
+    CHECK(tt.rows.size() >= 10 && tt.rows.back() == FH, "full: bands reported, last is the whole picture");
+    bool ok = true;
+    for (size_t i = 0; i < tt.rows.size(); i++) {
+      if (i && tt.rows[i] < tt.rows[i - 1]) ok = false;
+      for (int y = 0; y < tt.rows[i] && y < FH && ok; y++)
+        if (std::memcmp(&tt.snaps[i][(size_t) y * FW], &fr[(size_t) y * FW], FW * 2) != 0) ok = false;
+    }
+    CHECK(ok, "full: bands in order and final");
+    volatile bool cn = false;
+    struct C2 { volatile bool *c; } c2{&cn};
+    jpg::Progress p3;
+    p3.ctx = &c2; p3.cancel = &cn;
+    p3.rows = [](int done, void *x) { if (done >= 64) *((C2 *) x)->c = true; };
+    std::vector<uint16_t> fc((size_t) FW * FH, SENTINEL);
+    const char *e3 = jpg::decode_full(v->jpeg, v->len, fc.data(), FW, FH, &p3);
+    CHECK(e3 && std::strcmp(e3, "cancelled") == 0, "full: cancel");
+    CHECK(fc[(size_t) (FH - 1) * FW + FW / 2] == SENTINEL, "full: nothing below the cancel point was written");
+  }
+
   // Bad input.
   const uint8_t junk[16] = {1, 2, 3};
   CHECK(jpg::decode_half(junk, sizeof(junk), buf.data(), TW, TH) != nullptr, "junk is refused");

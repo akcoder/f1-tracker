@@ -388,30 +388,44 @@ def page_circuit(ctx):
     return img, "page-4-circuit"
 
 
-def _profile_card(ctx, p, badge, name):
+def _age(dob, season):
+    """f1_ui.h age_from_dob(): the age in the season."""
+    try:
+        return int(season) - int(dob[:4]) if dob else 0
+    except ValueError:
+        return 0
+
+
+def _profile_card(ctx, p, badge, name, photo_rows=320):
     img = Image.new("RGB", (W, H), BG); d = ImageDraw.Draw(img)
     _card_head(img, d, ctx, badge, f"{p['given']} {p['family']}", p["iso3"])
     blob = ctx["por"][0].get(p["id"])
     credit = None
     if blob:
-        img.paste(Image.open(io.BytesIO(blob)), (24, 56))
+        # decoded top-down (f1_photo.h): rows not yet done are black, as the device's buffer starts
+        px, py, pw, ph_ = box(ctx["geo"], "card_photo")
+        d.rectangle([24, 56, 24 + 239, 56 + 319], fill=(0, 0, 0))
+        img.paste(Image.open(io.BytesIO(blob)).crop((0, 0, 240, photo_rows)), (24, 56))
         credit = f"photo: {ctx['por'][1].get(p['id'], '')}"[:58]
-    tx, y = 290, 60
-    if p["number"] and p["code"]:
-        d.text((tx, y), f"#{p['number']}  {p['code']}", font=FONT[14], fill=MUTED); y += 24
-    elif p["code"]:
-        d.text((tx, y), p["code"], font=FONT[14], fill=MUTED); y += 24
-    d.text((tx, y), f"{p['first']}-{p['last']}", font=FONT[14], fill=MUTED); y += 30
-    d.text((tx, y), f"{p['starts']} starts", font=FONT[14], fill=TEXT); y += 20
-    d.text((tx, y), f"{p['wins']} wins", font=FONT[14], fill=TEXT); y += 20
-    if p["poles"] >= 0:
-        d.text((tx, y), f"{p['poles']} poles", font=FONT[14], fill=TEXT); y += 20
+    # the text beside the portrait: the same lines f1_ui.h compose_profile() writes, in the
+    # card_body label (mono12, 7.2 px/char) moved to x 282, y 60, 190 px wide
+    tx, y, _, _ = 282, 60, 190, 0
+    cols = int(190 // 7.2)
+    lines = []
+    if p["number"] and p["code"]: lines.append(f"#{p['number']}  {p['code']}")
+    elif p["code"]: lines.append(p["code"])
+    eras = f"{p['first']}-{p['last']}" if p["first"] and p["last"] else ""
+    age = _age(p["dob"], ctx["cal"][0])
+    lines.append(eras + (f"   age {age}" if age else ""))
+    lines += ["", f"{p['starts']} starts   {p['wins']} wins" + (f"   {p['poles']} poles" if p["poles"] >= 0 else "")]
     if p["titles"]:
-        d.text((tx, y), f"{p['titles']} world title" + ("s" if p["titles"] > 1 else ""),
-               font=FONT[14], fill=ORANGE)
+        lines.append(f"{p['titles']} world title" + ("s" if p["titles"] > 1 else ""))
     if p["line"]:
-        d.multiline_text((16, 386), "\n".join(textwrap.wrap(p["line"], 62)),
-                         font=FONT[12], fill=TEXT, spacing=4)
+        lines += [""] + p["line"].split("\n")
+    wrapped = []
+    for ln in lines:
+        wrapped += textwrap.wrap(ln, cols) or [""]
+    d.multiline_text((tx, y), "\n".join(wrapped), font=FONT[12], fill=MUTED, spacing=4)
     footer(d, credit); gear(d)
     return img, name
 
@@ -419,6 +433,12 @@ def _profile_card(ctx, p, badge, name):
 def page_driver(ctx):
     p = next(x for x in ctx["drivers"] if x["id"] == "max_verstappen")
     return _profile_card(ctx, p, "DRIVER · LEGEND", "page-5-driver")
+
+
+def page_driver_loading(ctx):
+    """Part way through the decode: 128 of the 320 rows, top-down (f1_photo.h)."""
+    p = next(x for x in ctx["drivers"] if x["id"] == "max_verstappen")
+    return _profile_card(ctx, p, "DRIVER · LEGEND", "page-5b-driver-loading", photo_rows=128)
 
 
 def page_legend(ctx):
@@ -969,7 +989,7 @@ def main():
     print(f"geometry OK: map {my}-{my+mh}, top5 {ty}-{ty+th}, "
           f"banner {by}-{by+bh}, gear 432+")
 
-    pages = [page_wifi_loading, page_wifi_connecting, page_wifi_ap, page_race, page_order, page_circuit, page_driver, page_legend,
+    pages = [page_wifi_loading, page_wifi_connecting, page_wifi_ap, page_race, page_order, page_circuit, page_driver, page_driver_loading, page_legend,
              page_standings, page_summary, page_settings, page_settings_race,
              page_settings_location, page_about, page_debug, page_offseason,
              overlay_detail, overlay_detail_loading, overlay_alert, overlay_milestone,
