@@ -33,6 +33,7 @@ struct Entry {
 inline constexpr int MAX_ROUNDS = 26;
 inline constexpr int MAX_ENTRIES = 24;
 inline constexpr int MAX_STANDINGS = 24;
+inline constexpr int MAX_CONSTRUCTORS = 12;
 
 struct Standing {
   int pos = 0;
@@ -142,7 +143,7 @@ struct Store {
   Standing standings[MAX_STANDINGS];
   int n_standings = 0;
 
-  Constructor constructors[12];
+  Constructor constructors[MAX_CONSTRUCTORS];
   int n_constructors = 0;
   uint8_t standings_round = 0;    // which round the table is up to date through
   Summary summary;

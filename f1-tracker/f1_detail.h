@@ -12,8 +12,10 @@
 #include "f1_circuits.h"
 #include "f1_drivers.h"
 #include "f1_facts.h"
+#include "f1_photo.h"
 #include "f1_legends.h"
 #include "f1_map.h"
+#include "f1_portraits.h"
 #include "f1_state.h"
 #include "f1_store.h"
 
@@ -98,6 +100,33 @@ inline void compose_circuit(const circuits::Circuit &c, const calendar::Round *r
   if (r) std::snprintf(body + k, bn - k, "\n%-20s %s", "Country", r->country);
 }
 
+// ---- the portrait --------------------------------------------------------
+// 6.11: a driver's picture beside the text, half size (120x160, from the 240x320
+// portrait of decision 91), shown top-down as it decodes (f1_photo.h).
+inline constexpr int PHOTO_W = 120, PHOTO_H = 160;
+inline constexpr int TEXT_W_PHOTO = 280, TEXT_W_FULL = 408;
+
+inline photo::Photo ph;                 // the detail card's picture
+inline lv_obj_t *credit_lbl = nullptr;
+inline char credit_text[64] = {0};
+
+inline void photo_stop() {
+  photo::stop(ph);
+  if (credit_lbl) lv_obj_add_flag(credit_lbl, LV_OBJ_FLAG_HIDDEN);
+}
+// Returns true when a picture is on its way (the text then makes room for it).
+inline bool photo_start(const portraits::Portrait *p) {
+  photo_stop();
+  if (!photo::start(ph, p)) return false;
+  // decision 72: the credit is drawn wherever the photograph is
+  if (credit_lbl) {
+    std::snprintf(credit_text, sizeof(credit_text), "photo: %s", p->credit);
+    lv_label_set_text(credit_lbl, credit_text);
+    lv_obj_remove_flag(credit_lbl, LV_OBJ_FLAG_HIDDEN);
+  }
+  return true;
+}
+
 // ---- the panel -----------------------------------------------------------
 struct Card {
   lv_obj_t *panel = nullptr;
@@ -113,14 +142,21 @@ inline Card g;
 inline bool is_open() { return g.open; }
 
 inline void close() {
+  photo_stop();
   if (g.panel) lv_obj_add_flag(g.panel, LV_OBJ_FLAG_HIDDEN);
   g.open = false;
 }
 
-inline void show(const char *title, const char *body, const char *iso3) {
+inline void show(const char *title, const char *body, const char *iso3,
+                 const portraits::Portrait *photo = nullptr) {
   if (g.panel == nullptr) return;
   if (g.title) lv_label_set_text(g.title, title);
-  if (g.body) lv_label_set_text(g.body, body);
+  if (g.body) {
+    lv_label_set_text(g.body, body);
+    lv_obj_set_width(g.body, photo_start(photo) ? TEXT_W_PHOTO : TEXT_W_FULL);
+  } else {
+    photo_start(photo);
+  }
   if (g.flag) {
     const flags::Flag *f = (iso3 && *iso3) ? flags::find(iso3) : nullptr;
     if (f) {
@@ -141,8 +177,11 @@ inline void show(const char *title, const char *body, const char *iso3) {
   g.open = true;
 }
 
-inline void setup(lv_obj_t *panel, lv_obj_t *title, lv_obj_t *body, lv_obj_t *flag) {
+inline void setup(lv_obj_t *panel, lv_obj_t *title, lv_obj_t *body, lv_obj_t *flag,
+                  lv_obj_t *photo = nullptr, lv_obj_t *credit = nullptr) {
   g.panel = panel; g.title = title; g.body = body; g.flag = flag;
+  ph.w = PHOTO_W; ph.h = PHOTO_H; ph.half = true;
+  ph.img = photo; credit_lbl = credit;
   close();
 }
 

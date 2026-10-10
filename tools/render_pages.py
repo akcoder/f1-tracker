@@ -63,6 +63,17 @@ def flags():
     return out
 
 
+def team_iso3():
+    """The demonym -> ISO3 table of f1_store.h team_iso3(), so the render uses the firmware's own."""
+    s = _txt("f1_store.h")
+    body = s[s.index("inline const char *team_iso3"):]
+    body = body[:body.index("return \"\";   // decision 20")]
+    return dict(re.findall(r'\{"([^"]+)", "([A-Z]{3})"\}', body))
+
+
+TEAM_ISO3 = team_iso3()
+
+
 def profiles(fn):
     s = _txt(fn)
     rows = re.findall(r'\{"([a-z_0-9]+)", "([^"]*)", "([^"]*)", "([^"]*)", "([^"]*)", '
@@ -377,30 +388,44 @@ def page_circuit(ctx):
     return img, "page-4-circuit"
 
 
-def _profile_card(ctx, p, badge, name):
+def _age(dob, season):
+    """f1_ui.h age_from_dob(): the age in the season."""
+    try:
+        return int(season) - int(dob[:4]) if dob else 0
+    except ValueError:
+        return 0
+
+
+def _profile_card(ctx, p, badge, name, photo_rows=320):
     img = Image.new("RGB", (W, H), BG); d = ImageDraw.Draw(img)
     _card_head(img, d, ctx, badge, f"{p['given']} {p['family']}", p["iso3"])
     blob = ctx["por"][0].get(p["id"])
     credit = None
     if blob:
-        img.paste(Image.open(io.BytesIO(blob)), (24, 56))
+        # decoded top-down (f1_photo.h): rows not yet done are black, as the device's buffer starts
+        px, py, pw, ph_ = box(ctx["geo"], "card_photo")
+        d.rectangle([24, 56, 24 + 239, 56 + 319], fill=(0, 0, 0))
+        img.paste(Image.open(io.BytesIO(blob)).crop((0, 0, 240, photo_rows)), (24, 56))
         credit = f"photo: {ctx['por'][1].get(p['id'], '')}"[:58]
-    tx, y = 290, 60
-    if p["number"] and p["code"]:
-        d.text((tx, y), f"#{p['number']}  {p['code']}", font=FONT[14], fill=MUTED); y += 24
-    elif p["code"]:
-        d.text((tx, y), p["code"], font=FONT[14], fill=MUTED); y += 24
-    d.text((tx, y), f"{p['first']}-{p['last']}", font=FONT[14], fill=MUTED); y += 30
-    d.text((tx, y), f"{p['starts']} starts", font=FONT[14], fill=TEXT); y += 20
-    d.text((tx, y), f"{p['wins']} wins", font=FONT[14], fill=TEXT); y += 20
-    if p["poles"] >= 0:
-        d.text((tx, y), f"{p['poles']} poles", font=FONT[14], fill=TEXT); y += 20
+    # the text beside the portrait: the same lines f1_ui.h compose_profile() writes, in the
+    # card_body label (mono12, 7.2 px/char) moved to x 282, y 60, 190 px wide
+    tx, y, _, _ = 282, 60, 190, 0
+    cols = int(190 // 7.2)
+    lines = []
+    if p["number"] and p["code"]: lines.append(f"#{p['number']}  {p['code']}")
+    elif p["code"]: lines.append(p["code"])
+    eras = f"{p['first']}-{p['last']}" if p["first"] and p["last"] else ""
+    age = _age(p["dob"], ctx["cal"][0])
+    lines.append(eras + (f"   age {age}" if age else ""))
+    lines += ["", f"{p['starts']} starts   {p['wins']} wins" + (f"   {p['poles']} poles" if p["poles"] >= 0 else "")]
     if p["titles"]:
-        d.text((tx, y), f"{p['titles']} world title" + ("s" if p["titles"] > 1 else ""),
-               font=FONT[14], fill=ORANGE)
+        lines.append(f"{p['titles']} world title" + ("s" if p["titles"] > 1 else ""))
     if p["line"]:
-        d.multiline_text((16, 386), "\n".join(textwrap.wrap(p["line"], 62)),
-                         font=FONT[12], fill=TEXT, spacing=4)
+        lines += [""] + p["line"].split("\n")
+    wrapped = []
+    for ln in lines:
+        wrapped += textwrap.wrap(ln, cols) or [""]
+    d.multiline_text((tx, y), "\n".join(wrapped), font=FONT[12], fill=MUTED, spacing=4)
     footer(d, credit); gear(d)
     return img, name
 
@@ -408,6 +433,12 @@ def _profile_card(ctx, p, badge, name):
 def page_driver(ctx):
     p = next(x for x in ctx["drivers"] if x["id"] == "max_verstappen")
     return _profile_card(ctx, p, "DRIVER · LEGEND", "page-5-driver")
+
+
+def page_driver_loading(ctx):
+    """Part way through the decode: 128 of the 320 rows, top-down (f1_photo.h)."""
+    p = next(x for x in ctx["drivers"] if x["id"] == "max_verstappen")
+    return _profile_card(ctx, p, "DRIVER · LEGEND", "page-5b-driver-loading", photo_rows=128)
 
 
 def page_legend(ctx):
@@ -420,18 +451,24 @@ def page_standings(ctx):
             "constructors_hdr", "constructors_body", "champ_line")
     img = Image.new("RGB", (W, H), BG); d = ImageDraw.Draw(img)
     d.text((10, 4), "Championship", font=FONT[16], fill=ORANGE)
-    d.text((12, 32), "Pos Driver    Pts", font=FONT[12], fill=MUTED)
+    d.text((12, 32), "Pos     Driver      Pts", font=FONT[12], fill=MUTED)
+    LH = 16          # mono12's line height; the firmware places the flags on the label's own pitch
+    cw = d.textlength("0", font=FONT[12])
     y = 52
-    for s in ctx["standings"][:17]:
-        d.text((12, y), f"{s['pos']:>2}  {s['name'][:10]:<10} {s['points']:>4}"
-               + ("  W" if s["wins"] else ""), font=FONT[12], fill=TEXT)
-        y += 21
+    for s in ctx["standings"][:22]:
+        d.text((12, y), f"{s['pos']:>2}      {s['name'][:10]:<10} {s['points']:>4}"
+               + (" W" if s["wins"] else ""), font=FONT[12], fill=TEXT)
+        if s.get("iso3") in ctx["flags"]:    # between the position and the name, by driverId
+            img.paste(ctx["flags"][s["iso3"]], (int(12 + 3 * cw), y + (LH - 12) // 2))
+        y += LH
     d.text((278, 32), "Constructors", font=FONT[12], fill=MUTED)
     y = 52
     for c in ctx["constructors"][:11]:
-        d.text((278, y), f"{c['pos']:>2}  {c['name'][:12]:<12} {c['points']:>4}",
+        d.text((278, y), f"{c['pos']:>2}      {c['name'][:13]:<13} {c['points']:>4}",
                font=FONT[12], fill=TEXT)
-        y += 21
+        if c.get("iso3") in ctx["flags"]:    # the team's nationality flag (store.h team_iso3)
+            img.paste(ctx["flags"][c["iso3"]], (int(278 + 3 * cw), y + (LH - 12) // 2))
+        y += LH
     # 8.1: blank for most of a season on purpose
     if ctx.get("champ_line"):
         d.text((12, 430), ctx["champ_line"], font=FONT[14], fill=(0xFF, 0xD5, 0x4A))
@@ -727,6 +764,115 @@ def page_settings_location(ctx):
     return img, "page-9c-settings-location"
 
 
+def anim_consts():
+    """The animation's geometry and timing, read from f1_anim.h / f1_animlogic.h."""
+    a = _txt("f1_anim.h"); b = _txt("f1_animlogic.h")
+    c = {}
+    for src in (a, b):
+        for m in re.finditer(r"constexpr (?:int32_t|int|uint32_t|float) ([^;]+);", src):
+            for part in m.group(1).split(","):
+                k, _, v = part.partition("=")
+                v = v.strip().rstrip("f")
+                try:
+                    c[k.strip()] = int(v, 0) if v.lower().startswith("0x") or v.lstrip("-").isdigit() else float(v)
+                except ValueError:
+                    pass
+    m = re.search(r"CAR_COL\[[^\]]*\] = \{([^}]*)\}", a)
+    if m:
+        for k, v in enumerate(m.group(1).split(",")):
+            c["CAR_COL%d" % k] = int(v.strip(), 16)
+    c["OUT_MS"] = c["N_LIGHTS"] * c["STEP_MS"] + c["HOLD_MS"]
+    need = ("BOOT_LAMP_D", "BOOT_LAMP_GAP", "BOOT_LAMP_Y", "ABOUT_LAMP_D", "ABOUT_LAMP_GAP",
+            "ABOUT_LAMP_DY", "CAR_D", "LAMP_OFF", "LAMP_ON", "STEP_MS", "HOLD_MS", "LAP_MS", "N_LIGHTS",
+            "N_TRAIL", "TRAIL_LAG", "BOOT_LOGO", "ABOUT_LOGO", "ABOUT_PERIOD_MS", "CAR_COL0")
+    missing = [k for k in need if k not in c]
+    if missing:
+        raise DriftError(f"f1_anim.h / f1_animlogic.h no longer define {missing}")
+    return c
+
+
+def _lap(size):
+    """The Monza trace as the logo lays it out (gen_logo.layout), closed, with arc lengths."""
+    sys.path.insert(0, os.path.join(ROOT, "tools"))
+    import gen_logo
+    pts = gen_logo.layout(float(size)); pts.append(pts[0])
+    cum = [0.0]
+    for (x0, y0), (x1, y1) in zip(pts, pts[1:]):
+        cum.append(cum[-1] + math.hypot(x1 - x0, y1 - y0))
+    return pts, cum
+
+
+def _lap_at(track, frac):
+    pts, cum = track
+    frac -= math.floor(frac)
+    sdist = frac * cum[-1]
+    i = 1
+    while i < len(pts) - 1 and cum[i] < sdist:
+        i += 1
+    seg = cum[i] - cum[i - 1]
+    u = (sdist - cum[i - 1]) / seg if seg else 0
+    return (pts[i - 1][0] + (pts[i][0] - pts[i - 1][0]) * u, pts[i - 1][1] + (pts[i][1] - pts[i - 1][1]) * u)
+
+
+def _hex(v): return ((v >> 16) & 255, (v >> 8) & 255, v & 255)
+
+
+def _anim(img, c, logo_xy, size, lamp_d, lamp_gap, lamp_cy, t_ms, about):
+    """Draw the start lights and the car at `t_ms` into the sequence, as f1_anim.h does."""
+    d = ImageDraw.Draw(img)
+    lt = t_ms % c["ABOUT_PERIOD_MS"] if about else t_ms
+    step, n = c["STEP_MS"], int(c["N_LIGHTS"])
+    lit = 0 if lt < step or lt >= c["OUT_MS"] else min(n, lt // step)
+    if 0 <= lt < c["OUT_MS"] + 500:
+        span = (n - 1) * lamp_gap
+        for i in range(n):
+            cx = 240 - span / 2 + i * lamp_gap
+            col = _hex(c["LAMP_ON"] if i < lit else c["LAMP_OFF"])
+            d.ellipse([cx - lamp_d / 2, lamp_cy - lamp_d / 2, cx + lamp_d / 2, lamp_cy + lamp_d / 2], fill=col)
+    track = _lap(size)
+    f = (t_ms % c["LAP_MS"]) / c["LAP_MS"]
+    cols = [c["CAR_COL%d" % k] for k in range(int(c["N_TRAIL"]) + 1)]
+    for k in range(int(c["N_TRAIL"]), -1, -1):                 # tail first, the head on top
+        x, y = _lap_at(track, f - k * c["TRAIL_LAG"])
+        r = (c["CAR_D"] - 2 * k) / 2
+        d.ellipse([logo_xy[0] + x - r, logo_xy[1] + y - r, logo_xy[0] + x + r, logo_xy[1] + y + r],
+                  fill=_hex(cols[k]))
+
+
+def _anim_boot(ctx, t_ms):
+    c = anim_consts()
+    img, _ = page_wifi(ctx, "connecting")
+    _anim(img, c, ((W - 200) // 2, 40), 200, c["BOOT_LAMP_D"], c["BOOT_LAMP_GAP"], c["BOOT_LAMP_Y"], t_ms, False)
+    return img
+
+
+def _anim_about(ctx, t_ms):
+    c = anim_consts()
+    img, _ = page_about(ctx)
+    mx, my, _, _ = box(ctx["geo"], "about_mark")
+    _anim(img, c, (mx, my), 112, c["ABOUT_LAMP_D"], c["ABOUT_LAMP_GAP"], my + 56 + c["ABOUT_LAMP_DY"], t_ms, True)
+    return img
+
+
+def page_boot_lights(ctx):
+    return _anim_boot(ctx, 2100), "page-1d-boot-lights"
+
+
+def page_boot_strip(ctx):
+    """Four moments of the boot sequence side by side: 1 light, 3, 5, then lights out."""
+    c = anim_consts()
+    ts = [c["STEP_MS"] * 1 + 100, c["STEP_MS"] * 3 + 100, c["STEP_MS"] * 5 + 400, c["OUT_MS"] + 250]
+    frames = [_anim_boot(ctx, t).crop((60, 20, 420, 440)) for t in ts]
+    out = Image.new("RGB", (360 * 4 + 12, 420), (0x20, 0x20, 0x20))
+    for i, f in enumerate(frames):
+        out.paste(f, (i * 364, 0))
+    return out, "boot-lights-strip"
+
+
+def page_about_lights(ctx):
+    return _anim_about(ctx, 3300), "page-12b-about-lights"
+
+
 def page_debug(ctx):
     require(ctx["geo"], "page-10-debug", "debug_label")
     img = Image.new("RGB", (W, H), BG); d = ImageDraw.Draw(img)
@@ -751,27 +897,53 @@ def page_debug(ctx):
     return img, "page-10-debug"
 
 
-def overlay_detail(ctx):
-    require(ctx["geo"], "overlay-detail-card", "detail_panel", "detail_title",
-            "detail_body", "detail_flag")
+def _detail_card(ctx, name, photo_rows):
+    """The detail card with the portrait beside the text. `photo_rows` of the 160 are
+    decoded; the rest are black, the card's colour - as on the device while it decodes."""
+    require(ctx["geo"], name, "detail_panel", "detail_title", "detail_body", "detail_flag",
+            "detail_photo", "detail_credit")
+    G = ctx["geo"]
     img, _ = page_order(ctx)
     d = ImageDraw.Draw(img, "RGBA")
     d.rectangle([0, 0, W, H], fill=(0, 0, 0, 150))
     d.rounded_rectangle([20, 40, 460, 440], 12, fill=PANEL, outline=BORDER, width=2)
+    px0, py0 = 20, 40                       # the panel's origin: every child is relative to it
     p = next(x for x in ctx["drivers"] if x["id"] == "max_verstappen")
-    d.text((36, 52), f"{p['given']} {p['family']}", font=FONT[18], fill=ORANGE)
+    d.text((px0 + 16, py0 + 12), f"{p['given']} {p['family']}", font=FONT[18], fill=ORANGE)
     if p["iso3"] in ctx["flags"]:
         img.paste(ctx["flags"][p["iso3"]].resize((32, 24), Image.NEAREST), (412, 56))
+    # the text keeps to 280 px beside the portrait (f1_detail.h TEXT_W_PHOTO), mono14 = 8.4 px/char
+    cols = int(280 // 8.4)
     body = (f"#{p['number']}  {p['code']}   Red Bull Racing\n\n"
             f"{'Starts (provisional)':<20} P8\n"
             f"{'Gap':<20} +5.848\n\n"
             f"{'Career starts':<20} {p['starts']}\n"
             f"{'Wins':<20} {p['wins']}\n"
             f"{'Poles':<20} {p['poles']}\n"
-            f"{'World titles':<20} {p['titles']}\n\n" + "\n".join(textwrap.wrap(p["line"], 48)))
-    d.multiline_text((36, 90), body, font=FONT[14], fill=TEXT, spacing=5)
+            f"{'World titles':<20} {p['titles']}\n\n" + "\n".join(textwrap.wrap(p["line"], cols)))
+    bx, by, _, _ = box(G, "detail_body", px0, py0)
+    d.multiline_text((bx, by), body, font=FONT[14], fill=TEXT, spacing=5)
+    # the portrait: half size, a 2x2 box average of the 240x320 JPEG (f1_jpg.h)
+    jpg = ctx["por"][0].get(p["id"])
+    fx, fy, _, _ = box(G, "detail_photo", px0, py0)
+    if jpg:
+        full = Image.open(io.BytesIO(jpg)).convert("RGB").resize((120, 160), Image.BOX)
+        d.rectangle([fx, fy, fx + 119, fy + 159], fill=(0, 0, 0))      # the buffer starts black
+        img.paste(full.crop((0, 0, 120, photo_rows)), (fx, fy))
+        cx, cy, cw, _ = box(G, "detail_credit", px0, py0)
+        credit = textwrap.wrap("photo: " + ctx["por"][1][p["id"]], int(cw // 7.2))
+        d.multiline_text((cx, cy), "\n".join(credit), font=FONT[12], fill=MUTED, spacing=2)
     d.text((240, 420), "tap anywhere to close", font=FONT[12], fill=DIM, anchor="mm")
-    return img, "overlay-detail-card"
+    return img, name
+
+
+def overlay_detail(ctx):
+    return _detail_card(ctx, "overlay-detail-card", 160)
+
+
+def overlay_detail_loading(ctx):
+    """Part way through the decode: the rows done so far, top-down (f1_jpg.h)."""
+    return _detail_card(ctx, "overlay-detail-card-loading", 64)
 
 
 def overlay_alert(ctx):
@@ -874,13 +1046,17 @@ def main():
     cj = json.load(open(os.path.join(SAMP, "jolpica-constructor-standings.json")))
     cl = cj["MRData"]["StandingsTable"]["StandingsLists"][0]["ConstructorStandings"]
     constructors = [dict(pos=int(x["position"]), points=int(float(x["points"])),
-                         name=x["Constructor"]["name"]) for x in cl]
+                         name=x["Constructor"]["name"],
+                         iso3=TEAM_ISO3.get(x["Constructor"].get("nationality", ""), ""))
+                    for x in cl]
 
     sj = json.load(open(os.path.join(SAMP, "jolpica-driver-standings.json")))
     sl = sj["MRData"]["StandingsTable"]["StandingsLists"][0]["DriverStandings"]
     standings = [dict(pos=int(x["position"]), points=int(float(x["points"])),
                       wins=int(x["wins"]), name=x["Driver"]["familyName"].upper(),
-                      team=x["Constructors"][0]["name"]) for x in sl]
+                      team=x["Constructors"][0]["name"],
+                      iso3=next((q["iso3"] for q in drv if q["id"] == x["Driver"]["driverId"]), ""))
+                 for x in sl]
 
     fa = json.load(open(os.path.join(SAMP, "jolpica-last-fastest.json")))["MRData"]["RaceTable"]["Races"][0]
     ps = json.load(open(os.path.join(SAMP, "jolpica-last-pitstops.json")))["MRData"]["RaceTable"]["Races"][0]["PitStops"]
@@ -922,10 +1098,10 @@ def main():
     print(f"geometry OK: map {my}-{my+mh}, top5 {ty}-{ty+th}, "
           f"banner {by}-{by+bh}, gear 432+")
 
-    pages = [page_wifi_loading, page_wifi_connecting, page_wifi_ap, page_race, page_order, page_circuit, page_driver, page_legend,
+    pages = [page_wifi_loading, page_wifi_connecting, page_wifi_ap, page_race, page_order, page_circuit, page_driver, page_driver_loading, page_legend,
              page_standings, page_summary, page_settings, page_settings_race,
-             page_settings_location, page_about, page_debug, page_offseason,
-             overlay_detail, overlay_alert, overlay_milestone,
+             page_settings_location, page_about, page_about_lights, page_boot_lights, page_boot_strip, page_debug, page_offseason,
+             overlay_detail, overlay_detail_loading, overlay_alert, overlay_milestone,
              page_race_with_icon, overlay_update_checking, overlay_update_available,
              overlay_update_installing, overlay_update_failed]
     made = []

@@ -54,12 +54,16 @@ esphome:
     - f1-tracker/f1_sun.h
     - f1-tracker/f1_updlogic.h
     - f1-tracker/f1_update.h
+    - f1-tracker/f1_animlogic.h
+    - f1-tracker/f1_anim.h         # animated logos: start lights and a car lapping the circuit
     - f1-tracker/f1_map.h
     - f1-tracker/f1_state.h
     - f1-tracker/f1_watch.h
     - f1-tracker/f1_json.h
     - f1-tracker/f1_store.h
     - f1-tracker/f1_order.h
+    - f1-tracker/f1_jpg.h          # the portrait decoder (top-down)
+    - f1-tracker/f1_photo.h        # a portrait decoding in the background, redrawn as rows arrive
     - f1-tracker/f1_detail.h
     - f1-tracker/f1_net.h
     - f1-tracker/f1_app.h
@@ -147,10 +151,11 @@ esphome:
                          "%s", TEAMS[i]);
             }
             f1::detail::setup(id(detail_panel), id(detail_title), id(detail_body),
-                              id(detail_flag));
+                              id(detail_flag), id(detail_photo), id(detail_credit));
             f1::upd::set_source("https://github.com/akcoder/f1-tracker/releases/latest/download/manifest.json");
             f1::upd::init(id(fw_update), id(setup_title)->get_lv_font(), id(mono16)->get_lv_font(),
                           id(mono12)->get_lv_font(), &lv_font_montserrat_28);   // UI-68
+            f1::anim::init(id(wifi_page)->obj, id(boot_mark), id(about_page)->obj, id(about_mark));
             f1::net::start();                 // the data task, pinned to core 1
             lv_label_set_text(id(wifi_title), "Connecting to Wi-Fi");   // BOOT-2: start-up done
 
@@ -882,6 +887,21 @@ lvgl:
                 y: 16
                 src: pixel_img
                 hidden: true
+            - image:                # the portrait, half size (120x160), shown top-down
+                id: detail_photo      # as it decodes; hidden for a person without one
+                x: 304
+                y: 48
+                src: pixel_img
+                hidden: true
+            - label:                # decision 72: the photographer, wherever the photo shows
+                id: detail_credit
+                x: 304
+                y: 212
+                width: 120
+                text: ""
+                text_font: mono12
+                text_color: 0x7E8BB3
+                hidden: true
             - label:
                 id: detail_body
                 x: 16
@@ -1206,7 +1226,7 @@ lvgl:
             id: card_photo      # on a person with no attributable image (RACE-13e).
             src: pixel_img
             x: 24
-            y: 86
+            y: 56
             hidden: true
         - image:                # nationality / circuit country flag (6.6)
             id: card_flag
@@ -1261,7 +1281,7 @@ lvgl:
             id: standings_hdr
             x: 12
             y: 32
-            text: "Pos Driver     Team             Pts"
+            text: "Pos     Driver      Pts"
             text_font: mono12
             text_color: 0x7E8BB3
         - label:

@@ -44,6 +44,32 @@ static const char *const TAG = "f1_web";
 inline char *page = nullptr;
 inline size_t page_len = 0;
 
+#define PROJECT_URL "https://github.com/akcoder/f1-tracker"
+
+// The header logo already sits inside the page's own link (to ESPHome's web API docs);
+// point that at the project page instead, as sky-tracker does at build time (its
+// __init__.py patches the same anchor). The SVG itself is swapped separately, above.
+// A page worded differently is left as it is.
+inline void link_logo() {
+  static const char OLD[] = "href=\"https://esphome.io/web-api\" id=\"logo\"";
+  static const char NEW[] = "href=\"" PROJECT_URL "\" id=\"logo\" target=\"_blank\" rel=\"noopener\"";
+  const std::string_view all(page, page_len);
+  const size_t at = all.find(OLD);
+  if (at == std::string_view::npos) {
+    ESP_LOGW(TAG, "logo link not found; it stays as ESPHome has it");
+    return;
+  }
+  const size_t olen = sizeof(OLD) - 1, nlen = sizeof(NEW) - 1, len = page_len - olen + nlen;
+  auto *np = (char *) heap_caps_malloc(len, MALLOC_CAP_SPIRAM);
+  if (np == nullptr) return;
+  std::memcpy(np, page, at);
+  std::memcpy(np + at, NEW, nlen);
+  std::memcpy(np + at + nlen, page + at + olen, page_len - at - olen);
+  heap_caps_free(page);
+  page = np;
+  page_len = len;
+}
+
 // Inflate ESPHome's page and put our mark in. Returns false - and serves
 // nothing of its own - on any doubt.
 inline bool build() {
@@ -128,6 +154,7 @@ inline bool build() {
          a2 = all.find(SEL, a2 + 1), n++)
       std::memcpy(page + a2 + 11, "none", 4);
     if (n == 0) ESP_LOGW(TAG, "app icon selector not found; the app may replace the icon");
+    link_logo();
   }
   heap_caps_free(raw);
   return page != nullptr;

@@ -59,6 +59,10 @@ struct App {
   uint32_t data_gen = 0;        // generation we have rendered
   lv_obj_t *standings_rows = nullptr;
   lv_obj_t *standings_label = nullptr;
+  lv_obj_t *st_flag[store::MAX_STANDINGS] = {nullptr};   // 8.1: a flag beside each driver
+  lv_image_dsc_t st_dsc[store::MAX_STANDINGS]{};
+  lv_obj_t *ct_flag[store::MAX_CONSTRUCTORS] = {nullptr};
+  lv_image_dsc_t ct_dsc[store::MAX_CONSTRUCTORS]{};
   // The top-5 strip's widgets, built once in setup().
   lv_obj_t *t5_bar[5] = {nullptr};
   lv_obj_t *t5_flag[5] = {nullptr};
@@ -322,7 +326,8 @@ inline void open_driver(int idx) {
   char title[48], body[480];
   detail::compose_driver(e, prof, leg, g.data.entries_mode, title, sizeof(title),
                          body, sizeof(body));
-  detail::show(title, body, prof ? prof->iso3 : e.iso3);
+  detail::show(title, body, prof ? prof->iso3 : e.iso3,
+               prof ? portraits::find(prof->driver_id) : nullptr);
 }
 
 // Tapping the map opens the circuit card (6.11).
@@ -341,6 +346,61 @@ inline void open_circuit() {
 // ---- the tick -----------------------------------------------------------
 // Pull a new snapshot only when the data task says the generation moved. A
 // fetch must never block rendering, and the lock is held for a memcpy only.
+// 8.1: a flag beside each row of a championship table (drivers, constructors). The
+// images are made once, as children of the label's page, and placed on the label's own
+// line pitch so they follow the text. `iso3[i]` null or unknown = no flag (decision 20:
+// none beats a wrong one). The flag sits `col` characters in.
+inline void place_flags(lv_obj_t *lbl, lv_obj_t **img, lv_image_dsc_t *dsc, const char *const *iso3,
+                        int n, int cap, int col) {
+  if (lbl == nullptr) return;
+  lv_obj_t *page = lv_obj_get_parent(lbl);
+  const lv_font_t *font = lv_obj_get_style_text_font(lbl, LV_PART_MAIN);
+  const int pitch = lv_font_get_line_height(font) + lv_obj_get_style_text_line_space(lbl, LV_PART_MAIN);
+  const int x = lv_obj_get_x(lbl) + col * lv_font_get_glyph_width(font, '0', '0');
+  for (int i = 0; i < cap; i++) {
+    const flags::Flag *f = (i < n && iso3[i] && iso3[i][0]) ? flags::find(iso3[i]) : nullptr;
+    if (f == nullptr) {
+      if (img[i] != nullptr) lv_obj_add_flag(img[i], LV_OBJ_FLAG_HIDDEN);
+      continue;
+    }
+    if (img[i] == nullptr) {
+      img[i] = lv_image_create(page);
+      lv_obj_remove_flag(img[i], LV_OBJ_FLAG_CLICKABLE);
+    }
+    auto &d = dsc[i];
+    d.header.magic = LV_IMAGE_HEADER_MAGIC;
+    d.header.cf = LV_COLOR_FORMAT_RGB565;
+    d.header.w = flags::CARD_W;
+    d.header.h = flags::CARD_H;
+    d.header.stride = flags::CARD_W * 2;
+    d.data_size = flags::CARD_W * flags::CARD_H * 2;
+    d.data = (const uint8_t *) f->card;
+    lv_image_set_src(img[i], &d);
+    lv_obj_set_pos(img[i], x, lv_obj_get_y(lbl) + i * pitch + (pitch - flags::CARD_H) / 2);
+    lv_obj_remove_flag(img[i], LV_OBJ_FLAG_HIDDEN);
+  }
+}
+
+// Drivers: the flag comes from the compiled driver table by driverId (DATA-6).
+inline void update_standing_flags() {
+  const char *iso[store::MAX_STANDINGS] = {nullptr};
+  for (int i = 0; i < g.data.n_standings && i < store::MAX_STANDINGS; i++) {
+    const char *id = g.data.standings[i].driver_id;
+    for (int k = 0; k < drivers::N && id[0]; k++)
+      if (std::strcmp(drivers::P[k].driver_id, id) == 0) { iso[i] = drivers::P[k].iso3; break; }
+  }
+  place_flags(g.w.standings, g.st_flag, g.st_dsc, iso, g.data.n_standings, store::MAX_STANDINGS, 3);
+}
+
+// Constructors: the team's nationality flag, from the demonym Jolpica gives (store.h).
+inline void update_constructor_flags() {
+  const char *iso[store::MAX_CONSTRUCTORS] = {nullptr};
+  for (int i = 0; i < g.data.n_constructors && i < store::MAX_CONSTRUCTORS; i++)
+    iso[i] = g.data.constructors[i].iso3;
+  place_flags(g.w.constructors, g.ct_flag, g.ct_dsc, iso, g.data.n_constructors,
+              store::MAX_CONSTRUCTORS, 3);
+}
+
 inline void refresh_data() {
   const uint32_t gen = net::snapshot(g.data);
   if (gen == g.data_gen) return;
@@ -436,10 +496,11 @@ inline void refresh_data() {
     int k = 0;
     for (int i = 0; i < g.data.n_constructors && k < (int) sizeof(b) - 40; i++) {
       const auto &c = g.data.constructors[i];
-      k += std::snprintf(b + k, sizeof(b) - k, "%2d  %-16s %4d\n",
+      k += std::snprintf(b + k, sizeof(b) - k, "%2d      %-13.13s %4d\n",
                          c.pos, c.name, c.points);
     }
     lv_label_set_text(g.w.constructors, b);
+    update_constructor_flags();
   }
 
   // 8.1: the permutation line. It stays BLANK for most of a season on purpose -
@@ -464,15 +525,17 @@ inline void refresh_data() {
   }
 
   if (g.data.n_standings > 0 && g.w.standings) {
+    // The flag column sits between the position and the name: 6 spaces after the
+    // position leave room for a 16 px flag at the third character.
     char b[900];
     int k = 0;
     for (int i = 0; i < g.data.n_standings && k < (int) sizeof(b) - 48; i++) {
       const auto &s2 = g.data.standings[i];
-      k += std::snprintf(b + k, sizeof(b) - k, "%2d  %-10s %-14s %4d %s\n",
-                         s2.pos, s2.name, s2.team, s2.points,
-                         s2.wins ? "W" : " ");
+      k += std::snprintf(b + k, sizeof(b) - k, "%2d      %-10s %4d %s\n",
+                         s2.pos, s2.name, s2.points, s2.wins ? "W" : " ");
     }
     lv_label_set_text(g.w.standings, b);
+    update_standing_flags();
   }
 }
 

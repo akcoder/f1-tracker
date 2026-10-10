@@ -17,6 +17,7 @@
 #include "f1_flags.h"
 #include "f1_legends.h"
 #include "f1_map.h"
+#include "f1_photo.h"
 #include "f1_portraits.h"
 #include "f1_roster.h"
 
@@ -63,6 +64,7 @@ struct State {
   int staged_attempts = 0;
   lv_image_dsc_t flag_dsc{};
   const portraits::Portrait *staged_photo = nullptr;
+  photo::Photo card_photo{240, 320};                // the carousel card's portrait, full size
   char staged_badge[12] = {0};
   char staged_title[48] = {0};
   char staged_body[320] = {0};
@@ -370,7 +372,15 @@ inline void commit() {
     lv_obj_set_style_text_color(
         g.w.title, lv_color_hex(g.staged_birthday ? 0xFFD54A : 0xC9D3F2), 0);
   }
-  if (g.w.body) lv_label_set_text(g.w.body, g.staged_body);
+  if (g.w.body) {
+    lv_label_set_text(g.w.body, g.staged_body);
+    // 6.4: a circuit's text sits under its map; a person's sits beside the portrait
+    // (24,56 - 240x320), or fills the width when there is none. Without this the
+    // text lay across the picture.
+    if (g.staged_circuit) { lv_obj_set_pos(g.w.body, 12, 300); lv_obj_set_width(g.w.body, 456); }
+    else if (g.staged_photo) { lv_obj_set_pos(g.w.body, 282, 60); lv_obj_set_width(g.w.body, 190); }
+    else { lv_obj_set_pos(g.w.body, 12, 60); lv_obj_set_width(g.w.body, 456); }
+  }
 
   if (g.w.flag != nullptr) {
     const flags::Flag *f = g.staged_iso3 ? flags::find(g.staged_iso3) : nullptr;
@@ -411,9 +421,18 @@ inline void commit() {
   }
   // RACE-13e: a person with no portrait gets a text-only card rather than
   // being skipped. The frame is hidden, not left empty.
+  // The portrait appears top-down as it decodes (f1_photo.h); the previous card's
+  // decode, if still running, is cancelled first. A picture that cannot be had
+  // (no memory, no task) leaves a text-only card.
   if (g.w.photo) {
-    if (!is_circuit && g.staged_photo) lv_obj_remove_flag(g.w.photo, LV_OBJ_FLAG_HIDDEN);
-    else lv_obj_add_flag(g.w.photo, LV_OBJ_FLAG_HIDDEN);
+    g.card_photo.img = g.w.photo;
+    if (!is_circuit && g.staged_photo) {
+      if (!photo::start(g.card_photo, g.staged_photo)) {
+        lv_obj_add_flag(g.w.credit, LV_OBJ_FLAG_HIDDEN);   // no photo, so no credit
+      }
+    } else {
+      photo::stop(g.card_photo);
+    }
   }
 }
 
