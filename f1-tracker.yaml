@@ -1368,12 +1368,13 @@ lvgl:
             lv_obj_add_flag(id(settings_kb)->obj, LV_OBJ_FLAG_HIDDEN);
             lv_obj_t *pnl[3] = {id(pnl_display), id(pnl_race), id(pnl_location)};
             lv_obj_t *btn[3] = {id(tab_display), id(tab_race), id(tab_location)};
-            f1::ui::settings_tab(pnl, btn, 0);
+            f1::ui::settings_tab(pnl, btn, 0, id(settings_title));
       widgets:
-        - label:
+        - label:                # UI-16a (sky-tracker): the header names the open tab
+            id: settings_title
             x: 16
             y: 14
-            text: "Settings"
+            text: "DISPLAY"
             text_font: mono16
             text_color: 0xFF8A1F
         - button:
@@ -1460,96 +1461,60 @@ lvgl:
 
         - button:
             id: tab_display
-            x: 16
-            y: 54
-            width: 144
-            height: 34
+            x: 4
+            y: 52
+            width: 152
+            height: 44
             radius: 8
             bg_color: 0x1A2547
             shadow_width: 0
             widgets:
-              - obj:
-                  align: CENTER
-                  width: SIZE_CONTENT
-                  height: SIZE_CONTENT
-                  bg_opa: TRANSP
-                  border_width: 0
-                  pad_all: 0
-                  clickable: false
-                  scrollable: false
-                  layout: {type: FLEX, flex_flow: ROW, flex_align_cross: CENTER, pad_column: 8}
-                  widgets:
-                    - label: {text: "\U000F0379", text_font: mdi18, text_color: 0xC9D3F2}
-                    - label: {text: "Display", text_font: mono14, text_color: 0xC9D3F2}
+              - label: {text: "\U000F0379", align: CENTER, text_font: mdi18, text_color: 0xC9D3F2}
             on_click:
               - lambda: |-
                   lv_obj_add_flag(id(settings_kb)->obj, LV_OBJ_FLAG_HIDDEN);
                   lv_obj_t *pnl[3] = {id(pnl_display), id(pnl_race), id(pnl_location)};
                   lv_obj_t *btn[3] = {id(tab_display), id(tab_race), id(tab_location)};
-                  f1::ui::settings_tab(pnl, btn, 0);
+                  f1::ui::settings_tab(pnl, btn, 0, id(settings_title));
         - button:
             id: tab_race
-            x: 168
-            y: 54
-            width: 144
-            height: 34
+            x: 164
+            y: 52
+            width: 152
+            height: 44
             radius: 8
             bg_color: 0x1A2547
             shadow_width: 0
             widgets:
-              - obj:
-                  align: CENTER
-                  width: SIZE_CONTENT
-                  height: SIZE_CONTENT
-                  bg_opa: TRANSP
-                  border_width: 0
-                  pad_all: 0
-                  clickable: false
-                  scrollable: false
-                  layout: {type: FLEX, flex_flow: ROW, flex_align_cross: CENTER, pad_column: 8}
-                  widgets:
-                    - label: {text: "\U000F023C", text_font: mdi18, text_color: 0xC9D3F2}
-                    - label: {text: "Race", text_font: mono14, text_color: 0xC9D3F2}
+              - label: {text: "\U000F023C", align: CENTER, text_font: mdi18, text_color: 0xC9D3F2}
             on_click:
               - lambda: |-
                   lv_obj_add_flag(id(settings_kb)->obj, LV_OBJ_FLAG_HIDDEN);
                   lv_obj_t *pnl[3] = {id(pnl_display), id(pnl_race), id(pnl_location)};
                   lv_obj_t *btn[3] = {id(tab_display), id(tab_race), id(tab_location)};
-                  f1::ui::settings_tab(pnl, btn, 1);
+                  f1::ui::settings_tab(pnl, btn, 1, id(settings_title));
         - button:
             id: tab_location
-            x: 320
-            y: 54
-            width: 144
-            height: 34
+            x: 324
+            y: 52
+            width: 152
+            height: 44
             radius: 8
             bg_color: 0x1A2547
             shadow_width: 0
             widgets:
-              - obj:
-                  align: CENTER
-                  width: SIZE_CONTENT
-                  height: SIZE_CONTENT
-                  bg_opa: TRANSP
-                  border_width: 0
-                  pad_all: 0
-                  clickable: false
-                  scrollable: false
-                  layout: {type: FLEX, flex_flow: ROW, flex_align_cross: CENTER, pad_column: 8}
-                  widgets:
-                    - label: {text: "\U000F034E", text_font: mdi18, text_color: 0xC9D3F2}
-                    - label: {text: "Location", text_font: mono14, text_color: 0xC9D3F2}
+              - label: {text: "\U000F034E", align: CENTER, text_font: mdi18, text_color: 0xC9D3F2}
             on_click:
               - lambda: |-
                   lv_obj_add_flag(id(settings_kb)->obj, LV_OBJ_FLAG_HIDDEN);
                   lv_obj_t *pnl[3] = {id(pnl_display), id(pnl_race), id(pnl_location)};
                   lv_obj_t *btn[3] = {id(tab_display), id(tab_race), id(tab_location)};
-                  f1::ui::settings_tab(pnl, btn, 2);
+                  f1::ui::settings_tab(pnl, btn, 2, id(settings_title));
 
         - obj:                  # 7 / UI-16a: three panels, one shown at a time
             id: pnl_display
             x: 0
-            y: 96
+            y: 104
             width: 480
             height: 224
             bg_opa: TRANSP
@@ -1631,7 +1596,7 @@ lvgl:
         - obj:
             id: pnl_race
             x: 0
-            y: 96
+            y: 104
             width: 480
             height: 224
             hidden: true
@@ -1664,7 +1629,7 @@ lvgl:
         - obj:
             id: pnl_location
             x: 0
-            y: 96
+            y: 104
             width: 480
             height: 224
             hidden: true
@@ -1725,66 +1690,41 @@ lvgl:
                   text: "Latitude and longitude set sunrise/sunset for auto-dim only.\nThe time zone is fixed in firmware and does not follow them."
                   text_font: mono12
                   text_color: 0x7E8BB3
-              - button:         # "Made for ESPHome": check on demand, as well as
-                  id: btn_update      # on the hourly timer
-                  x: 16
-                  y: 150
-                  width: 210
-                  height: 42
-                  bg_color: 0x1A2547
-                  shadow_width: 0
-                  radius: 8
-                  widgets:
-                    - obj:
-                        align: CENTER
-                        width: SIZE_CONTENT
-                        height: SIZE_CONTENT
-                        bg_opa: TRANSP
-                        border_width: 0
-                        pad_all: 0
-                        clickable: false
-                        scrollable: false
-                        layout: {type: FLEX, flex_flow: ROW, flex_align_cross: CENTER, pad_column: 8}
-                        widgets:
-                          - label: {text: "\U000F0162", text_font: mdi18, text_color: 0x7E8BB3}
-                          - label: {text: "Check for updates", text_font: mono14, text_color: 0xC9D3F2}
-                  on_click:
-                    # UI-68: the card on the top layer shows Checking, then Up to date,
-                    # Update available (with the notes) or Couldn't check
-                    - lambda: f1::upd::check_now(id(wifi_comp).is_connected());
 
         - label:                # Save validation feedback, outside the panels so
             id: settings_err    # every tab can report into it
             x: 16
-            y: 404
-            width: 360
+            y: 440
+            width: 184
             text: ""
             text_font: mono12
             text_color: 0xFF8A1F
-        - button:               # UI-67: About, lower right where the version used to be
-            id: btn_about
-            align: BOTTOM_RIGHT
-            x: -10
-            y: -8
-            width: 104
-            height: 38
+        - button:               # UI-68 (sky-tracker's Upgrade Check): check on demand,
+            id: btn_update      # as well as on the hourly timer
+            x: 206
+            y: 440
+            width: 150
+            height: 34
             radius: 8
             bg_color: 0x1A2547
             shadow_width: 0
             widgets:
-              - obj:
-                  align: CENTER
-                  width: SIZE_CONTENT
-                  height: SIZE_CONTENT
-                  bg_opa: TRANSP
-                  border_width: 0
-                  pad_all: 0
-                  clickable: false
-                  scrollable: false
-                  layout: {type: FLEX, flex_flow: ROW, flex_align_cross: CENTER, pad_column: 6}
-                  widgets:
-                    - label: {text: "\U000F02FD", text_font: mdi18, text_color: 0xC9D3F2}
-                    - label: {text: "About", text_font: mono14, text_color: 0xC9D3F2}
+              - label: {text: "Upgrade Check", align: CENTER, text_font: mono16, text_color: 0xC9D3F2}
+            on_click:
+              # the card on the top layer shows Checking, then Up to date,
+              # Update available (with the notes) or Couldn't check
+              - lambda: f1::upd::check_now(id(wifi_comp).is_connected());
+        - button:               # UI-67: About, lower right
+            id: btn_about
+            x: 362
+            y: 440
+            width: 112
+            height: 34
+            radius: 8
+            bg_color: 0x1A2547
+            shadow_width: 0
+            widgets:
+              - label: {text: "About", align: CENTER, text_font: mono16, text_color: 0xC9D3F2}
             on_click:
               - lambda: lv_obj_add_flag(id(settings_kb)->obj, LV_OBJ_FLAG_HIDDEN);
               - lvgl.page.show: about_page
@@ -2001,6 +1941,22 @@ interval:
             case f1::boot::TO_STATUS:
               id(lvgl_comp)->show_page(id(wifi_page)->index, LV_SCREEN_LOAD_ANIM_FADE_IN, 300); break;
             default: break;
+          }
+  - interval: 2s                # UI-72 (sky-tracker): 60 s untouched closes what is open
+    then:
+      - lambda: |-
+          if (lv_display_get_inactive_time(nullptr) < 60000) return;
+          f1::upd::idle_close();                 // an offer or result closes as Not now
+          if (id(settings_page)->is_showing()) {
+            // as Cancel: nothing saved, the live brightness put back
+            id(bright_day) = id(bright_day_open);
+            auto call = id(backlight).turn_on();
+            call.set_brightness(id(bright_on_open));
+            call.set_transition_length(0);
+            call.perform();
+            id(lvgl_comp)->show_page(id(race_page)->index, LV_SCREEN_LOAD_ANIM_NONE, 0);
+          } else if (id(about_page)->is_showing() || id(debug_page)->is_showing()) {
+            id(lvgl_comp)->show_page(id(race_page)->index, LV_SCREEN_LOAD_ANIM_NONE, 0);
           }
   - interval: 1h                # "Made for ESPHome": check for a published
     then:                       # firmware update once an hour.

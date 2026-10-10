@@ -70,6 +70,12 @@ inline void close() {
   ui_ = Ui();
 }
 
+// UI-72 (sky-tracker): after 60 s untouched an open offer or result closes as Not now.
+// Never a download or install in progress.
+inline void idle_close() {
+  if (ui_.root && ui_.mode != M_INSTALLING) close();
+}
+
 inline lv_obj_t *label(lv_obj_t *p, const lv_font_t *f, uint32_t col, int y) {
   lv_obj_t *l = lv_label_create(p);
   if (f) lv_obj_set_style_text_font(l, f, 0);
@@ -116,7 +122,7 @@ inline void open() {
   lv_obj_set_size(ui_.bar, BAR_W, BAR_H);
   lv_obj_align(ui_.bar, LV_ALIGN_TOP_MID, 0, BAR_Y);
   lv_bar_set_range(ui_.bar, 0, 100);
-  lv_obj_set_style_bg_color(ui_.bar, lv_color_hex(0x22305A), LV_PART_MAIN);
+  lv_obj_set_style_bg_color(ui_.bar, lv_color_hex(0x1A2547), LV_PART_MAIN);
   lv_obj_set_style_bg_opa(ui_.bar, LV_OPA_COVER, LV_PART_MAIN);
   lv_obj_set_style_bg_color(ui_.bar, lv_color_hex(0x2D5BD0), LV_PART_INDICATOR);
   lv_obj_add_flag(ui_.bar, LV_OBJ_FLAG_HIDDEN);
