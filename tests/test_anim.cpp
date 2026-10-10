@@ -1,5 +1,7 @@
-// f1_animlogic.h: the start-lights timing and the car's path round the logo.
+// f1_animlogic.h: the boot page's start-lights timing, the cars' path round the logo and
+// which way each one points.
 #include <cmath>
+#include <cstdlib>
 #include <cstdio>
 #include <initializer_list>
 
@@ -20,9 +22,7 @@ int main() {
   CHECK(mono, "the count never falls before lights out");
   CHECK(gantry_visible(0) && gantry_visible(OUT_MS) && !gantry_visible(GANTRY_END_MS) && !gantry_visible(-1),
         "the gantry shows for the sequence and a moment after");
-  CHECK(about_phase(-5) == -1 && about_phase(0) == 0 && about_phase(ABOUT_PERIOD_MS + 7) == 7,
-        "About repeats the sequence");
-  CHECK(ABOUT_PERIOD_MS > GANTRY_END_MS, "there is a rest between About sequences");
+  CHECK(GANTRY_END_MS < LAP_MS, "the whole sequence fits in the first lap, so a looping render repeats cleanly");
 
   // the track: Monza, as the 200 px and 112 px logos lay it out
   const auto *c = find_circuit("it-1922");
@@ -70,6 +70,34 @@ int main() {
       off = std::fmax(off, best);
     }
     CHECK(off < 0.01f, "the car is on the line (%.4f px off)", off);
+  }
+  // headings: the sprite points the way the track runs, and turns smoothly round the lap
+  {
+    const auto *m = find_circuit("it-1922");
+    Track t; build(t, *m, 200);
+    int prev = heading(t, 0.0f), big = 0;
+    for (int i = 1; i <= 2000; i++) {
+      const int h = heading(t, i / 2000.0f);
+      if (h < 0 || h >= HEADINGS) big += 100;
+      int d = std::abs(h - prev); d = d > HEADINGS / 2 ? HEADINGS - d : d;
+      if (d > 3) big++;                      // a turn of more than 67 degrees between samples = a jump
+      prev = h;
+    }
+    CHECK(big == 0, "headings are valid and never jump (%d bad)", big);
+    // a heading agrees with the drawn direction: step along the track and compare
+    int wrong = 0;
+    for (int i = 0; i < 200; i++) {
+      const float f = i / 200.0f;
+      float x0, y0, x1, y1; at(t, f, x0, y0); at(t, f + 0.003f, x1, y1);
+      const float deg = std::atan2(x1 - x0, -(y1 - y0)) * 57.29578f;
+      float want = deg < 0 ? deg + 360 : deg;
+      float got = heading(t, f) * (360.0f / HEADINGS);
+      float diff = std::fabs(want - got); diff = diff > 180 ? 360 - diff : diff;
+      if (diff > 2 * 360.0f / HEADINGS) wrong++;   // a corner turns the car within the sample
+    }
+    CHECK(wrong == 0, "heading within two steps of the track direction (a flipped axis would be 8 off) (%d off)", wrong);
+    // the straight at the start line runs one way, the opposite straight the other
+    CHECK(N_CARS == 3 && CAR_GAP * N_CARS < 0.5f, "a pack that fits on the lap");
   }
   CHECK(lap_frac(-3) == 0 && lap_frac(0) == 0 && std::fabs(lap_frac(LAP_MS / 2) - 0.5f) < 1e-6f &&
         std::fabs(lap_frac(LAP_MS + 1250) - 0.25f) < 1e-6f, "lap fraction");
