@@ -90,8 +90,8 @@ Two mature projects by the same author drive this board, and both are on disk:
 
 | Project | Path | Role here |
 |---|---|---|
-| `sky-tracker` | `/Volumes/config/esphome/sky-tracker.yaml` + `sky-tracker/*.h` | **UI cues, flags, platform config, settings page, web UI.** Installed and working (rev 4, fw 4.5.34) |
-| `plane-tracker` | `/Users/dan.m/Projects/Personal/plane-tracker/` | **Document style, requirement IDs, and 65 hard-won decisions** already distilled from `sky-tracker` |
+| `sky-tracker` | `<sky-tracker>/sky-tracker.yaml` + `sky-tracker/*.h` (paths in `REQUIREMENTS.private.md`) | **UI cues, flags, platform config, settings page, web UI.** Installed and working (rev 4, fw 4.5.34) |
+| `plane-tracker` | `<plane-tracker>/` (path in `REQUIREMENTS.private.md`) | **Document style, requirement IDs, and 65 hard-won decisions** already distilled from `sky-tracker` |
 
 - [ ] Treat `sky-tracker`'s pin map, `sdkconfig_options` and LVGL tuning as
       **authoritative** over any community config or default.
@@ -260,14 +260,14 @@ refreshable.
 loudest at low duty, which is exactly where dimming parks it.
 
 - [ ] Use **30 kHz**. This device will sit dimmed overnight for most of the
-      year at 61.58 N (§6.8), so it lands squarely in the whine band.
+      year at the deployment latitude (§6.8; value in `REQUIREMENTS.private.md`), so it lands squarely in the whine band.
 
 #### 2.4.8 Download buffers — sized so every response fits one window (NET-15)
 **Decision 99: raise the TCP receive window from 32 KB to 64 KB, and the HTTP
 client's receive buffer from its 512 B default to 4 KB.**
 
 Throughput over a long link is capped by **window ÷ round-trip time**, and from
-Alaska these hosts are **~100 ms away**. `sky-tracker` measured exactly this:
+the deployment site (a high-latitude, remote location) these hosts are **~100 ms away**. `sky-tracker` measured exactly this:
 the IDF default gave 57 KB/s and a 32 KB window gave ~320 KB/s — which matches
 the arithmetic to within rounding, so the model is trustworthy enough to size
 against.
@@ -864,7 +864,7 @@ OFF_SEASON ─> IDLE ─> RACE_WEEK ─> SESSION_SOON ─> SESSION_LIVE ─┐
 | `POST_SESSION` | OpenF1's window closed (session end + 30 min) < 12 h ago — decision 60 | Race Day page, final classification |
 
 - [ ] **"Race day" is a state, not a date comparison.** The brief says "on race
-      day"; the device is in Alaska and the races are in Melbourne, Suzuka and
+      day"; the device is far from the races, which are in Melbourne, Suzuka and
       Las Vegas. A UTC race start of `04:00Z` is the previous *evening*
       locally. Driving the UI off the device's local calendar date would show
       the race-day screen on the wrong day for roughly half the calendar.
@@ -1680,7 +1680,7 @@ nationality and every 2026 circuit country against the 79 available:
       the clock sets as soon as HA connects without waiting on SNTP. **Gate
       SNTP on Wi-Fi** (`sky-tracker`'s NET-8): hold at boot, kick from
       `on_connect`, hold on `on_disconnect`.
-- [ ] Timezone: `America/Anchorage`, handling DST automatically. ESPHome's
+- [ ] Timezone: the owner's IANA zone (see `REQUIREMENTS.private.md`), handling DST automatically. ESPHome's
       `timezone:` must be a **literal**, so it is compile-time — see the
       caveat in §6.8.
 - [ ] Show a clear **unsynced** indication rather than a plausible-but-wrong
@@ -1719,7 +1719,7 @@ This is why the device stores a position at all.
         does not fight the user's slider;
       - the user's slider sets the **daytime** level while auto is on, not the
         current level — a subtle distinction that must be preserved.
-- [ ] **This matters far more at 61.58 N than at mid-latitudes.** Day length at
+- [ ] **This matters far more at high latitude than at mid-latitudes.** Day length at
       the default position runs from **~19.1 h** at the summer solstice to
       **~4.9 h** at the winter solstice. A fixed clock-time schedule would be
       wrong most of the year, which is the whole argument for deriving it from
@@ -1730,7 +1730,7 @@ This is why the device stores a position at all.
 - [ ] **UI-44a: the lat/lon and the timezone are independent, and that is a
       trap.** The position is a runtime entity; the timezone is a compile-time
       literal. Move the position to Melbourne and the sun times will be
-      correct in UTC while the clock stays on Alaska time, so the display will
+      correct in UTC while the clock stays on the home time zone, so the display will
       dim at the right absolute moment and the wrong apparent hour. **State
       this on the settings page** next to the coordinate fields — one line, so
       nobody has to discover it.
@@ -1854,7 +1854,7 @@ it; this project does not get it.
 The reasoning, recorded because it is the kind of thing that gets re-proposed:
 `sky-tracker` and `plane-tracker` are **instruments watched in the dark**, where
 preserving night vision is the point. This is a **living-room object showing a
-sport**, and at 61.58 N a dusk-triggered red palette would hold the screen red
+sport**, and at the deployment latitude a dusk-triggered red palette would hold the screen red
 for up to **19 hours a day in December** (§6.8) — the device would be red far
 more often than not, which is an aesthetic decision disguised as a feature.
 
@@ -2343,7 +2343,7 @@ it — which suits a device watched all week rather than only on Sunday.
       checks, 0 failures). Keep the testable logic free of LVGL so it builds on
       the host. The high-value targets:
       - the **state machine** (§4.1) against a table of synthetic clocks,
-        including a race at `04:00Z` read from Alaska — the bug §4.1 warns about;
+        including a race at `04:00Z` read from a far-away time zone — the bug §4.1 warns about;
       - **demonym → ISO3** resolution against the captured driver fixture,
         asserting every present nationality resolves and every absent one
         yields no flag;
@@ -2460,7 +2460,7 @@ exists.
 | 80 | **Each alert event latches once** against a `(round, session, event)` key in a `restore_value` global, so a mid-weekend reboot does not replay the set. The most likely bug in the feature | 2026-10-01 | active |
 | 81 | **The ambient marker is the feature most of the time** — his flag in the header and his row highlighted — and is the part worth polishing. The strip is for the few moments that deserve one | 2026-10-01 | active |
 | 82 | A **cancelled session suppresses the "on track" alert** (`is_cancelled`), and a **withdrawal is never reported as a DNF** | 2026-10-01 | active |
-| 83 | **Red night mode is declined** — not ported, not shipped disabled, absent. Both siblings are instruments watched in the dark; this is a living-room object showing a sport, and at 61.58 N a dusk trigger would hold the screen red up to 19 h a day in December. Auto-dim (§6.8) answers the same problem without destroying team colours and flags | 2026-10-01 | **decided by owner**, closes open question 2 |
+| 83 | **Red night mode is declined** — not ported, not shipped disabled, absent. Both siblings are instruments watched in the dark; this is a living-room object showing a sport, and at the deployment latitude a dusk trigger would hold the screen red up to 19 h a day in December. Auto-dim (§6.8) answers the same problem without destroying team colours and flags | 2026-10-01 | **decided by owner**, closes open question 2 |
 | 84 | **No hardware yet.** Work stops at `esphome compile`; §14.1 collects every hardware-gated item. The generators, data layer, state machine and test suite are all host work and carry most of the project's risk, so this costs little | 2026-10-01 | **decided by owner** |
 | 85 | **The legends list is settled at 31 rows** — 32 after 96 adds `max_verstappen` (§5.6.4), delegated by the owner. Two errors in the draft fixed: Jack Brabham was duplicated, and Räikkönen and Button were missing. Barrichello dropped on the stated bar | 2026-10-01 | settles 75 |
 | 86 | **A driver in both sets gets one card** — their current-driver card with a `LEGEND` badge. Measured overlap: Alonso, Hamilton, Verstappen | 2026-10-01 | **corrected by 96** — the resolution is at runtime, not build time |
@@ -2537,7 +2537,7 @@ exists.
 | 157 | **Both render checks run in `deploy.sh`.** Geometry collisions and invented widgets now fail the build, alongside the glyph check and the warnings gate. A render that is not derived from the firmware is decoration, not verification | 2026-10-01 | active |
 | 158 | **The alert banner's flag is padded**: 24 px from the edge, 24 px of clear space before the text, and the text beside it rather than beneath. It had been drawn directly above the words and the two collided | 2026-10-01 | **corrected by owner** |
 | 159 | **`72th` is not a word.** The milestone ordinal special-cases 11/12/13 before looking at the last digit | 2026-10-01 | active |
-| 160 | **UI-44c: Auto Off blanks the panel overnight**, as a checkbox with a from/until hour. Deliberately **separate from auto-dim**: dim is about the ambient light, off is about the household being asleep, and someone may want either, both or neither. At 61.58 N dimming alone still leaves the panel lit through nineteen hours of December darkness | 2026-10-01 | **asked for by owner** |
+| 160 | **UI-44c: Auto Off blanks the panel overnight**, as a checkbox with a from/until hour. Deliberately **separate from auto-dim**: dim is about the ambient light, off is about the household being asleep, and someone may want either, both or neither. At the deployment latitude dimming alone still leaves the panel lit through nineteen hours of December darkness | 2026-10-01 | **asked for by owner** |
 | 161 | **The off window wraps midnight**, because 23:00–07:00 is the normal case and is not a range on a number line. A zero-length window never fires, and a touch wakes the panel for 60 s so somebody up at 3 a.m. need not change a setting. Leaving the window clears the override, so a touch cannot keep it awake into the next night | 2026-10-01 | active |
 | 162 | **Every setting carries an icon**, the same glyph on the device, the web UI and Home Assistant. The codepoints are **generated from MDI's own metadata by name** (`tools/gen_icons.py`) and the generator fails on a name that does not exist — guessing a codepoint gives a blank glyph that compiles, flashes, and only shows up on a screen, which is the same silent class as a missing font glyph | 2026-10-01 | **asked for by owner** |
 | 163 | **Constructor standings** ship beside the drivers' table. 2.5 kB, no live window, and team nationality resolves to a flag through the same demonym rule drivers use — an unmapped one draws none | 2026-10-01 | implements 8.1 |
@@ -2556,7 +2556,7 @@ exists.
 | 176 | **OpenF1 answers a filter that matches nothing with HTTP 404** and `{"detail":"No results found."}` — measured with `flag=RED` on a race that had none. That is an empty result, not a fault; treated as an error it would back the data task off for five minutes over a clean race, the common case. `session_type=Race` also includes **Sprints** (name `Sprint`), so the session is chosen by `session_name` | 2026-10-05 | active |
 | 177 | **`setup()` configured the carousel with zero drivers and zero legends** ("M2 fills them in") and `set_focus()` returns early when nothing changed, so in IDLE — most of the year — the carousel showed circuits only until someone touched Carousel Content. The counts are real from the first frame | 2026-10-05 | corrects 68 |
 | 178 | **The boot / Wi-Fi page is ported from `sky-tracker` — and nothing ever left it.** This project had the page but no code that moved off it, so a device that connected would have sat on "Connecting to Wi-Fi" for ever. A 2 s check now fades to the primary page on connect and returns after 10 s offline (never over settings). Porting `sky-tracker`'s outage clock exactly would have carried a bug with it: it stores `now \| 1` and later computes `now - lost_since`, which for an **even** `now` is one tick in the future and wraps to ~4 billion, so the status page would return **at once** on half of all outages rather than after 10 s. The clock now stores `now`, or 1 when `now` is 0 | 2026-10-08 | **asked for by owner**, implements 6.1 |
-| 179 | **Auto-dim reads the Sun from `sky-tracker`'s solar position**, not a cheaper formula. The first version used declination from the day of year and no equation of time - up to ~4 deg out around the equinoxes, harmless for a 13 deg ramp but no reason to be less accurate than the sibling. `tests/test_sun.cpp` pins it to known geometry (solstice noon elevations 51.9 / 5.0 deg, solar noon at Greenwich 11:44 UTC on 3 Nov and 12:14 on 11 Feb, east-positive longitude, both hemispheres) and shows midsummer at 61.58 N dips only to ~42 % while midwinter reaches the 25 % floor | 2026-10-08 | **asked for by owner**, implements 6.8 |
+| 179 | **Auto-dim reads the Sun from `sky-tracker`'s solar position**, not a cheaper formula. The first version used declination from the day of year and no equation of time - up to ~4 deg out around the equinoxes, harmless for a 13 deg ramp but no reason to be less accurate than the sibling. `tests/test_sun.cpp` pins it to known geometry (solstice noon elevations 51.9 / 5.0 deg, solar noon at Greenwich 11:44 UTC on 3 Nov and 12:14 on 11 Feb, east-positive longitude, both hemispheres) and shows midsummer at the deployment latitude dips only to ~42 % while midwinter reaches the 25 % floor | 2026-10-08 | **asked for by owner**, implements 6.8 |
 | 180 | **The position is an input, read live.** The app had copied latitude and longitude into its own state once at boot, so a change from the new settings fields, the web UI or Home Assistant never reached the dimmer until a reboot - and at boot the restored value may not yet have been loaded. `auto_factor(time, lat, lon)` takes them as arguments and the 30 s pass reads the entities each time | 2026-10-08 | corrects 7 |
 | 181 | **About page, modelled on `sky-tracker`'s UI-67**: logo (112 px, resized at build time because LVGL's own scaling garbles it), name, version, "by Dan Morphis", ESPHome version and build date, THIS DEVICE (name, IP, Wi-Fi and signal, MAC, uptime, refreshed each second while shown), DATA FROM with licences, and the trademark non-affiliation notice (3.7.5). Reached from a button where the settings page's version used to be. **Close returns to Settings without re-staging it**: on_load would otherwise discard unsaved edits and re-capture a live-changed brightness as Cancel's baseline | 2026-10-08 | **asked for by owner** |
 | 182 | **Icons everywhere a control is**: Cancel, Save, About, Close and the three settings tabs on the panel, and the five diagnostic entities that had none on the web UI and in Home Assistant. Codepoints come from `tools/gen_icons.py` by name and the build fails on one that does not exist. The renders draw them from the same MDI font | 2026-10-08 | **asked for by owner**, implements 7.1 |
@@ -2743,7 +2743,7 @@ project's real risk.
    - [x] `f1_state.h`: the state machine and the poll-interval table
          (`intervals_for()`), read by the fetch task each cycle
    - [x] Host tests for the state machine, **including a `04:00Z` race read
-         from Alaska** (`tests/test_state.cpp`)
+         from a far-away time zone** (`tests/test_state.cpp`)
    - [x] Calendar refresh superseding the compiled floor, with a
          `Calendar Source` diagnostic
    - [ ] The **profile build date** on the debug page (RACE-13e) — not built
