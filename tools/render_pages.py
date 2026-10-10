@@ -1005,11 +1005,27 @@ def page_offseason(ctx):
     return img, "page-11-offseason"
 
 
+def animation_gifs(ctx, step_ms=50):
+    """boot-lights.gif and about-lights.gif: the animations as the firmware plays them
+    (f1_anim.h), frame by frame from the same constants. Slow, so only with --gif."""
+    c = anim_consts()
+    jobs = (("boot-lights", _anim_boot, int(c["OUT_MS"] + 500 + c["LAP_MS"] * 0.4)),
+            ("about-lights", _anim_about, int(c["ABOUT_PERIOD_MS"])))
+    for name, fn, total in jobs:
+        frames = [fn(ctx, t).quantize(colors=48, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.NONE)
+                  for t in range(0, total, step_ms)]
+        path = os.path.join(OUT, name + ".gif")
+        frames[0].save(path, save_all=True, append_images=frames[1:], duration=step_ms, loop=0,
+                       optimize=True, disposal=1)
+        print(f"  {name}.gif  {len(frames)} frames, {os.path.getsize(path) // 1024} KB")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--font", default="/tmp/RobotoMono.ttf")
     ap.add_argument("--sans", default=None)
     ap.add_argument("--out", default=None, help="output directory (default docs/renders)")
+    ap.add_argument("--gif", action="store_true", help="also write the boot and About animations as GIFs (slow)")
     a = ap.parse_args()
     for sz in (10, 12, 14, 15, 16, 18, 22, 24, 34):
         FONT[sz] = ImageFont.truetype(a.font, sz)
@@ -1104,6 +1120,8 @@ def main():
              overlay_detail, overlay_detail_loading, overlay_alert, overlay_milestone,
              page_race_with_icon, overlay_update_checking, overlay_update_available,
              overlay_update_installing, overlay_update_failed]
+    if a.gif:
+        animation_gifs(ctx)
     made = []
     for fn in pages:
         try:
