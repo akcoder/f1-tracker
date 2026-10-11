@@ -13,6 +13,8 @@ without a board (section 14.1).
   python3 tools/render_pages.py --font /path/to/RobotoMono.ttf
 """
 import argparse, glob, io, json, math, os, re, sys, textwrap
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import tracker_common
 from PIL import Image, ImageDraw, ImageFont
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -611,17 +613,11 @@ def _slider(d, px, py, wid, G, frac):
 
 
 def _tracker_update_h():
-    """tracker_update.h of tracker-common: $TRACKER_COMMON, a sibling checkout, or the copy
-    ESPHome fetched for the last build."""
-    rel = os.path.join("components", "tracker_common", "tracker_update.h")
-    cands = [os.path.join(os.environ["TRACKER_COMMON"], rel)] if os.environ.get("TRACKER_COMMON") else []
-    cands.append(os.path.join(ROOT, "..", "tracker-common", rel))
-    cands += sorted(glob.glob(os.path.join(ROOT, ".esphome", "external_components", "*", rel)))
-    for c in cands:
-        if os.path.isfile(c):
-            return c
-    raise DriftError("tracker_update.h not found: check out tracker-common beside this repo, "
-                     "or set TRACKER_COMMON")
+    """tracker_update.h of tracker-common (see tools/tracker_common.py)."""
+    try:
+        return tracker_common.find(os.path.join("components", "tracker_common", "tracker_update.h"))
+    except FileNotFoundError as e:
+        raise DriftError(str(e))
 
 
 def update_consts():

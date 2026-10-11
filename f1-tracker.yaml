@@ -30,6 +30,13 @@ external_components:
     refresh: ${tracker_common_refresh}
 tracker_common:
 
+packages:
+  tracker_fonts:              # the fonts every tracker shares (decision 194)
+    url: ${tracker_common_url}
+    ref: ${tracker_common_ref}
+    files: [fonts.yaml]
+    refresh: ${tracker_common_refresh}
+
 esphome:
   name: ${name}
   friendly_name: ${friendly_name}
@@ -458,47 +465,14 @@ image:
     id: f1_mark
     type: RGB565
 
+# mono12/14/16/18/24, setup_title and setup_body are the shared set: tracker-common/fonts.yaml (the
+# packages entry at the top). What follows is this project's own.
 font:
-  - file: "gfonts://Roboto Mono"
-    id: mono12                # order rows (6.3.1), circuit facts
-    size: 12
-    bpp: 4
-    glyphsets: &glyphs [GF_Latin_Core]
-  - file: "gfonts://Roboto Mono"
-    id: mono14                # card body
-    size: 14
-    bpp: 4
-    glyphsets: *glyphs
-  - file: "gfonts://Roboto Mono"
-    id: mono16                # titles, buttons
-    size: 16
-    bpp: 4
-    glyphsets: *glyphs
-  - file: "gfonts://Roboto Mono"
-    id: mono18                # card titles
-    size: 18
-    bpp: 4
-    glyphsets: *glyphs
-  - file: "gfonts://Roboto Mono@500"
-    id: mono24                # clock, OTA panel, watched-driver banner (6.14.3)
-    size: 24
-    bpp: 4
-    glyphsets: *glyphs
-  - file: "gfonts://Roboto@300"
-    id: setup_title
-    size: 34
-    bpp: 4
-    glyphsets: *glyphs
   - file: "gfonts://Roboto@300"
     id: title_big             # boot/About "Tracker": cap height matches the F1 logo (36 px)
     size: 50
     bpp: 4
-    glyphsets: *glyphs
-  - file: "gfonts://Roboto"
-    id: setup_body
-    size: 22
-    bpp: 4
-    glyphsets: *glyphs
+    glyphsets: [GF_Latin_Core]
   - file:
       type: web
       url: https://cdn.jsdelivr.net/npm/@mdi/font@7.4.47/fonts/materialdesignicons-webfont.ttf

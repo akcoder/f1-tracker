@@ -27,6 +27,9 @@ ROOT = os.path.dirname(HERE)
 SRC = os.path.join(ROOT, "f1-tracker")
 YAML = os.path.join(ROOT, "f1-tracker.yaml")
 
+sys.path.insert(0, HERE)
+import tracker_common
+
 try:
     from fontTools.ttLib import TTFont
 except ImportError:
@@ -35,12 +38,13 @@ except ImportError:
 
 def requested_glyphsets():
     """Which glyphsets each font block asks for, from the YAML."""
+    # this project's fonts, then the shared set (tracker-common/fonts.yaml)
     s = open(YAML, encoding="utf-8").read()
     block = re.search(r"\nfont:\n(.*?)\n[a-z_]+:\n", s, re.S)
-    if not block:
-        return {}
+    shared = open(tracker_common.find("fonts.yaml"), encoding="utf-8").read().split("\nfont:\n", 1)[1]
+    lines = (block.group(1) if block else "").split("\n") + shared.split("\n")
     out, cur = {}, None
-    for line in block.group(1).split("\n"):
+    for line in lines:
         m = re.match(r"\s+id:\s*(\w+)", line)
         if m:
             cur = m.group(1)
