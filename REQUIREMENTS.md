@@ -230,7 +230,8 @@ refreshable.
         and tapping it shows the prompt;
       - **UI-68c: the prompt shows the release notes** - the manifest's
         `ota.summary`, Markdown marks dropped, blank runs squeezed, typographic
-        punctuation folded to the fonts, at most ~1.5 KB, in a box that scrolls.
+        punctuation folded to the fonts, at most ~1.5 KB, in a box that scrolls
+        in the 16 px font (12 px was blurry in `sky-tracker`).
         `tools/make_release.py` writes it, from `--notes FILE` or the commit
         subjects since the previous tag;
       - **UI-68b: the install** is one blocking call on the main loop, so the
