@@ -184,6 +184,22 @@ int main() {
     CHECK(ec2 && std::strcmp(ec2, "cancelled") == 0, "fit: cancel");
   }
 
+  // A caller-supplied work area gives the same pixels as the stack's.
+  {
+    alignas(4) static uint8_t wk[4096];
+    std::vector<uint16_t> a((size_t) TW * TH, SENTINEL), b((size_t) 240 * 320, SENTINEL), c((size_t) 240 * 320, SENTINEL);
+    CHECK(jpg::decode_half(v->jpeg, v->len, a.data(), TW, TH, nullptr, nullptr, nullptr, wk) == nullptr, "pool: half");
+    CHECK(a == ref, "pool: half equals the stack decode");
+    CHECK(jpg::decode_full(v->jpeg, v->len, b.data(), 240, 320, nullptr, nullptr, nullptr, wk) == nullptr, "pool: full");
+    CHECK(jpg::decode_full(v->jpeg, v->len, c.data(), 240, 320) == nullptr && b == c, "pool: full equals the stack decode");
+    std::vector<uint16_t> acc((size_t) 200 * 266 * 3), f1v((size_t) 200 * 266), f2v((size_t) 200 * 266);
+    CHECK(jpg::decode_fit(v->jpeg, v->len, f1v.data(), 200, 266, acc.data(), nullptr, nullptr, nullptr, 1.0f, 0, false, wk) == nullptr, "pool: fit");
+    CHECK(jpg::decode_fit(v->jpeg, v->len, f2v.data(), 200, 266, acc.data()) == nullptr && f1v == f2v, "pool: fit equals the stack decode");
+    std::vector<uint16_t> g1((size_t) 240 * 320), g2((size_t) 240 * 320);
+    CHECK(jpg::decode_copy(v->jpeg, v->len, g1.data(), 240, 240, 320, nullptr, wk) == nullptr, "pool: copy");
+    CHECK(jpg::decode_copy(v->jpeg, v->len, g2.data(), 240, 240, 320) == nullptr && g1 == g2, "pool: copy equals the stack decode");
+  }
+
   std::printf("%d checks, %d failures\n", checks, fails);
   return fails ? 1 : 0;
 }
