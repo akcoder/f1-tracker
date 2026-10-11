@@ -12,7 +12,7 @@ substitutions:
   obs_lat: "61.581"
   obs_lon: "-149.439"
   tracker_common_url: https://github.com/akcoder/tracker-common
-  tracker_common_ref: v0.5.1     # a tag, so a change in tracker-common cannot break this build
+  tracker_common_ref: v0.4.4     # a tag, so a change in tracker-common cannot break this build
   tracker_common_refresh: 1d
   manifest_url: https://akcoder.github.io/f1-tracker/manifest.json   # UI-68: built and published by the Firmware workflow
   # The board package's tunables (tracker-common/boards/guition-4848s040.yaml):
@@ -82,6 +82,9 @@ esphome:
     - f1-tracker/f1_cars.h         # generated: tools/gen_cars.py
     - f1-tracker/f1_logomark.h     # generated: tools/gen_logo.py, the logo outline the cars follow
     - f1-tracker/f1_animlogic.h
+    - f1-tracker/f1_dinologic.h
+    - f1-tracker/f1_dino_data.h
+    - f1-tracker/f1_dino.h        # the walking dinosaur (decision 203)
     - f1-tracker/f1_anim.h         # animated logos: start lights and a car lapping the circuit
     - f1-tracker/f1_map.h
     - f1-tracker/f1_state.h
@@ -190,8 +193,8 @@ esphome:
               return t.is_valid() ? tracker::display::auto_factor((double) t.timestamp, (double) id(obs_lat).state,
                                                                   (double) id(obs_lon).state, true) : 1.0f;
             };
-            tracker::dino::bubble_font = id(mono16)->get_lv_font();         // MOTION-5
-            tracker::dino::enabled = [] { return id(dino_on).state; };
+            f1::dino::bubble_font = id(mono16)->get_lv_font();         // MOTION-5
+            f1::dino::enabled = [] { return id(dino_on).state; };
             tracker::upd::ota_hook_begin = [] { f1::net::ota_begin(); };   // 2.4.6: pause the data task
             tracker::upd::ota_hook_error = [] { f1::net::ota_error(); };   // resume it if the install failed
             f1::anim::init(id(wifi_page)->obj, id(boot_mark), id(about_page)->obj, id(about_mark));
@@ -1695,7 +1698,7 @@ interval:
                                id(circuit_page)->is_showing() || id(standings_page)->is_showing() ||
                                id(summary_page)->is_showing());
           // MOTION-5: a dinosaur walks by now and then, where nothing is over the page and the panel is lit
-          tracker::dino::tick(esphome::millis(),
+          f1::dino::tick(esphome::millis(),
                               tracker::upd::page_ok && tracker::upd::ui_.root == nullptr &&
                                   !f1::detail::is_open() && id(backlight).current_values.is_on());
           switch (st.page) {

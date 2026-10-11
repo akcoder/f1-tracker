@@ -1250,12 +1250,9 @@ _DINO = {}
 
 
 def _dino():
-    """tracker-common's tools/dino_art.py: the dinosaur's vector art, and the Python twin of the walk's timing."""
+    """tools/dino_art.py: the dinosaur's vector art, and the Python twin of the walk's timing."""
     if not _DINO:
-        import importlib.util
-        spec = importlib.util.spec_from_file_location("dino_art", tracker_common.find("tools/dino_art.py"))
-        mod = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(mod)
+        import dino_art as mod
         _DINO["art"] = mod
         _DINO["poses"] = [mod.sprite(k) for k in range(mod.N_POSES)]
         _DINO["tails"] = [mod.tail_image(False), mod.tail_image(True)]
