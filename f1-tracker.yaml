@@ -1402,7 +1402,7 @@ lvgl:
             id: settings_title
             x: 16
             y: 14
-            text: "DISPLAY"
+            text: "Display"
             text_font: mono16
             text_color: 0xFF8A1F
         - button:
@@ -1798,7 +1798,7 @@ lvgl:
             id: about_hdr
             x: 8
             y: 12
-            text: "ABOUT"
+            text: "About"
             text_font: mono16
             text_color: 0xFF8A1F
         - image:
@@ -1857,7 +1857,7 @@ lvgl:
             id: about_device_hdr
             x: 16
             y: 238
-            text: "THIS DEVICE"
+            text: "This device"
             text_font: mono12
             text_color: 0xFF8A1F
         - label:
@@ -1873,7 +1873,7 @@ lvgl:
             id: about_data_hdr
             x: 16
             y: 336
-            text: "DATA FROM"
+            text: "Data from"
             text_font: mono12
             text_color: 0xFF8A1F
         - label:

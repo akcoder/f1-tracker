@@ -558,7 +558,7 @@ inline void settings_labels(lv_obj_t *lbl, int seconds) {
 // button takes the accent colour so the current panel is never ambiguous.
 inline void settings_tab(lv_obj_t *const pnl[3], lv_obj_t *const btn[3], int sel,
                          lv_obj_t *title = nullptr) {
-  static const char *const NAMES[3] = {"DISPLAY", "RACE", "LOCATION"};   // sky-tracker UI-16a
+  static const char *const NAMES[3] = {"Display", "Race", "Location"};   // sky-tracker UI-16a
   if (title != nullptr && sel >= 0 && sel < 3) lv_label_set_text(title, NAMES[sel]);
   for (int i = 0; i < 3; i++) {
     if (pnl[i] == nullptr || btn[i] == nullptr) continue;
