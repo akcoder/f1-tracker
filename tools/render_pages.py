@@ -256,10 +256,10 @@ FONT = {}
 def _title(img, d, cx, cy):
     """The title row, as on the device: the F1 logo, 12 px, then "Tracker", centred on cx."""
     mark = Image.open(os.path.join(ROOT, "reference", "logo", "f1-wordmark.png"))
-    tw = d.textlength("Tracker", font=FONT[34])
+    tw = d.textlength("Tracker", font=FONT[50])
     x0 = cx - (mark.width + 12 + tw) / 2
     img.paste(mark, (int(round(x0)), int(round(cy - mark.height / 2))))
-    d.text((x0 + mark.width + 12, cy), "Tracker", font=FONT[34], fill=WHITE, anchor="lm")
+    d.text((x0 + mark.width + 12, cy), "Tracker", font=FONT[50], fill=WHITE, anchor="lm")
 
 
 def page_wifi(ctx, mode="connecting"):
@@ -1206,6 +1206,7 @@ def main():
     a = ap.parse_args()
     for sz in (10, 12, 14, 15, 16, 18, 22, 24, 34):
         FONT[sz] = ImageFont.truetype(a.font, sz)
+    FONT[50] = ImageFont.truetype(a.sans or a.font, 50)   # title_big: cap height = the F1 logo's 36 px
     global OUT
     if a.out:
         OUT = os.path.abspath(a.out)

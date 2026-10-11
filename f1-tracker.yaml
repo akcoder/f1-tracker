@@ -478,6 +478,11 @@ font:
     size: 34
     bpp: 4
     glyphsets: *glyphs
+  - file: "gfonts://Roboto@300"
+    id: title_big             # boot/About "Tracker": cap height matches the F1 logo (36 px)
+    size: 50
+    bpp: 4
+    glyphsets: *glyphs
   - file: "gfonts://Roboto"
     id: setup_body
     size: 22
@@ -1002,7 +1007,7 @@ lvgl:
                     - label:
                         id: boot_name           # the device's name, plainly (3.7.5)
                         text: "Tracker"
-                        text_font: setup_title
+                        text_font: title_big
                         text_color: 0xFFFFFF
               - label:
                   id: wifi_title
@@ -1825,9 +1830,9 @@ lvgl:
         - obj:                  # the title: the F1 logo, then "Tracker"
             id: about_title
             x: 0
-            y: 130
+            y: 124
             width: 480
-            height: 40
+            height: 52
             bg_opa: TRANSP
             border_width: 0
             pad_all: 0
@@ -1840,7 +1845,7 @@ lvgl:
               - label:
                   id: about_name
                   text: "Tracker"
-                  text_font: setup_title
+                  text_font: title_big
                   text_color: 0xFFFFFF
         - label:
             id: about_version
