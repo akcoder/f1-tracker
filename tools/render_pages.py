@@ -577,7 +577,7 @@ def _settings_frame(ctx, page, tab, ids):
             "settings_title",
             "pnl_display", "pnl_race", "pnl_location", "settings_err", *ids)
     img = Image.new("RGB", (W, H), BG); d = ImageDraw.Draw(img)
-    d.text((16, 14), ("DISPLAY", "RACE", "LOCATION")[tab], font=FONT[16], fill=ORANGE)   # names the open tab
+    d.text((16, 14), ("Display", "Race", "Location")[tab], font=FONT[16], fill=ORANGE)   # names the open tab
     for x, w, col, lab in ((238, 110, (0x1A, 0x25, 0x47), "Cancel"),
                            (356, 110, BORDER, "Save")):
         d.rounded_rectangle([x, 8, x + w, 46], 6, fill=col)
@@ -729,18 +729,18 @@ def page_about(ctx):
     tx, ty, tw, th = box(G, "about_title")
     _title(img, d, tx + tw // 2, ty + th // 2)
     hx, hy, _, _ = box(G, "about_hdr")
-    d.text((hx, hy), "ABOUT", font=FONT[16], fill=(0xFF, 0x8A, 0x1F))
+    d.text((hx, hy), "About", font=FONT[16], fill=(0xFF, 0x8A, 0x1F))
     centred("about_version", "Version 0.1.0", 16, (0xDC, 0xE4, 0xF8))
     centred("about_by", "by Dan Morphis", 14, MUTED)
     centred("about_build", "ESPHome 2026.9.1, built Oct 8 2026", 12, MUTED)
     hx, hy, _, _ = box(G, "about_device_hdr")
-    d.text((hx, hy), "THIS DEVICE", font=FONT[12], fill=(0xFF, 0x8A, 0x1F))
+    d.text((hx, hy), "This device", font=FONT[12], fill=(0xFF, 0x8A, 0x1F))
     dx, dy, dw, dh = box(G, "about_device")
     d.multiline_text((dx, dy),
         "f1-tracker-9cad68  192.168.1.52\nWi-Fi home-ssid  -52 dBm\nMAC 24:EC:4A:9C:AD:68\nUp 3h 12m",
         font=FONT[14], fill=(0xDC, 0xE4, 0xF8), spacing=2)
     hx, hy, _, _ = box(G, "about_data_hdr")
-    d.text((hx, hy), "DATA FROM", font=FONT[12], fill=(0xFF, 0x8A, 0x1F))
+    d.text((hx, hy), "Data from", font=FONT[12], fill=(0xFF, 0x8A, 0x1F))
     x, y, w, h = box(G, "about_data")
     d.multiline_text((x, y),
         "Jolpica jolpi.ca, OpenF1 openf1.org (CC BY-NC-SA)\nPortraits: Wikimedia Commons, credited on each card\n"
