@@ -1,4 +1,4 @@
-// The watched driver (section 6.14). decision 80 calls the latch the most
+// The watched driver (section 4.14). decision 80 calls the latch the most
 // likely bug in the feature, so most of this is about firing exactly once.
 #include <cstdarg>
 #include <cstdio>
@@ -130,7 +130,7 @@ int main() {
     okf(n == 0, "milestones_only must suppress the per-session tier, got %d", n);
   }
 
-  std::printf("wording (6.14.2)\n");
+  std::printf("wording (4.14.2)\n");
   {
     Config c = cfg_default();
     state::Status st = state::evaluate(cal, race + 600, true);

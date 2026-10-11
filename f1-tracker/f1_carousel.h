@@ -19,7 +19,7 @@ enum CardType : uint8_t { CIRCUIT = 0, DRIVER = 1, LEGEND = 2, N_TYPES = 3 };
 inline constexpr CardType PATTERN[] = {CIRCUIT, DRIVER, CIRCUIT, LEGEND};
 inline constexpr int PATTERN_LEN = 4;
 
-// Which types the Carousel Content setting admits (section 7).
+// Which types the Carousel Content setting admits (section 4.15).
 enum Content : uint8_t {
   ALL = 0, CIRCUITS_ONLY, DRIVERS_ONLY, LEGENDS_ONLY, CIRCUITS_AND_DRIVERS
 };

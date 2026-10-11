@@ -1,4 +1,4 @@
-// Championship permutations (section 8.1). The interesting cases happen once a
+// Championship permutations (section B.1). The interesting cases happen once a
 // year and the embarrassing ones are off-by-one, so they are pinned here.
 #include <cstdarg>
 #include <cstdio>

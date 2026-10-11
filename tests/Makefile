@@ -1,4 +1,4 @@
-# Host tests (REQUIREMENTS.md section 10).  make -C tests
+# Host tests (REQUIREMENTS.md section 8).  make -C tests
 CXX      ?= c++
 # tracker-common (github.com/akcoder/tracker-common): a checkout beside this repo, or TC=...
 TC       ?= ../../tracker-common/components/tracker_common

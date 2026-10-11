@@ -1,5 +1,5 @@
 #pragma once
-// Favourite team (§8.2) and teammate head-to-head (§8.2).
+// Favourite team (§B.2) and teammate head-to-head (§B.2).
 //
 // Free of LVGL so both can be tested on the host. The head-to-head is the
 // comparison people actually argue about, and it needs no data the device does
@@ -72,7 +72,7 @@ inline bool h2h_line(const store::Entry *e, const Pair &p, char *out, size_t n) 
   return true;
 }
 
-// §8.2 favourite team: which rows to tint, and the constructors' position.
+// §B.2 favourite team: which rows to tint, and the constructors' position.
 struct Favourite {
   char name[20] = {0};
   bool set() const { return name[0] != '\0'; }

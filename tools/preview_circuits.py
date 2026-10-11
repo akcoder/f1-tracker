@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Render the GENERATED circuit traces, using the device's own fit maths.
 
-MAP-3/MAP-5 cannot be checked on hardware yet (section 14.1), but the geometry
+MAP-3/MAP-5 cannot be checked on hardware yet (section D.1), but the geometry
 can be checked here: this parses f1-tracker/f1_circuits.h - the actual bytes the
 firmware carries - and draws them through the same fit_box() arithmetic
 f1_map.h uses. A wrong rotation, a squashed aspect or a trace escaping its box

@@ -8,7 +8,7 @@ and the same Roboto Mono metrics the device uses.
 
 That makes these a check on the design rather than a drawing of it: a line that
 overflows, a column that collides or a card that is too dense shows up here,
-without a board (section 14.1).
+without a board (section D.1).
 
   python3 tools/render_pages.py --font /path/to/RobotoMono.ttf
 """

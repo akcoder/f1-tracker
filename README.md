@@ -111,7 +111,7 @@ python3 tools/render_pages.py --font /path/to/RobotoMono.ttf
 
 | Path | Contents |
 |---|---|
-| [`REQUIREMENTS.md`](REQUIREMENTS.md) | **the design document** — 170 decisions, each with the measurement behind it |
+| [`REQUIREMENTS.md`](REQUIREMENTS.md) | **the design document** — requirements by area (one ID each, in the style shared with `sky-tracker`) and a log of 198 decisions, each with the measurement behind it |
 | `f1-tracker.yaml` | the public ESPHome config |
 | `dev/` | the local build, with secrets |
 | `f1-tracker/` | C++ headers: state machine, data task, drawing, generated data |

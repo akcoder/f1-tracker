@@ -22,7 +22,7 @@ inline constexpr uint16_t SEASON = 2026;
 inline constexpr uint32_t BUILT_AT = 1790883085;  // unix, for the debug page
 
 // Session start times are UTC unix epochs. 0 = this round does not have
-// that session, or Jolpica gave a date with no time (section 3.4).
+// that session, or Jolpica gave a date with no time (section 3.5).
 enum SessionIdx : uint8_t { FP1, FP2, FP3, SQ, SPRINT, QUALI, RACE, N_SESSIONS };
 
 struct Round {

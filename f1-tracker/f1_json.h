@@ -1,7 +1,7 @@
 #pragma once
 // A minimal selective JSON scanner.
 //
-// Section 4.2 asks for a streaming/selective parser rather than a DOM: the
+// Section 1.2 asks for a streaming/selective parser rather than a DOM: the
 // 48 KB sessions response carries ~20 fields per row and we use eight. This
 // walks the text and pulls named values out of the current object without
 // allocating anything, which also means it builds on the host with no
@@ -75,7 +75,7 @@ inline size_t find_key(const char *s, size_t obj, size_t n, const char *key) {
 }
 
 // Copy a string value into out. Returns false when the key is absent or null,
-// which is the common case this project must tolerate (section 3.4): a missing
+// which is the common case this project must tolerate (section 3.5): a missing
 // field is NOT an error and must not become an empty-but-present value by
 // accident.
 inline bool get_str(const char *s, size_t obj, size_t n, const char *key,

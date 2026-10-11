@@ -1,5 +1,5 @@
 #pragma once
-// The watched driver (section 6.14). Ships watching Max Verstappen.
+// The watched driver (section 4.14). Ships watching Max Verstappen.
 //
 // Free of LVGL so the latch can be tested on the host - decision 80 calls that
 // the most likely bug in the feature, because a mid-weekend reboot must not
@@ -181,7 +181,7 @@ inline Event due(const Config &cfg, const state::Status &st, const Latch &latch,
 }
 
 // The line shown. Kept here rather than scattered through the drawing code so
-// the wording can be changed in one place (6.14.3).
+// the wording can be changed in one place (4.14.3).
 inline void compose(const Config &cfg, Event e, const state::Status &st,
                     int grid_pos, int finish_pos, const char *status,
                     char *out, size_t n) {

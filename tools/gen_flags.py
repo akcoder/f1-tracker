@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Generate f1-tracker/f1_flags.h - country flags as RGB565 bitmaps.
 
-REQUIREMENTS.md 6.6, decision 34. The approach is sky-tracker's sky_flags.h:
+REQUIREMENTS.md 4.6, decision 34. The approach is sky-tracker's sky_flags.h:
 flag-icons 4:3 SVGs rasterised and downsampled, keyed by ISO 3166-1 alpha-3.
 Two sizes, matching sky-tracker so the two projects stay comparable:
 

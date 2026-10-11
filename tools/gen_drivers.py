@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Generate f1-tracker/f1_drivers.h and f1_legends.h.
 
-REQUIREMENTS.md 5.6. Career records are generated offline and compiled in, so
+REQUIREMENTS.md 3.10. Career records are generated offline and compiled in, so
 the carousel works with no network (decision 69).
 
 Two guards that exist because the data lies in specific ways:
@@ -188,7 +188,7 @@ def emit(path, ns, rows, season, extra_note=""):
     w("  const char *iso3;        // \"\" when the demonym is absent or unmapped: draw")
     w("                           // NO flag rather than a wrong one (decision 20)")
     w("  const char *dob;         // ISO date, for the age line")
-    w("  const char *line;        // legends only: one curated sentence (5.6.2)")
+    w("  const char *line;        // legends only: one curated sentence (3.10.2)")
     w("  uint16_t number;         // 0 when absent (DATA-7). NEVER an identity key")
     w("  uint16_t wins, starts, podiums;")
     w("  int16_t poles;           // -1 = unknown, OMIT the line (DATA-8)")

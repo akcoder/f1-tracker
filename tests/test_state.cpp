@@ -1,5 +1,5 @@
-// Host tests for the weekend state machine (section 4.1) and the OpenF1
-// live-window arithmetic (NET-14). Section 10 names these the high-value
+// Host tests for the weekend state machine (section 1.1) and the OpenF1
+// live-window arithmetic (NET-14). Section 8 names these the high-value
 // targets, and the 04:00Z-from-Alaska case is the bug 4.1 calls most likely.
 #include <cstdarg>
 #include <cstdio>
@@ -48,7 +48,7 @@ static Round make_round(uint8_t n, const char *cid, uint32_t fp1, uint32_t quali
 }
 
 static void test_alaska() {
-  std::printf("the 04:00Z race read from Alaska (section 4.1)\n");
+  std::printf("the 04:00Z race read from Alaska (section 1.1)\n");
   // Melbourne, 2026-03-08 04:00 UTC. In America/Anchorage (UTC-9 in March,
   // AKDT) that is 2026-03-07 at 19:00 - the PREVIOUS EVENING. A state machine
   // driven by the device's local calendar date would show the race-day screen

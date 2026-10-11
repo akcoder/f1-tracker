@@ -2,7 +2,7 @@
 // The parsed data store: what the fetch task produces and the UI thread reads.
 //
 // Free of LVGL and of ESP-IDF so tests/ can drive the parsers against the
-// committed fixtures - the parse is where the data-quality rules in section 3.4
+// committed fixtures - the parse is where the data-quality rules in section 3.5
 // actually live, so it is the part most worth testing.
 #include <cstdint>
 #include <cstdio>
@@ -77,7 +77,7 @@ struct Summary {
 // OpenF1 - tyre strategy, weather, and the safety cars and red flags that
 // occurred. All four endpoints are free once the live window has closed
 // (NET-14), and all are fetched ONCE per race: the 5 min interval is for
-// retrying until it appears, never for refreshing (3.6.2).
+// retrying until it appears, never for refreshing (6a.1.2).
 inline constexpr int MAX_STINTS = 6;
 inline constexpr int MAX_STINT_DRIVERS = 24;
 inline constexpr int MAX_INCIDENTS = 8;
@@ -182,7 +182,7 @@ inline void upper_copy(char *dst, size_t n, const char *src) {
 }
 
 // Jolpica serves date and time separately, both UTC. A round with a date but
-// NO time has an UNKNOWN start, which must not become midnight (section 3.4).
+// NO time has an UNKNOWN start, which must not become midnight (section 3.5).
 inline uint32_t to_epoch(const char *date, const char *time_s) {
   if (!date || !*date || !time_s || !*time_s) return 0;
   int y = 0, mo = 0, d = 0, h = 0, mi = 0, se = 0;

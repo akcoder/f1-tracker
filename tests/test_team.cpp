@@ -1,4 +1,4 @@
-// Favourite team and teammate head-to-head (section 8.2).
+// Favourite team and teammate head-to-head (section B.2).
 #include <cstdarg>
 #include <cstdio>
 #include <cstring>
