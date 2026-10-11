@@ -580,8 +580,8 @@ def _settings_frame(ctx, page, tab, ids):
     d.text((16, 14), ("Display", "Race", "Location")[tab], font=FONT[16], fill=ORANGE)   # names the open tab
     for x, w, col, lab in ((238, 110, (0x1A, 0x25, 0x47), "Cancel"),
                            (356, 110, BORDER, "Save")):
-        d.rounded_rectangle([x, 8, x + w, 46], 6, fill=col)
-        d.text((x + w / 2, 8 + 19), lab, font=FONT[16], fill=TEXT, anchor="mm")
+        d.rounded_rectangle([x, 10, x + w, 48], 6, fill=col)
+        d.text((x + w / 2, 10 + 19), lab, font=FONT[16], fill=TEXT, anchor="mm")
     mdi = None
     mdi_path = os.path.join(ROOT, "tools", ".cache", "mdi.ttf")     # the firmware's MDI 7.4.47
     if os.path.exists(mdi_path):
@@ -1053,8 +1053,8 @@ def page_debug(ctx):
     require(ctx["geo"], "page-10-debug", "debug_label")
     img = Image.new("RGB", (W, H), BG); d = ImageDraw.Draw(img)
     d.text((8, 8), "Debug", font=FONT[16], fill=ORANGE)
-    d.rounded_rectangle([W - 104, 4, W - 8, 38], 6, fill=(0x1A, 0x25, 0x47))
-    d.text((W - 56, 21), "Close", font=FONT[16], fill=TEXT, anchor="mm")
+    d.rounded_rectangle([W - 104, 10, W - 8, 44], 6, fill=(0x1A, 0x25, 0x47))
+    d.text((W - 56, 27), "Close", font=FONT[16], fill=TEXT, anchor="mm")
     body = ("System\n"
             "  IP 192.168.1.47\n"
             "  Wi-Fi home-ssid  -58 dBm\n"

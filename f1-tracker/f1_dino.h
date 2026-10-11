@@ -182,6 +182,7 @@ inline bool begin_walk(uint32_t seed) {
   st.root = lv_image_create(scr);
   lv_image_set_src(st.root, st.snap);
   lv_obj_set_pos(st.root, 0, 0);
+  lv_obj_set_size(st.root, SCREEN_W, SCREEN_H);   // not SIZE_CONTENT: a sprite past x=480 would widen it and shift the picture
   lv_obj_remove_flag(st.root, LV_OBJ_FLAG_CLICKABLE);
   lv_obj_remove_flag(st.root, LV_OBJ_FLAG_SCROLLABLE);
   lv_obj_move_foreground(st.root);
