@@ -13,7 +13,11 @@
 #include "freertos/task.h"
 
 #include "f1_headshot.h"
-#include "f1_jpg.h"
+#if __has_include("esphome/components/tracker_common/tracker_jpg.h")
+#include "esphome/components/tracker_common/tracker_jpg.h"
+#else
+#include "tracker_jpg.h"             // host tests: -I the tracker-common component dir
+#endif
 #include "f1_portraits.h"
 
 namespace f1 {
@@ -32,6 +36,7 @@ struct Photo {
   std::atomic<bool> running{false};
   volatile bool cancel = false;
   int shown = -1;
+  int ext_scale = 256;                 // LVGL scale (256 = 1:1) for an external (headshot) picture
   const portraits::Portrait *p = nullptr;
   // A picture the network task is decoding into its own buffer (f1_headshot.h): shown from
   // that buffer as its rows arrive. Then there is no decode task of ours.
@@ -44,12 +49,12 @@ inline void on_rows(int done, void *ctx) {
 }
 inline void task(void *arg) {
   auto *ph = static_cast<Photo *>(arg);
-  jpg::Progress pr;
+  tracker::jpg::Progress pr;
   pr.rows = on_rows;
   pr.ctx = ph;
   pr.cancel = &ph->cancel;
-  if (ph->half) jpg::decode_half(ph->p->jpeg, ph->p->len, ph->buf, ph->w, ph->h, &pr);
-  else jpg::decode_full(ph->p->jpeg, ph->p->len, ph->buf, ph->w, ph->h, &pr);
+  if (ph->half) tracker::jpg::decode_half(ph->p->jpeg, ph->p->len, ph->buf, ph->w, ph->h, &pr);
+  else tracker::jpg::decode_full(ph->p->jpeg, ph->p->len, ph->buf, ph->w, ph->h, &pr);
   ph->running.store(false);
   vTaskDelete(nullptr);
 }
@@ -94,6 +99,7 @@ inline bool start(Photo &ph, const portraits::Portrait *p) {
   ph.dsc.data_size = (uint32_t) ph.w * ph.h * 2;
   ph.dsc.data = (const uint8_t *) ph.buf;
   lv_image_set_src(ph.img, &ph.dsc);
+  lv_image_set_scale(ph.img, 256);
   lv_obj_remove_flag(ph.img, LV_OBJ_FLAG_HIDDEN);
   ph.p = p;
   ph.cancel = false;
@@ -122,6 +128,8 @@ inline bool show_external(Photo &ph, headshot::Slot *slot) {
   ph.dsc.data_size = (uint32_t) headshot::W * headshot::H * 2;
   ph.dsc.data = (const uint8_t *) slot->buf;
   lv_image_set_src(ph.img, &ph.dsc);
+  lv_image_set_pivot(ph.img, 0, 0);
+  lv_image_set_scale(ph.img, (uint32_t) ph.ext_scale);
   ph.rows_src = &slot->rows;
   ph.state_src = &slot->state;
   ph.shown = -1;

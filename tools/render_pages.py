@@ -12,7 +12,9 @@ without a board (section 14.1).
 
   python3 tools/render_pages.py --font /path/to/RobotoMono.ttf
 """
-import argparse, io, json, math, os, re, sys, textwrap
+import argparse, glob, io, json, math, os, re, sys, textwrap
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import tracker_common
 from PIL import Image, ImageDraw, ImageFont
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -444,13 +446,9 @@ def page_driver(ctx):
     return _profile_card(ctx, p, "DRIVER · LEGEND", "page-5-driver")
 
 
-def _rookie_card(ctx, name, photo_rows=206):
-    """A driver with no compiled portrait: the card as f1_ui.h draws it with a fetched headshot.
-    The picture is a STAND-IN (a plain silhouette drawn here): the real one is the F1 media
-    server's, fetched by the device, and is not kept in this repository."""
-    img = Image.new("RGB", (W, H), BG); d = ImageDraw.Draw(img)
-    _card_head(img, d, ctx, "Driver", "Arvid Lindblad", "GBR")
-    px, py, pw, ph_ = box(ctx["geo"], "card_photo")
+def _silhouette():
+    """STAND-IN for a fetched headshot: 206x206, a plain silhouette (the real picture is the F1
+    media server's, fetched by the device, and is not kept in this repository)."""
     ph_img = Image.new("RGB", (206, 206), (0, 0, 0))
     pd = ImageDraw.Draw(ph_img)
     for r in range(0, 206):                                          # a soft studio gradient behind
@@ -459,6 +457,17 @@ def _rookie_card(ctx, name, photo_rows=206):
     pd.ellipse([68, 28, 138, 112], fill=(205, 170, 140))              # head
     pd.rounded_rectangle([34, 118, 172, 230], 40, fill=(30, 50, 110))  # shoulders
     pd.rectangle([92, 100, 114, 126], fill=(205, 170, 140))           # neck
+    return ph_img
+
+
+def _rookie_card(ctx, name, photo_rows=206):
+    """A driver with no compiled portrait: the card as f1_ui.h draws it with a fetched headshot.
+    The picture is a STAND-IN (a plain silhouette drawn here): the real one is the F1 media
+    server's, fetched by the device, and is not kept in this repository."""
+    img = Image.new("RGB", (W, H), BG); d = ImageDraw.Draw(img)
+    _card_head(img, d, ctx, "Driver", "Arvid Lindblad", "GBR")
+    px, py, pw, ph_ = box(ctx["geo"], "card_photo")
+    ph_img = _silhouette()
     d.rectangle([px, py, px + 205, py + 205], fill=(0, 0, 0))
     img.paste(ph_img.crop((0, 0, 206, photo_rows)), (px, py))
     # the text beside it, as f1_ui.h lays it out: x 282, y 60, 190 wide
@@ -601,7 +610,7 @@ def _sw(d, px, py, wid, G, on):
 def _field(d, px, py, wid, G, text):
     x, y, w, h = box(G, wid, px, py)
     d.rectangle([x, y, x + w, y + h], fill=(0x0E, 0x18, 0x36), outline=(0x3A, 0x4E, 0x86), width=2)
-    d.text((x + 8, y + h // 2), text, font=FONT[14], fill=(0xEE, 0xF2, 0xFF), anchor="lm")
+    d.text((x + 8, y + h // 2), text, font=FONT[16], fill=(0xEE, 0xF2, 0xFF), anchor="lm")
 
 
 def _slider(d, px, py, wid, G, frac):
@@ -610,9 +619,17 @@ def _slider(d, px, py, wid, G, frac):
     d.rounded_rectangle([x, y, x + int(w * frac), y + h], h // 2, fill=BORDER)
 
 
+def _tracker_update_h():
+    """tracker_update.h of tracker-common (see tools/tracker_common.py)."""
+    try:
+        return tracker_common.find(os.path.join("components", "tracker_common", "tracker_update.h"))
+    except FileNotFoundError as e:
+        raise DriftError(str(e))
+
+
 def update_consts():
-    """The card's geometry, read from f1_update.h so the render cannot drift from it."""
-    src = open(os.path.join(ROOT, "f1-tracker", "f1_update.h"), encoding="utf-8").read()
+    """The card's geometry, read from tracker-common's tracker_update.h so the render cannot drift."""
+    src = open(_tracker_update_h(), encoding="utf-8").read()
     out = {}
     for m in re.finditer(r"inline constexpr int ([^;]+);", src):
         for part in m.group(1).split(","):
@@ -623,7 +640,7 @@ def update_consts():
             "ICON_W", "ICON_H", "ICON_X", "ICON_Y")
     missing = [k for k in need if k not in out]
     if missing:
-        raise DriftError(f"f1_update.h no longer defines {missing}")
+        raise DriftError(f"tracker_update.h no longer defines {missing}")
     return out
 
 
@@ -648,13 +665,13 @@ def _card(mode):
         d.rounded_rectangle([bx, y0 + btn_y, bx + c["BTN_W"], y0 + btn_y + c["BTN_H"]], 8, fill=(0x1A, 0x25, 0x47))
         d.text((bx + c["BTN_W"] // 2, y0 + btn_y + c["BTN_H"] // 2), label, font=FONT[16], fill=WHITE, anchor="mm")
     if mode == "checking":
-        line("Checking for updates", 16, 22, WHITE); line("Asking GitHub for the latest release", l1y, 16, (0xDC, 0xE4, 0xF8))
+        line("Checking for updates", 16, "s34", WHITE); line("Asking GitHub for the latest release", l1y, 16, (0xDC, 0xE4, 0xF8))
         line("Installed: 0.1.0", l2y, 16, MUTED); one_button("Close"); name = "overlay-update-checking"
     elif mode == "latest":
-        line("Up to date", 16, 22, WHITE); line("0.1.0 is the latest version", l1y, 16, (0xDC, 0xE4, 0xF8))
+        line("Up to date", 16, "s34", WHITE); line("0.1.0 is the latest version", l1y, 16, (0xDC, 0xE4, 0xF8))
         line("Checks again every hour", l2y, 16, MUTED); one_button("Close"); name = "overlay-update-latest"
     elif mode == "available":
-        line("Update available", 16, 22, WHITE); line("New version: 0.2.0", l1y, 16, (0xDC, 0xE4, 0xF8))
+        line("Update available", 16, "s34", WHITE); line("New version: 0.2.0", l1y, 16, (0xDC, 0xE4, 0xF8))
         line("Installed: 0.1.0 - what's new:", l2y, 16, MUTED)
         nx, ny = x0 + (cw - c["NOTES_W"]) // 2, y0 + c["NOTES_Y"]
         d.rounded_rectangle([nx, ny, nx + c["NOTES_W"], ny + c["NOTES_H"]], 8, fill=(0x0A, 0x11, 0x28))
@@ -664,14 +681,14 @@ def _card(mode):
             font=FONT[16], fill=TEXT, spacing=4)
         button(0, "Not now", (0x1A, 0x25, 0x47)); button(1, "Update", BORDER); name = "overlay-update-available"
     elif mode == "installing":
-        line("Updating firmware", 16, 22, WHITE); line("Downloading", l1y, 16, (0xDC, 0xE4, 0xF8))
+        line("Updating firmware", 16, "s34", WHITE); line("Downloading", l1y, 16, (0xDC, 0xE4, 0xF8))
         line("Keep the power on", l2y, 16, (0xFF, 0xB5, 0x47))
         bx, by = x0 + (cw - c["BAR_W"]) // 2, y0 + c["BAR_Y"]
         d.rounded_rectangle([bx, by, bx + c["BAR_W"], by + c["BAR_H"]], 8, fill=(0x1A, 0x25, 0x47))
         d.rounded_rectangle([bx, by, bx + int(c["BAR_W"] * 0.42), by + c["BAR_H"]], 8, fill=BORDER)
         name = "overlay-update-installing"
     else:
-        line("Couldn't check", 16, 22, WHITE); line("No network connection", l1y, 16, (0xDC, 0xE4, 0xF8))
+        line("Couldn't check", 16, "s34", WHITE); line("No network connection", l1y, 16, (0xDC, 0xE4, 0xF8))
         line("Check the Wi-Fi and try again later", l2y, 16, MUTED); one_button("Close"); name = "overlay-update-failed"
     return img, name
 
@@ -695,7 +712,7 @@ def page_race_with_icon(ctx):
 def page_about(ctx):
     G = ctx["geo"]
     require(G, "page-12-about", "about_close", "about_mark", "about_title", "about_f1", "about_name", "about_version",
-            "about_by", "about_build", "about_device", "about_data", "about_legal")
+            "about_hdr", "about_by", "about_build", "about_device_hdr", "about_device", "about_data_hdr", "about_data", "about_legal")
     img = Image.new("RGB", (W, H), BG); d = ImageDraw.Draw(img)
     mark = os.path.join(ROOT, "reference", "logo", "boot-200.png")
     mx, my, _, _ = box(G, "about_mark")
@@ -711,22 +728,24 @@ def page_about(ctx):
         d.text((x + w // 2, y), text, font=FONT[size], fill=fill, anchor="ma")
     tx, ty, tw, th = box(G, "about_title")
     _title(img, d, tx + tw // 2, ty + th // 2)
-    centred("about_version", "Version 0.1.0", 14, TEXT)
+    hx, hy, _, _ = box(G, "about_hdr")
+    d.text((hx, hy), "ABOUT", font=FONT[16], fill=(0xFF, 0x8A, 0x1F))
+    centred("about_version", "Version 0.1.0", 16, (0xDC, 0xE4, 0xF8))
     centred("about_by", "by Dan Morphis", 14, MUTED)
-    centred("about_build", "ESPHome 2026.9.1, built Oct  8 2026", 12, MUTED)
+    centred("about_build", "ESPHome 2026.9.1, built Oct 8 2026", 12, MUTED)
+    hx, hy, _, _ = box(G, "about_device_hdr")
+    d.text((hx, hy), "THIS DEVICE", font=FONT[12], fill=(0xFF, 0x8A, 0x1F))
     dx, dy, dw, dh = box(G, "about_device")
-    mdi = _mdi(18)
-    if mdi: d.text((16, dy - 2), chr(0xF061A), font=mdi, fill=MUTED)
     d.multiline_text((dx, dy),
-        "This device\n  Name   f1-tracker-9cad68\n  IP     192.168.1.52\n"
-        "  Wi-Fi  home-ssid  -52 dBm\n  MAC    24:EC:4A:9C:AD:68\n  Up     3h 12m",
-        font=FONT[12], fill=TEXT, spacing=5)
+        "f1-tracker-9cad68  192.168.1.52\nWi-Fi home-ssid  -52 dBm\nMAC 24:EC:4A:9C:AD:68\nUp 3h 12m",
+        font=FONT[14], fill=(0xDC, 0xE4, 0xF8), spacing=2)
+    hx, hy, _, _ = box(G, "about_data_hdr")
+    d.text((hx, hy), "DATA FROM", font=FONT[12], fill=(0xFF, 0x8A, 0x1F))
     x, y, w, h = box(G, "about_data")
     d.multiline_text((x, y),
-        "Data from\n  Jolpica, jolpi.ca  and  OpenF1, openf1.org  (CC BY-NC-SA 4.0)\n"
-        "  Portraits: Wikimedia Commons, credited on each card\n"
-        "  Flags: flag-icons (MIT)   Circuits: f1-circuits (MIT)",
-        font=FONT[12], fill=MUTED, spacing=5)
+        "Jolpica jolpi.ca, OpenF1 openf1.org (CC BY-NC-SA)\nPortraits: Wikimedia Commons, credited on each card\n"
+        "Flags: flag-icons (MIT)  Circuits: f1-circuits (MIT)",
+        font=FONT[14], fill=TEXT, spacing=2)
     x, y, w, h = box(G, "about_legal")
     d.multiline_text((x, y),
         "Unofficial and not affiliated with Formula 1, the FIA or any\nteam. The F1 logo and names are trademarks of their owners.",
@@ -743,16 +762,16 @@ def page_settings(ctx):
     G = ctx["geo"]
     img, d, px, py = _settings_frame(ctx, "page-9-settings", 0,
         ("sw_autodim", "sw_autooff", "sl_bright", "ta_off_from", "ta_off_to"))
-    _row_icon(d, px, py, 6, 0xF00E1); d.text((px + 44, py + 6), "Auto-dim display", font=FONT[14], fill=TEXT)
+    _row_icon(d, px, py, 6, 0xF00E1); d.text((px + 44, py + 6), "Auto-dim display", font=FONT[16], fill=TEXT)
     _sw(d, px, py, "sw_autodim", G, True)
-    _row_icon(d, px, py, 56, 0xF0904); d.text((px + 44, py + 56), "Auto off overnight", font=FONT[14], fill=TEXT)
+    _row_icon(d, px, py, 56, 0xF0904); d.text((px + 44, py + 56), "Auto off overnight", font=FONT[16], fill=TEXT)
     _sw(d, px, py, "sw_autooff", G, True)
-    _row_icon(d, px, py, 106, 0xF0594); d.text((px + 44, py + 106), "Off from", font=FONT[14], fill=TEXT)
+    _row_icon(d, px, py, 106, 0xF0594); d.text((px + 44, py + 106), "Off from", font=FONT[16], fill=TEXT)
     _field(d, px, py, "ta_off_from", G, "23")
-    d.text((px + 224, py + 106), "until", font=FONT[14], fill=MUTED)
+    d.text((px + 224, py + 106), "until", font=FONT[16], fill=MUTED)
     _field(d, px, py, "ta_off_to", G, "7")
     d.text((px + 364, py + 106), "local h", font=FONT[12], fill=MUTED)
-    _row_icon(d, px, py, 162, 0xF00DF); d.text((px + 44, py + 162), "Brightness", font=FONT[14], fill=TEXT)
+    _row_icon(d, px, py, 162, 0xF00DF); d.text((px + 44, py + 162), "Brightness", font=FONT[16], fill=TEXT)
     _slider(d, px, py, "sl_bright", G, 0.8)
     return img, "page-9-settings"
 
@@ -761,12 +780,12 @@ def page_settings_race(ctx):
     G = ctx["geo"]
     img, d, px, py = _settings_frame(ctx, "page-9b-settings-race", 1,
         ("sl_carousel", "lbl_carousel", "sw_alerts", "sw_milestone"))
-    _row_icon(d, px, py, 6, 0xF051B); d.text((px + 44, py + 6), "Carousel", font=FONT[14], fill=TEXT)
-    d.text((px + 160, py + 6), "45 s", font=FONT[14], fill=MUTED)
+    _row_icon(d, px, py, 6, 0xF051B); d.text((px + 44, py + 6), "Carousel", font=FONT[16], fill=TEXT)
+    d.text((px + 160, py + 6), "45 s", font=FONT[16], fill=MUTED)
     _slider(d, px, py, "sl_carousel", G, 0.29)
-    _row_icon(d, px, py, 56, 0xF009E); d.text((px + 44, py + 56), "Watched driver alerts", font=FONT[14], fill=TEXT)
+    _row_icon(d, px, py, 56, 0xF009E); d.text((px + 44, py + 56), "Watched driver alerts", font=FONT[16], fill=TEXT)
     _sw(d, px, py, "sw_alerts", G, True)
-    _row_icon(d, px, py, 106, 0xF053A); d.text((px + 44, py + 106), "Milestones only", font=FONT[14], fill=TEXT)
+    _row_icon(d, px, py, 106, 0xF053A); d.text((px + 44, py + 106), "Milestones only", font=FONT[16], fill=TEXT)
     _sw(d, px, py, "sw_milestone", G, False)
     return img, "page-9b-settings-race"
 
@@ -775,10 +794,10 @@ def page_settings_location(ctx):
     G = ctx["geo"]
     img, d, px, py = _settings_frame(ctx, "page-9c-settings-location", 2,
         ("ta_lat", "ta_lon", "settings_kb"))
-    _row_icon(d, px, py, 10, 0xF0F57); d.text((px + 44, py + 10), "Latitude", font=FONT[14], fill=TEXT)
+    _row_icon(d, px, py, 10, 0xF0F57); d.text((px + 44, py + 10), "Latitude", font=FONT[16], fill=TEXT)
     _field(d, px, py, "ta_lat", G, "61.580")
     d.text((px + 320, py + 12), "N+  S-", font=FONT[12], fill=MUTED)
-    _row_icon(d, px, py, 60, 0xF0F5A); d.text((px + 44, py + 60), "Longitude", font=FONT[14], fill=TEXT)
+    _row_icon(d, px, py, 60, 0xF0F5A); d.text((px + 44, py + 60), "Longitude", font=FONT[16], fill=TEXT)
     _field(d, px, py, "ta_lon", G, "-149.440")
     d.text((px + 320, py + 62), "E+  W-", font=FONT[12], fill=MUTED)
     d.multiline_text((px + 16, py + 104),
@@ -1047,7 +1066,7 @@ def page_debug(ctx):
             "  Carousel: CIRCUIT 14/40\n"
             "  Jolpica 41 fetches, last 3 h\n"
             "  OpenF1 skipped (window) x6")
-    d.multiline_text((8, 36), body, font=FONT[12], fill=TEXT, spacing=4)
+    d.multiline_text((8, 32), body, font=FONT[16], fill=TEXT, spacing=2)
     return img, "page-10-debug"
 
 
@@ -1089,6 +1108,32 @@ def _detail_card(ctx, name, photo_rows):
         d.multiline_text((cx, cy), "\n".join(credit), font=FONT[12], fill=MUTED, spacing=2)
     d.text((240, 420), "tap anywhere to close", font=FONT[12], fill=DIM, anchor="mm")
     return img, name
+
+
+def overlay_detail_rookie(ctx):
+    """The detail card for a driver with no compiled portrait (decision 193): the F1 media
+    server's headshot, 206 px scaled to 120 (LVGL scale 256*120/206), credited to formula1.com."""
+    require(ctx["geo"], "overlay-detail-rookie", "detail_panel", "detail_title", "detail_body", "detail_flag",
+            "detail_photo", "detail_credit")
+    G = ctx["geo"]
+    img, _ = page_order(ctx)
+    d = ImageDraw.Draw(img, "RGBA")
+    d.rectangle([0, 0, W, H], fill=(0, 0, 0, 150))
+    d.rounded_rectangle([20, 40, 460, 440], 12, fill=PANEL, outline=BORDER, width=2)
+    px0, py0 = 20, 40
+    d.text((px0 + 16, py0 + 12), "Arvid Lindblad", font=FONT[18], fill=ORANGE)
+    if "GBR" in ctx["flags"]:
+        img.paste(ctx["flags"]["GBR"].resize((32, 24), Image.NEAREST), (412, 56))
+    body = "#41  LIN   Racing Bulls\n\n" + f"{'Starts (provisional)':<20} P12\n" + f"{'Gap':<20} +3.204"
+    bx, by, _, _ = box(G, "detail_body", px0, py0)
+    d.multiline_text((bx, by), body, font=FONT[14], fill=TEXT, spacing=5)
+    fx, fy, _, _ = box(G, "detail_photo", px0, py0)
+    sz = 256 * 120 // 206 * 206 // 256          # the scaled size LVGL gives it: ~120 px
+    img.paste(_silhouette().resize((sz, sz), Image.BILINEAR), (fx, fy))
+    cx, cy, cw, _ = box(G, "detail_credit", px0, py0)
+    d.multiline_text((cx, cy), "\n".join(textwrap.wrap("photo: formula1.com", int(cw // 7.2))), font=FONT[12], fill=MUTED, spacing=2)
+    d.text((240, 420), "tap anywhere to close", font=FONT[12], fill=DIM, anchor="mm")
+    return img, "overlay-detail-rookie"
 
 
 def overlay_detail(ctx):
@@ -1206,6 +1251,7 @@ def main():
     a = ap.parse_args()
     for sz in (10, 12, 14, 15, 16, 18, 22, 24, 34):
         FONT[sz] = ImageFont.truetype(a.font, sz)
+    FONT["s34"] = ImageFont.truetype(a.sans or a.font, 34)   # setup_title: the update card's title
     FONT[50] = ImageFont.truetype(a.sans or a.font, 50)   # title_big: cap height = the F1 logo's 36 px
     global OUT
     if a.out:
@@ -1295,7 +1341,7 @@ def main():
     pages = [page_wifi_loading, page_wifi_connecting, page_wifi_ap, page_race, page_order, page_circuit, page_driver, page_driver_loading, page_rookie, page_rookie_loading, page_legend,
              page_standings, page_summary, page_settings, page_settings_race,
              page_settings_location, page_about, page_about_cars, page_boot_cars, page_boot_strip, page_overtake, page_debug, page_offseason,
-             overlay_detail, overlay_detail_loading, overlay_alert, overlay_milestone,
+             overlay_detail, overlay_detail_loading, overlay_detail_rookie, overlay_alert, overlay_milestone,
              page_race_with_icon, overlay_update_checking, overlay_update_available,
              overlay_update_installing, overlay_update_failed]
     if a.gif:

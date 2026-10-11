@@ -24,7 +24,11 @@
 #include <ctime>
 
 #include "f1_headshot.h"
-#include "f1_png.h"
+#if __has_include("esphome/components/tracker_common/tracker_png.h")
+#include "esphome/components/tracker_common/tracker_png.h"
+#else
+#include "tracker_png.h"             // host tests: -I the tracker-common component dir
+#endif
 #endif
 
 namespace f1 {
@@ -203,7 +207,7 @@ inline bool fetch_headshot(const char *url, headshot::Slot &sl) {
   const int status = esp_http_client_get_status_code(s.h);
   g_stats.last_status = (uint16_t) status;
   bool ok = status == 200;
-  png::Decoder dec;
+  tracker::png::Decoder dec;
   if (ok) {
     dec.on_row = headshot_row;
     dec.row_ctx = &sl;

@@ -13,7 +13,30 @@ substitutions:
   obs_lon: "-149.439"
   backlight_min: "0.10"       # HW-6: lowest duty still visible; raise if the panel
                               # goes dark at the bottom of the brightness slider
+  tracker_common_url: https://github.com/akcoder/tracker-common
+  tracker_common_ref: v0.2.1     # a tag, so a change in tracker-common cannot break this build
+  tracker_common_refresh: 1d
+  manifest_url: https://akcoder.github.io/f1-tracker/manifest.json   # UI-68: built and published by the Firmware workflow
   carousel_default: "45"      # UI-20: seconds per card (brief asked 30 s - 1 min)
+
+# The firmware-update card and the web page's icon and logo link are shared with
+# sky-tracker: github.com/akcoder/tracker-common (a local build can point at a checkout,
+# see dev/f1-tracker-dev.yaml).
+external_components:
+  - source:
+      type: git
+      url: ${tracker_common_url}
+      ref: ${tracker_common_ref}
+    components: [tracker_common]
+    refresh: ${tracker_common_refresh}
+tracker_common:
+
+packages:
+  tracker_fonts:              # the fonts every tracker shares (decision 194)
+    url: ${tracker_common_url}
+    ref: ${tracker_common_ref}
+    files: [fonts.yaml]
+    refresh: ${tracker_common_refresh}
 
 esphome:
   name: ${name}
@@ -35,9 +58,7 @@ esphome:
     # built dynamically, enable the type here.
     - "-DLV_USE_IMAGE=1"
   includes:
-    - f1-tracker/f1_panel.h
     - f1-tracker/f1_logo.h         # generated: tools/gen_logo.py
-    - f1-tracker/f1_web.h
     - f1-tracker/f1_circuits.h     # generated: tools/gen_circuits.py
     - f1-tracker/f1_calendar.h     # generated: tools/gen_calendar.py
     - f1-tracker/f1_flags.h        # generated: tools/gen_flags.py
@@ -51,9 +72,6 @@ esphome:
     - f1-tracker/f1_team.h
     - f1-tracker/f1_roster.h
     - f1-tracker/f1_boot.h
-    - f1-tracker/f1_sun.h
-    - f1-tracker/f1_updlogic.h
-    - f1-tracker/f1_update.h
     - f1-tracker/f1_cars.h         # generated: tools/gen_cars.py
     - f1-tracker/f1_logomark.h     # generated: tools/gen_logo.py, the logo outline the cars follow
     - f1-tracker/f1_animlogic.h
@@ -64,10 +82,8 @@ esphome:
     - f1-tracker/f1_json.h
     - f1-tracker/f1_store.h
     - f1-tracker/f1_order.h
-    - f1-tracker/f1_jpg.h          # the portrait decoder (top-down)
     - f1-tracker/f1_photo.h        # a portrait decoding in the background, redrawn as rows arrive
     - f1-tracker/f1_detail.h
-    - f1-tracker/f1_png.h          # streaming PNG decoder (palette + transparency), for headshots
     - f1-tracker/f1_headshot.h     # runtime headshots for drivers with no compiled portrait
     - f1-tracker/f1_net.h
     - f1-tracker/f1_app.h
@@ -77,7 +93,7 @@ esphome:
     - priority: 1100           # HW-7: before the SPI bus (1000) and the panel init
       then:
         - lambda: |-
-            f1::panel_soft_reset(39, 48, 47);   // CS, SCK, MOSI of GUITION-4848S040
+            tracker::panel_soft_reset(39, 48, 47);   // CS, SCK, MOSI of GUITION-4848S040
             // NET-2: fallback AP named "F1 Tracker - XXXX" (last MAC bytes).
             // Must be set before WiFi starts (250); ESPHome's ssid: is a literal.
             uint8_t mac[6];
@@ -91,10 +107,13 @@ esphome:
       then:                    # done - at boot a third TLS session beside the two the
         - delay: 3min          # data task keeps ran out of memory on sky-tracker
         - lambda: |-
-            if (id(wifi_comp).is_connected()) f1::upd::check_quiet("boot");
+            if (id(wifi_comp).is_connected()) tracker::upd::check_quiet("boot");
     - priority: 600            # NET-10: before web_server's own setup (249), so
       then:                    # our handler for "/" is asked first
-        - lambda: f1::web::install();
+        - lambda: |-
+            tracker::web::install({f1::logo::FAVICON_SVG, f1::logo::HEADER_SVG,
+                                   (size_t) f1::logo::HEADER_SVG_LEN,
+                                   "https://github.com/akcoder/f1-tracker"});
     - priority: -100           # widgets exist by now (7.1.2: entities own the
       then:                    # values, the widgets are one view of them)
         - lambda: |-
@@ -156,8 +175,8 @@ esphome:
             }
             f1::detail::setup(id(detail_panel), id(detail_title), id(detail_body),
                               id(detail_flag), id(detail_photo), id(detail_credit));
-            f1::upd::set_source("https://github.com/akcoder/f1-tracker/releases/latest/download/manifest.json");
-            f1::upd::init(id(fw_update), id(setup_title)->get_lv_font(), id(mono16)->get_lv_font(),
+            tracker::upd::set_source("${manifest_url}");
+            tracker::upd::init(id(fw_update), id(setup_title)->get_lv_font(), id(mono16)->get_lv_font(),
                           id(mono12)->get_lv_font(), &lv_font_montserrat_28);   // UI-68
             f1::anim::init(id(wifi_page)->obj, id(boot_mark), id(about_page)->obj, id(about_mark));
             f1::net::start();                 // the data task, pinned to core 1
@@ -266,14 +285,14 @@ ota:
     on_begin:                 # UI-68: the download blocks the loop, so the card is
       - lambda: |-            # redrawn from these hooks, and the data task steps aside
           f1::net::ota_begin();
-          f1::upd::ota_begin("Downloading");
+          tracker::upd::ota_begin("Downloading");
     on_progress:
-      - lambda: f1::upd::ota_progress(x);
+      - lambda: tracker::upd::ota_progress(x);
     on_end:
-      - lambda: f1::upd::ota_end(true);
+      - lambda: tracker::upd::ota_end(true);
     on_error:
       - lambda: |-
-          f1::upd::ota_end(false);
+          tracker::upd::ota_end(false);
           f1::net::ota_error();            // resume if the install failed
 
 wifi:
@@ -334,11 +353,9 @@ update:
     id: fw_update
     name: Firmware Update
     icon: mdi:cloud-download
-    # The manifest lives WITH the binaries, as a release asset: ESPHome's
-    # updater merges builds[].ota.path with this URL and has no absolute-URL
-    # branch, so a manifest on Pages could not point at a release.
-    # /releases/latest/download/ is a stable 302 to the newest release.
-    source: https://github.com/akcoder/f1-tracker/releases/latest/download/manifest.json
+    # The Firmware workflow (.github/workflows/firmware.yml, as sky-tracker's) publishes the
+    # manifest with the binaries on Pages; the release notes are the release body.
+    source: ${manifest_url}
     update_interval: never    # driven by our own hourly interval, so the check
                               # can also be triggered from the settings screen
     web_server: {sorting_group_id: grp_system, sorting_weight: 0}
@@ -447,47 +464,14 @@ image:
     id: f1_mark
     type: RGB565
 
+# mono12/14/16/18/24, setup_title and setup_body are the shared set: tracker-common/fonts.yaml (the
+# packages entry at the top). What follows is this project's own.
 font:
-  - file: "gfonts://Roboto Mono"
-    id: mono12                # order rows (6.3.1), circuit facts
-    size: 12
-    bpp: 4
-    glyphsets: &glyphs [GF_Latin_Core]
-  - file: "gfonts://Roboto Mono"
-    id: mono14                # card body
-    size: 14
-    bpp: 4
-    glyphsets: *glyphs
-  - file: "gfonts://Roboto Mono"
-    id: mono16                # titles, buttons
-    size: 16
-    bpp: 4
-    glyphsets: *glyphs
-  - file: "gfonts://Roboto Mono"
-    id: mono18                # card titles
-    size: 18
-    bpp: 4
-    glyphsets: *glyphs
-  - file: "gfonts://Roboto Mono@500"
-    id: mono24                # clock, OTA panel, watched-driver banner (6.14.3)
-    size: 24
-    bpp: 4
-    glyphsets: *glyphs
-  - file: "gfonts://Roboto@300"
-    id: setup_title
-    size: 34
-    bpp: 4
-    glyphsets: *glyphs
   - file: "gfonts://Roboto@300"
     id: title_big             # boot/About "Tracker": cap height matches the F1 logo (36 px)
     size: 50
     bpp: 4
-    glyphsets: *glyphs
-  - file: "gfonts://Roboto"
-    id: setup_body
-    size: 22
-    bpp: 4
-    glyphsets: *glyphs
+    glyphsets: [GF_Latin_Core]
   - file:
       type: web
       url: https://cdn.jsdelivr.net/npm/@mdi/font@7.4.47/fonts/materialdesignicons-webfont.ttf
@@ -530,7 +514,7 @@ button:
     web_server: {sorting_group_id: grp_system, sorting_weight: 1}
     on_press:                 # quiet: no card on the panel - the Firmware row and the
       - lambda: |-            # icon beside the gear show the result
-          f1::upd::check_quiet("button");
+          tracker::upd::check_quiet("button");
 
 number:
   - platform: template        # UI-44 / decision 7: feeds sunrise/sunset ONLY
@@ -1568,13 +1552,13 @@ lvgl:
             scrollable: false
             widgets:
               - label: {x: 16, y: 6, text: "\U000F00E1", text_font: mdi18, text_color: 0x7E8BB3}
-              - label: {x: 44, y: 6, text: "Auto-dim display", text_font: mono14, text_color: 0xC9D3F2}
+              - label: {x: 44, y: 6, text: "Auto-dim display", text_font: mono16, text_color: 0xC9D3F2}
               - switch: {id: sw_autodim, x: 380, y: 0, width: 72, height: 32}
               - label: {x: 16, y: 56, text: "\U000F0904", text_font: mdi18, text_color: 0x7E8BB3}
-              - label: {x: 44, y: 56, text: "Auto off overnight", text_font: mono14, text_color: 0xC9D3F2}
+              - label: {x: 44, y: 56, text: "Auto off overnight", text_font: mono16, text_color: 0xC9D3F2}
               - switch: {id: sw_autooff, x: 380, y: 50, width: 72, height: 32}
               - label: {x: 16, y: 106, text: "\U000F0594", text_font: mdi18, text_color: 0x7E8BB3}
-              - label: {x: 44, y: 106, text: "Off from", text_font: mono14, text_color: 0xC9D3F2}
+              - label: {x: 44, y: 106, text: "Off from", text_font: mono16, text_color: 0xC9D3F2}
               - textarea:
                   id: ta_off_from
                   x: 150
@@ -1586,7 +1570,7 @@ lvgl:
                   one_line: true
                   max_length: 2
                   accepted_chars: "0123456789"
-                  text_font: mono14
+                  text_font: mono16
                   text_color: 0xEEF2FF
                   bg_color: 0x0E1836
                   border_color: 0x3A4E86
@@ -1594,7 +1578,7 @@ lvgl:
                   on_click:
                     - lvgl.keyboard.update: { id: settings_kb, textarea: ta_off_from }
                     - lvgl.widget.show: settings_kb
-              - label: {x: 224, y: 106, text: "until", text_font: mono14, text_color: 0x7E8BB3}
+              - label: {x: 224, y: 106, text: "until", text_font: mono16, text_color: 0x7E8BB3}
               - textarea:
                   id: ta_off_to
                   x: 290
@@ -1606,7 +1590,7 @@ lvgl:
                   one_line: true
                   max_length: 2
                   accepted_chars: "0123456789"
-                  text_font: mono14
+                  text_font: mono16
                   text_color: 0xEEF2FF
                   bg_color: 0x0E1836
                   border_color: 0x3A4E86
@@ -1616,7 +1600,7 @@ lvgl:
                     - lvgl.widget.show: settings_kb
               - label: {x: 364, y: 106, text: "local h", text_font: mono12, text_color: 0x7E8BB3}
               - label: {x: 16, y: 162, text: "\U000F00DF", text_font: mdi18, text_color: 0x7E8BB3}
-              - label: {x: 44, y: 162, text: "Brightness", text_font: mono14, text_color: 0xC9D3F2}
+              - label: {x: 44, y: 162, text: "Brightness", text_font: mono16, text_color: 0xC9D3F2}
               - slider:
                   id: sl_bright
                   x: 150
@@ -1651,8 +1635,8 @@ lvgl:
             scrollable: false
             widgets:
               - label: {x: 16, y: 6, text: "\U000F051B", text_font: mdi18, text_color: 0x7E8BB3}
-              - label: {x: 44, y: 6, text: "Carousel", text_font: mono14, text_color: 0xC9D3F2}
-              - label: {id: lbl_carousel, x: 160, y: 6, text: "45 s", text_font: mono14, text_color: 0x7E8BB3}
+              - label: {x: 44, y: 6, text: "Carousel", text_font: mono16, text_color: 0xC9D3F2}
+              - label: {id: lbl_carousel, x: 160, y: 6, text: "45 s", text_font: mono16, text_color: 0x7E8BB3}
               - slider:
                   id: sl_carousel
                   x: 236
@@ -1664,10 +1648,10 @@ lvgl:
                   on_value:
                     - lambda: f1::ui::settings_labels(id(lbl_carousel), (int) x);
               - label: {x: 16, y: 56, text: "\U000F009E", text_font: mdi18, text_color: 0x7E8BB3}
-              - label: {x: 44, y: 56, text: "Watched driver alerts", text_font: mono14, text_color: 0xC9D3F2}
+              - label: {x: 44, y: 56, text: "Watched driver alerts", text_font: mono16, text_color: 0xC9D3F2}
               - switch: {id: sw_alerts, x: 380, y: 50, width: 72, height: 32}
               - label: {x: 16, y: 106, text: "\U000F053A", text_font: mdi18, text_color: 0x7E8BB3}
-              - label: {x: 44, y: 106, text: "Milestones only", text_font: mono14, text_color: 0xC9D3F2}
+              - label: {x: 44, y: 106, text: "Milestones only", text_font: mono16, text_color: 0xC9D3F2}
               - switch: {id: sw_milestone, x: 380, y: 100, width: 72, height: 32}
 
         - obj:
@@ -1684,7 +1668,7 @@ lvgl:
             scrollable: false
             widgets:
               - label: {x: 16, y: 10, text: "\U000F0F57", text_font: mdi18, text_color: 0x7E8BB3}
-              - label: {x: 44, y: 10, text: "Latitude", text_font: mono14, text_color: 0xC9D3F2}
+              - label: {x: 44, y: 10, text: "Latitude", text_font: mono16, text_color: 0xC9D3F2}
               - textarea:
                   id: ta_lat
                   x: 160
@@ -1696,7 +1680,7 @@ lvgl:
                   one_line: true
                   max_length: 8
                   accepted_chars: "-.0123456789"
-                  text_font: mono14
+                  text_font: mono16
                   text_color: 0xEEF2FF
                   bg_color: 0x0E1836
                   border_color: 0x3A4E86
@@ -1706,7 +1690,7 @@ lvgl:
                     - lvgl.widget.show: settings_kb
               - label: {x: 320, y: 12, text: "N+  S-", text_font: mono12, text_color: 0x7E8BB3}
               - label: {x: 16, y: 60, text: "\U000F0F5A", text_font: mdi18, text_color: 0x7E8BB3}
-              - label: {x: 44, y: 60, text: "Longitude", text_font: mono14, text_color: 0xC9D3F2}
+              - label: {x: 44, y: 60, text: "Longitude", text_font: mono16, text_color: 0xC9D3F2}
               - textarea:
                   id: ta_lon
                   x: 160
@@ -1718,7 +1702,7 @@ lvgl:
                   one_line: true
                   max_length: 8
                   accepted_chars: "-.0123456789"
-                  text_font: mono14
+                  text_font: mono16
                   text_color: 0xEEF2FF
                   bg_color: 0x0E1836
                   border_color: 0x3A4E86
@@ -1757,7 +1741,7 @@ lvgl:
             on_click:
               # the card on the top layer shows Checking, then Up to date,
               # Update available (with the notes) or Couldn't check
-              - lambda: f1::upd::check_now(id(wifi_comp).is_connected());
+              - lambda: tracker::upd::check_now(id(wifi_comp).is_connected());
         - button:               # UI-67: About, lower right
             id: btn_about
             x: 362
@@ -1822,6 +1806,13 @@ lvgl:
             on_click:
               - lambda: id(from_about) = true;      # return to Settings as it was left
               - lvgl.page.show: settings_page
+        - label:                # as sky/plane: the page name, small and orange, top left
+            id: about_hdr
+            x: 8
+            y: 12
+            text: "ABOUT"
+            text_font: mono16
+            text_color: 0xFF8A1F
         - image:
             id: about_mark
             src: about_logo
@@ -1853,13 +1844,13 @@ lvgl:
             y: 174
             width: 480
             text: "Version ${fw_version}"
-            text_font: mono14
-            text_color: 0xC9D3F2
+            text_font: mono16
+            text_color: 0xDCE4F8
             text_align: CENTER
         - label:
             id: about_by
             x: 0
-            y: 194
+            y: 196
             width: 480
             text: "by Dan Morphis"
             text_font: mono14
@@ -1868,34 +1859,43 @@ lvgl:
         - label:
             id: about_build
             x: 0
-            y: 216
+            y: 218
             width: 480
             text: ""
             text_font: mono12
             text_color: 0x7E8BB3
             text_align: CENTER
-        - label:
+        - label:                # as sky-tracker's About: a small orange heading, then four lines
+            id: about_device_hdr
             x: 16
-            y: 240
-            text: "\U000F061A"
-            text_font: mdi18
-            text_color: 0x7E8BB3
+            y: 238
+            text: "THIS DEVICE"
+            text_font: mono12
+            text_color: 0xFF8A1F
         - label:
             id: about_device
-            x: 44
-            y: 242
-            width: 424
+            x: 16
+            y: 258
+            width: 452
             text: ""
+            text_font: mono14
+            text_color: 0xDCE4F8
+            long_mode: WRAP
+        - label:
+            id: about_data_hdr
+            x: 16
+            y: 336
+            text: "DATA FROM"
             text_font: mono12
-            text_color: 0xC9D3F2
+            text_color: 0xFF8A1F
         - label:
             id: about_data
             x: 16
-            y: 352
+            y: 354
             width: 452
-            text: "Data from\n  Jolpica, jolpi.ca  and  OpenF1, openf1.org  (CC BY-NC-SA 4.0)\n  Portraits: Wikimedia Commons, credited on each card\n  Flags: flag-icons (MIT)   Circuits: f1-circuits (MIT)"
-            text_font: mono12
-            text_color: 0x7E8BB3
+            text: "Jolpica jolpi.ca, OpenF1 openf1.org (CC BY-NC-SA)\nPortraits: Wikimedia Commons, credited on each card\nFlags: flag-icons (MIT)  Circuits: f1-circuits (MIT)"
+            text_font: mono14
+            text_color: 0xC9D3F2
         - label:                # 3.7.5: the trademark non-affiliation notice
             id: about_legal
             x: 16
@@ -1923,7 +1923,7 @@ lvgl:
             y: 32
             width: 464
             text: ""
-            text_font: mono12
+            text_font: mono16
             text_color: 0xC9D3F2
         - button:
             align: TOP_RIGHT
@@ -1985,7 +1985,7 @@ interval:
             if (strcmp(lv_label_get_text(id(wifi_body)), b) != 0) lv_label_set_text(id(wifi_body), b);
           }
           // UI-68a: the update icon sits beside the gear, so only on pages that have one
-          f1::upd::set_page_ok(id(race_page)->is_showing() || id(order_page)->is_showing() ||
+          tracker::upd::set_page_ok(id(race_page)->is_showing() || id(order_page)->is_showing() ||
                                id(circuit_page)->is_showing() || id(standings_page)->is_showing() ||
                                id(summary_page)->is_showing());
           switch (st.page) {
@@ -2001,7 +2001,7 @@ interval:
     then:
       - lambda: |-
           if (lv_display_get_inactive_time(nullptr) < 60000) return;
-          f1::upd::idle_close();                 // an offer or result closes as Not now
+          tracker::upd::idle_close();                 // an offer or result closes as Not now
           if (id(settings_page)->is_showing()) {
             // as Cancel: nothing saved, the live brightness put back
             id(bright_day) = id(bright_day_open);
@@ -2016,7 +2016,7 @@ interval:
   - interval: 1h                # "Made for ESPHome": check for a published
     then:                       # firmware update once an hour.
       - lambda: |-
-          if (id(wifi_comp).is_connected()) f1::upd::check_quiet("hourly");
+          if (id(wifi_comp).is_connected()) tracker::upd::check_quiet("hourly");
   - interval: 30s               # UI-44 / UI-44c: auto-dim follows the Sun, and
     then:                       # Auto Off blanks the panel overnight.
       - lambda: |-
@@ -2024,7 +2024,7 @@ interval:
           if (!t.is_valid()) return;
           // UI-44: the position is read from the ENTITIES every pass, never cached - the
           // settings page, the web UI and Home Assistant can all change it.
-          id(sun_elevation).publish_state(f1::sun::elevation(
+          id(sun_elevation).publish_state(tracker::sun::elevation(
               (double) t.timestamp, (double) id(obs_lat).state, (double) id(obs_lon).state));
           f1::display::g_state.window.enabled = id(auto_off).state;
           f1::display::g_state.window.from_hour = (uint8_t) id(off_from).state;
@@ -2056,19 +2056,15 @@ interval:
       - lambda: |-
           if (!id(about_page)->is_showing()) return;
           char b[64];
-          snprintf(b, sizeof(b), "ESPHome %s, built %s", ESPHOME_VERSION, __DATE__);
+          char built[16];
+          tracker::about::tidy_date(__DATE__, built, sizeof(built));
+          snprintf(b, sizeof(b), "ESPHome %s, built %s", ESPHOME_VERSION, built);
           lv_label_set_text(id(about_build), b);
-          static char d[360];
-          const uint32_t s = esphome::millis() / 1000;
+          static char d[200];
           const std::string ip = id(ip_addr).state, ss = id(wifi_ssid_info).state;
-          char up[24];
-          if (s >= 86400) snprintf(up, sizeof(up), "%ud %uh", (unsigned) (s / 86400), (unsigned) ((s % 86400) / 3600));
-          else snprintf(up, sizeof(up), "%uh %02um", (unsigned) (s / 3600), (unsigned) ((s % 3600) / 60));
-          snprintf(d, sizeof(d),
-                   "This device\n  Name   %s\n  IP     %s\n  Wi-Fi  %s  %d dBm\n  MAC    %s\n  Up     %s",
-                   App.get_name().c_str(), ip.empty() ? "-" : ip.c_str(),
-                   ss.empty() ? "-" : ss.c_str(), (int) id(wifi_comp).wifi_rssi(),
-                   get_mac_address_pretty().c_str(), up);
+          tracker::about::device_text(d, sizeof(d), App.get_name().c_str(), ip.c_str(), ss.c_str(),
+                                      (int) id(wifi_comp).wifi_rssi(), get_mac_address_pretty().c_str(),
+                                      esphome::millis() / 1000.0);
           lv_label_set_text(id(about_device), d);
   - interval: 1s                # UI-27: debug page, only while it is showing
     then:

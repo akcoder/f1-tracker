@@ -61,6 +61,8 @@ def mark_points():
     centred, `MARK_N` even steps in arc length, in the traced circuit's direction round the lap,
     starting where the traced circuit's start/finish line is."""
     sys.path.insert(0, HERE)
+    import tracker_common
+    sys.path.insert(0, os.path.dirname(tracker_common.find("tools/svgpath.py")))
     import svgpath
     raw = svgpath.flatten(svgpath.path_d(open(MARK_SVG).read()), per_curve=40)
     cum = [0.0]

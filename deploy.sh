@@ -13,7 +13,7 @@
 set -euo pipefail
 
 cd "$(dirname "$0")"
-YAML=f1-tracker.yaml
+YAML=${YAML:-f1-tracker.yaml}   # YAML=dev/f1-tracker-dev.yaml builds against a local tracker-common
 ESPHOME=.venv/bin/esphome
 LOG=$(mktemp -t f1build)
 
@@ -46,8 +46,10 @@ set -e
 
 # Warnings in OUR code only. Everything under components/, esp-idf, the
 # toolchain and the PlatformIO package tree is upstream and out of scope.
-OURS=$(grep -nE "warning:" "$LOG" \
-        | grep -viE "components/|/esp-idf/|/framework-|toolchain|\.platformio" || true)
+# tracker_common is ours too (shared with sky-tracker), though it sits under components/.
+OURS=$({ grep -nE "warning:" "$LOG" | grep "tracker_common" || true
+         grep -nE "warning:" "$LOG" \
+           | grep -viE "components/|/esp-idf/|/framework-|toolchain|\.platformio" || true; })
 
 if [ $rc -ne 0 ]; then
   echo "==> COMPILE FAILED"; grep -E "error:" "$LOG" | head -20; echo "(full log: $LOG)"; exit 1

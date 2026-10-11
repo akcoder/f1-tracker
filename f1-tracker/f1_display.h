@@ -6,7 +6,11 @@
 #include <cmath>
 #include <cstdint>
 
-#include "f1_sun.h"
+#if __has_include("esphome/components/tracker_common/tracker_sun.h")
+#include "esphome/components/tracker_common/tracker_sun.h"
+#else
+#include "tracker_sun.h"          // host tests: -I the tracker-common component dir
+#endif
 
 namespace f1 {
 namespace display {
@@ -26,7 +30,7 @@ inline float dim_factor(float sun_elevation_deg, bool clock_valid) {
 // keep dimming for the old place until the next reboot.
 inline float auto_factor(double unix_s, double lat_deg, double lon_deg, bool clock_valid) {
   if (!clock_valid) return 1.0f;
-  return dim_factor(sun::elevation(unix_s, lat_deg, lon_deg), true);
+  return dim_factor(tracker::sun::elevation(unix_s, lat_deg, lon_deg), true);
 }
 
 // UI-44c: Auto Off. Dimming helps; at 61.58 N in December the panel is still

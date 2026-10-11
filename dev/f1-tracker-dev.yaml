@@ -9,6 +9,13 @@
 # adoption flow produces.
 #
 #   esphome run dev/f1-tracker-dev.yaml
+# Work on tracker-common beside this repo without pushing it: a git clone of the local
+# checkout (commit there first; a refresh of 0s re-reads it on every build).
+substitutions:
+  tracker_common_url: file:///Users/dan.m/Projects/Personal/tracker-common
+  tracker_common_ref: main
+  tracker_common_refresh: 0s
+
 packages:
   f1_tracker: !include ../f1-tracker.yaml
 
