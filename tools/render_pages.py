@@ -662,13 +662,13 @@ def _card(mode):
         d.rounded_rectangle([bx, y0 + btn_y, bx + c["BTN_W"], y0 + btn_y + c["BTN_H"]], 8, fill=(0x1A, 0x25, 0x47))
         d.text((bx + c["BTN_W"] // 2, y0 + btn_y + c["BTN_H"] // 2), label, font=FONT[16], fill=WHITE, anchor="mm")
     if mode == "checking":
-        line("Checking for updates", 16, 22, WHITE); line("Asking GitHub for the latest release", l1y, 16, (0xDC, 0xE4, 0xF8))
+        line("Checking for updates", 16, "s34", WHITE); line("Asking GitHub for the latest release", l1y, 16, (0xDC, 0xE4, 0xF8))
         line("Installed: 0.1.0", l2y, 16, MUTED); one_button("Close"); name = "overlay-update-checking"
     elif mode == "latest":
-        line("Up to date", 16, 22, WHITE); line("0.1.0 is the latest version", l1y, 16, (0xDC, 0xE4, 0xF8))
+        line("Up to date", 16, "s34", WHITE); line("0.1.0 is the latest version", l1y, 16, (0xDC, 0xE4, 0xF8))
         line("Checks again every hour", l2y, 16, MUTED); one_button("Close"); name = "overlay-update-latest"
     elif mode == "available":
-        line("Update available", 16, 22, WHITE); line("New version: 0.2.0", l1y, 16, (0xDC, 0xE4, 0xF8))
+        line("Update available", 16, "s34", WHITE); line("New version: 0.2.0", l1y, 16, (0xDC, 0xE4, 0xF8))
         line("Installed: 0.1.0 - what's new:", l2y, 16, MUTED)
         nx, ny = x0 + (cw - c["NOTES_W"]) // 2, y0 + c["NOTES_Y"]
         d.rounded_rectangle([nx, ny, nx + c["NOTES_W"], ny + c["NOTES_H"]], 8, fill=(0x0A, 0x11, 0x28))
@@ -678,14 +678,14 @@ def _card(mode):
             font=FONT[16], fill=TEXT, spacing=4)
         button(0, "Not now", (0x1A, 0x25, 0x47)); button(1, "Update", BORDER); name = "overlay-update-available"
     elif mode == "installing":
-        line("Updating firmware", 16, 22, WHITE); line("Downloading", l1y, 16, (0xDC, 0xE4, 0xF8))
+        line("Updating firmware", 16, "s34", WHITE); line("Downloading", l1y, 16, (0xDC, 0xE4, 0xF8))
         line("Keep the power on", l2y, 16, (0xFF, 0xB5, 0x47))
         bx, by = x0 + (cw - c["BAR_W"]) // 2, y0 + c["BAR_Y"]
         d.rounded_rectangle([bx, by, bx + c["BAR_W"], by + c["BAR_H"]], 8, fill=(0x1A, 0x25, 0x47))
         d.rounded_rectangle([bx, by, bx + int(c["BAR_W"] * 0.42), by + c["BAR_H"]], 8, fill=BORDER)
         name = "overlay-update-installing"
     else:
-        line("Couldn't check", 16, 22, WHITE); line("No network connection", l1y, 16, (0xDC, 0xE4, 0xF8))
+        line("Couldn't check", 16, "s34", WHITE); line("No network connection", l1y, 16, (0xDC, 0xE4, 0xF8))
         line("Check the Wi-Fi and try again later", l2y, 16, MUTED); one_button("Close"); name = "overlay-update-failed"
     return img, name
 
@@ -1220,6 +1220,7 @@ def main():
     a = ap.parse_args()
     for sz in (10, 12, 14, 15, 16, 18, 22, 24, 34):
         FONT[sz] = ImageFont.truetype(a.font, sz)
+    FONT["s34"] = ImageFont.truetype(a.sans or a.font, 34)   # setup_title: the update card's title
     FONT[50] = ImageFont.truetype(a.sans or a.font, 50)   # title_big: cap height = the F1 logo's 36 px
     global OUT
     if a.out:
