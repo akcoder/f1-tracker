@@ -127,6 +127,21 @@ inline bool photo_start(const portraits::Portrait *p) {
   return true;
 }
 
+// A driver with no compiled portrait: the F1 media server's headshot (f1_headshot.h), fetched
+// by the network task and shown here as its rows arrive, scaled from 206 to 120 px. Same credit
+// rule as a portrait (decision 72): where the picture is, the source is named.
+inline constexpr int HEADSHOT_SCALE = 256 * PHOTO_W / 206;
+inline bool headshot_start(headshot::Slot *slot) {
+  photo_stop();
+  ph.ext_scale = HEADSHOT_SCALE;
+  if (!photo::show_external(ph, slot)) return false;
+  if (credit_lbl) {
+    lv_label_set_text(credit_lbl, "photo: formula1.com");
+    lv_obj_remove_flag(credit_lbl, LV_OBJ_FLAG_HIDDEN);
+  }
+  return true;
+}
+
 // ---- the panel -----------------------------------------------------------
 struct Card {
   lv_obj_t *panel = nullptr;
@@ -148,14 +163,13 @@ inline void close() {
 }
 
 inline void show(const char *title, const char *body, const char *iso3,
-                 const portraits::Portrait *photo = nullptr) {
+                 const portraits::Portrait *photo = nullptr, headshot::Slot *hs = nullptr) {
   if (g.panel == nullptr) return;
   if (g.title) lv_label_set_text(g.title, title);
+  const bool has_pic = photo ? photo_start(photo) : (hs ? headshot_start(hs) : (photo_stop(), false));
   if (g.body) {
     lv_label_set_text(g.body, body);
-    lv_obj_set_width(g.body, photo_start(photo) ? TEXT_W_PHOTO : TEXT_W_FULL);
-  } else {
-    photo_start(photo);
+    lv_obj_set_width(g.body, has_pic ? TEXT_W_PHOTO : TEXT_W_FULL);
   }
   if (g.flag) {
     const flags::Flag *f = (iso3 && *iso3) ? flags::find(iso3) : nullptr;

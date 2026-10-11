@@ -446,13 +446,9 @@ def page_driver(ctx):
     return _profile_card(ctx, p, "DRIVER · LEGEND", "page-5-driver")
 
 
-def _rookie_card(ctx, name, photo_rows=206):
-    """A driver with no compiled portrait: the card as f1_ui.h draws it with a fetched headshot.
-    The picture is a STAND-IN (a plain silhouette drawn here): the real one is the F1 media
-    server's, fetched by the device, and is not kept in this repository."""
-    img = Image.new("RGB", (W, H), BG); d = ImageDraw.Draw(img)
-    _card_head(img, d, ctx, "Driver", "Arvid Lindblad", "GBR")
-    px, py, pw, ph_ = box(ctx["geo"], "card_photo")
+def _silhouette():
+    """STAND-IN for a fetched headshot: 206x206, a plain silhouette (the real picture is the F1
+    media server's, fetched by the device, and is not kept in this repository)."""
     ph_img = Image.new("RGB", (206, 206), (0, 0, 0))
     pd = ImageDraw.Draw(ph_img)
     for r in range(0, 206):                                          # a soft studio gradient behind
@@ -461,6 +457,17 @@ def _rookie_card(ctx, name, photo_rows=206):
     pd.ellipse([68, 28, 138, 112], fill=(205, 170, 140))              # head
     pd.rounded_rectangle([34, 118, 172, 230], 40, fill=(30, 50, 110))  # shoulders
     pd.rectangle([92, 100, 114, 126], fill=(205, 170, 140))           # neck
+    return ph_img
+
+
+def _rookie_card(ctx, name, photo_rows=206):
+    """A driver with no compiled portrait: the card as f1_ui.h draws it with a fetched headshot.
+    The picture is a STAND-IN (a plain silhouette drawn here): the real one is the F1 media
+    server's, fetched by the device, and is not kept in this repository."""
+    img = Image.new("RGB", (W, H), BG); d = ImageDraw.Draw(img)
+    _card_head(img, d, ctx, "Driver", "Arvid Lindblad", "GBR")
+    px, py, pw, ph_ = box(ctx["geo"], "card_photo")
+    ph_img = _silhouette()
     d.rectangle([px, py, px + 205, py + 205], fill=(0, 0, 0))
     img.paste(ph_img.crop((0, 0, 206, photo_rows)), (px, py))
     # the text beside it, as f1_ui.h lays it out: x 282, y 60, 190 wide
@@ -1103,6 +1110,32 @@ def _detail_card(ctx, name, photo_rows):
     return img, name
 
 
+def overlay_detail_rookie(ctx):
+    """The detail card for a driver with no compiled portrait (decision 193): the F1 media
+    server's headshot, 206 px scaled to 120 (LVGL scale 256*120/206), credited to formula1.com."""
+    require(ctx["geo"], "overlay-detail-rookie", "detail_panel", "detail_title", "detail_body", "detail_flag",
+            "detail_photo", "detail_credit")
+    G = ctx["geo"]
+    img, _ = page_order(ctx)
+    d = ImageDraw.Draw(img, "RGBA")
+    d.rectangle([0, 0, W, H], fill=(0, 0, 0, 150))
+    d.rounded_rectangle([20, 40, 460, 440], 12, fill=PANEL, outline=BORDER, width=2)
+    px0, py0 = 20, 40
+    d.text((px0 + 16, py0 + 12), "Arvid Lindblad", font=FONT[18], fill=ORANGE)
+    if "GBR" in ctx["flags"]:
+        img.paste(ctx["flags"]["GBR"].resize((32, 24), Image.NEAREST), (412, 56))
+    body = "#41  LIN   Racing Bulls\n\n" + f"{'Starts (provisional)':<20} P12\n" + f"{'Gap':<20} +3.204"
+    bx, by, _, _ = box(G, "detail_body", px0, py0)
+    d.multiline_text((bx, by), body, font=FONT[14], fill=TEXT, spacing=5)
+    fx, fy, _, _ = box(G, "detail_photo", px0, py0)
+    sz = 256 * 120 // 206 * 206 // 256          # the scaled size LVGL gives it: ~120 px
+    img.paste(_silhouette().resize((sz, sz), Image.BILINEAR), (fx, fy))
+    cx, cy, cw, _ = box(G, "detail_credit", px0, py0)
+    d.multiline_text((cx, cy), "\n".join(textwrap.wrap("photo: formula1.com", int(cw // 7.2))), font=FONT[12], fill=MUTED, spacing=2)
+    d.text((240, 420), "tap anywhere to close", font=FONT[12], fill=DIM, anchor="mm")
+    return img, "overlay-detail-rookie"
+
+
 def overlay_detail(ctx):
     return _detail_card(ctx, "overlay-detail-card", 160)
 
@@ -1308,7 +1341,7 @@ def main():
     pages = [page_wifi_loading, page_wifi_connecting, page_wifi_ap, page_race, page_order, page_circuit, page_driver, page_driver_loading, page_rookie, page_rookie_loading, page_legend,
              page_standings, page_summary, page_settings, page_settings_race,
              page_settings_location, page_about, page_about_cars, page_boot_cars, page_boot_strip, page_overtake, page_debug, page_offseason,
-             overlay_detail, overlay_detail_loading, overlay_alert, overlay_milestone,
+             overlay_detail, overlay_detail_loading, overlay_detail_rookie, overlay_alert, overlay_milestone,
              page_race_with_icon, overlay_update_checking, overlay_update_available,
              overlay_update_installing, overlay_update_failed]
     if a.gif:

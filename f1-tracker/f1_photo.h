@@ -36,6 +36,7 @@ struct Photo {
   std::atomic<bool> running{false};
   volatile bool cancel = false;
   int shown = -1;
+  int ext_scale = 256;                 // LVGL scale (256 = 1:1) for an external (headshot) picture
   const portraits::Portrait *p = nullptr;
   // A picture the network task is decoding into its own buffer (f1_headshot.h): shown from
   // that buffer as its rows arrive. Then there is no decode task of ours.
@@ -98,6 +99,7 @@ inline bool start(Photo &ph, const portraits::Portrait *p) {
   ph.dsc.data_size = (uint32_t) ph.w * ph.h * 2;
   ph.dsc.data = (const uint8_t *) ph.buf;
   lv_image_set_src(ph.img, &ph.dsc);
+  lv_image_set_scale(ph.img, 256);
   lv_obj_remove_flag(ph.img, LV_OBJ_FLAG_HIDDEN);
   ph.p = p;
   ph.cancel = false;
@@ -126,6 +128,8 @@ inline bool show_external(Photo &ph, headshot::Slot *slot) {
   ph.dsc.data_size = (uint32_t) headshot::W * headshot::H * 2;
   ph.dsc.data = (const uint8_t *) slot->buf;
   lv_image_set_src(ph.img, &ph.dsc);
+  lv_image_set_pivot(ph.img, 0, 0);
+  lv_image_set_scale(ph.img, (uint32_t) ph.ext_scale);
   ph.rows_src = &slot->rows;
   ph.state_src = &slot->state;
   ph.shown = -1;

@@ -324,8 +324,11 @@ inline void open_entry(const store::Entry &e) {
   char title[48], body[480];
   detail::compose_driver(e, prof, leg, g.data.entries_mode, title, sizeof(title),
                          body, sizeof(body));
-  detail::show(title, body, prof ? prof->iso3 : e.iso3,
-               prof ? portraits::find(prof->driver_id) : nullptr);
+  const portraits::Portrait *pic = prof ? portraits::find(prof->driver_id) : nullptr;
+  // No compiled portrait (a rookie, or a driver new this season): ask for the F1 media
+  // server's headshot, which appears in the card as it downloads (decision 193).
+  headshot::Slot *hs = (pic == nullptr && e.code[0]) ? headshot::want(e.code, lv_tick_get()) : nullptr;
+  detail::show(title, body, prof ? prof->iso3 : e.iso3, pic, hs);
 }
 
 inline void open_driver(int idx) {
