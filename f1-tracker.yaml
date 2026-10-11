@@ -1122,7 +1122,7 @@ lvgl:
             text_color: 0xFF8A1F
         - button:
             x: 238
-            y: 8
+            y: 10
             width: 110
             height: 38
             bg_color: 0x1A2547
@@ -1140,7 +1140,7 @@ lvgl:
               - lvgl.page.show: race_page
         - button:
             x: 356
-            y: 8
+            y: 10
             width: 110
             height: 38
             bg_color: 0x2D5BD0
@@ -1504,7 +1504,7 @@ lvgl:
             id: about_close
             align: TOP_RIGHT
             x: -8
-            y: 6
+            y: 10
             width: 104
             height: 38
             radius: 8
@@ -1637,7 +1637,7 @@ lvgl:
         - button:
             align: TOP_RIGHT
             x: -8
-            y: 4
+            y: 10
             width: 96
             height: 34
             bg_color: 0x1A2547
