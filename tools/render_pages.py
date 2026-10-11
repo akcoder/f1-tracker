@@ -761,7 +761,7 @@ def _row_icon(d, px, py, y, cp):
 def page_settings(ctx):
     G = ctx["geo"]
     img, d, px, py = _settings_frame(ctx, "page-9-settings", 0,
-        ("sw_autodim", "sw_autooff", "sl_bright", "ta_off_from", "ta_off_to"))
+        ("sw_autodim", "sw_autooff", "sw_dino", "sl_bright", "ta_off_from", "ta_off_to"))
     _row_icon(d, px, py, 6, 0xF00E1); d.text((px + 44, py + 6), "Auto bright", font=FONT[16], fill=TEXT); d.text((px + 44, py + 28), "dims after sunset", font=FONT[12], fill=MUTED)
     _sw(d, px, py, "sw_autodim", G, True)
     _row_icon(d, px, py, 56, 0xF0904); d.text((px + 44, py + 56), "Auto off overnight", font=FONT[16], fill=TEXT)
@@ -773,6 +773,9 @@ def page_settings(ctx):
     d.text((px + 364, py + 106), "local h", font=FONT[12], fill=MUTED)
     _row_icon(d, px, py, 162, 0xF00DF); d.text((px + 44, py + 162), "Brightness", font=FONT[16], fill=TEXT)
     _slider(d, px, py, "sl_bright", G, 0.8)
+    _row_icon(d, px, py, 206, 0xF03E9); d.text((px + 44, py + 206), "Dinosaur", font=FONT[16], fill=TEXT)
+    d.text((px + 44, py + 228), "walks by now and then", font=FONT[12], fill=MUTED)
+    _sw(d, px, py, "sw_dino", G, True)
     return img, "page-9-settings"
 
 
@@ -1242,6 +1245,97 @@ def animation_gifs(ctx, step_ms=50):
         print(f"  {name}.gif  {len(frames)} frames, {os.path.getsize(path) // 1024} KB")
 
 
+# ---------------------------------------------------------------- the walking dinosaur (MOTION-5)
+_DINO = {}
+
+
+def _dino():
+    """tracker-common's tools/dino_art.py: the dinosaur's vector art, and the Python twin of the walk's timing."""
+    if not _DINO:
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("dino_art", tracker_common.find("tools/dino_art.py"))
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        _DINO["art"] = mod
+        _DINO["poses"] = [mod.sprite(k) for k in range(mod.N_POSES)]
+        _DINO["tails"] = [mod.tail_image(False), mod.tail_image(True)]
+    return _DINO
+
+
+def _dino_bubble(text):
+    """The speech bubble as tracker_dino.h builds it: a 10 px rounded rectangle, 2 px orange border, mono16."""
+    tw = int(FONT[16].getlength(text))
+    w, h = tw + 24, 16 + 10 + 4          # 10 px side padding + 2 px border; the font's line + 5 px padding
+    im = Image.new("RGBA", (w, h), (0, 0, 0, 0)); d = ImageDraw.Draw(im)
+    d.rounded_rectangle([0, 0, w - 1, h - 1], radius=10, fill=(0xF2, 0xF5, 0xFC), outline=(0xFF, 0x8A, 0x1F), width=2)
+    d.text((w // 2, h // 2), text, font=FONT[16], fill=(0x10, 0x14, 0x20), anchor="mm")
+    return im
+
+
+def _dino_frame(ctx, bg, walk, t_ms):
+    """One frame of a walk over `bg`, as tracker_dino.h draws it."""
+    D = _dino(); art = D["art"]
+    x, y, pose, bubble = walk.at(t_ms)
+    img = bg.copy()
+    sp = D["poses"][pose]
+    if walk.flip:
+        sp = sp.transpose(Image.FLIP_LEFT_RIGHT)
+    img.paste(sp, (x, y), sp)
+    if bubble:
+        b = _dino_bubble(art.WORDS[walk.word])
+        bx = x - 6 if walk.flip else x + art.SW + 6 - b.width
+        bx = max(4, min(W - 4 - b.width, bx))
+        by = y - b.height - 12 + 4
+        img.paste(b, (bx, by), b)
+        tail = D["tails"][1 if walk.flip else 0]
+        tx = bx + 14 if walk.flip else bx + b.width - 22 - 14
+        img.paste(tail, (tx, by + b.height - 2), tail)
+    return img
+
+
+def page_dino_walks(ctx):
+    """Three walks on three lanes, caught walking in, roaring, and walking left: seeds chosen for the picture."""
+    D = _dino(); art = D["art"]
+    bg, _ = page_order(ctx)
+    out = bg.copy()
+    for seed, lane_pick in ((11, 0), (23, 1), (41, 2)):
+        w = art.Walk(seed)
+        w.lane = (70, 185, 335)[lane_pick]                       # the picture needs them apart
+        t = (w.t_stop * 0.55, w.t_stop + 1000, w.t_stop * 0.4)[lane_pick]
+        if lane_pick == 2: w.flip = True
+        fr = _dino_frame(ctx, bg, w, int(t))
+        top = w.lane - 46
+        out.paste(fr.crop((0, top, W, w.lane + art.SH + 4)), (0, top))
+    return out, "dino-walks"
+
+
+def page_dino_poses(ctx):
+    D = _dino(); art = D["art"]
+    sheet = Image.new("RGB", (art.N_POSES * 150 + 10, 120), BG)
+    for i, f in enumerate(D["poses"]):
+        sheet.paste(f, (10 + i * 150, 12), f)
+    return sheet, "dino-poses"
+
+
+def dino_gif(ctx, fps=12):
+    """dino-walk.gif: one walk across the order page, with the stop and the bubble."""
+    D = _dino(); art = D["art"]
+    bg, _ = page_order(ctx)
+    w = art.Walk(7); w.flip = False; w.lane = 312; w.stop_x = 170
+    w.t_stop = int((w.stop_x + art.SW) / w.speed * 1000)
+    w.t_end = w.t_stop + w.pause_ms + int((art.SCREEN_W - w.stop_x) / w.speed * 1000)
+    frames = [_dino_frame(ctx, bg, w, int(i * 1000 / fps)) for i in range(int(w.t_end * fps / 1000) + 1)]
+    pal = frames[0].quantize(colors=96, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.NONE)
+    sheet = Image.new("RGB", (W, H * 3), (0, 0, 0))
+    for i, k in enumerate((0, len(frames) // 2, len(frames) * 2 // 3)):
+        sheet.paste(frames[k], (0, i * H))
+    pal = sheet.quantize(colors=128, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.NONE)
+    q = [f.quantize(palette=pal, dither=Image.Dither.NONE) for f in frames]
+    path = os.path.join(OUT, "dino-walk.gif")
+    q[0].save(path, save_all=True, append_images=q[1:], duration=int(1000 / fps), loop=0, optimize=False, disposal=1)
+    print(f"  dino-walk.gif  {len(q)} frames, {os.path.getsize(path) // 1024} KB")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--font", default="/tmp/RobotoMono.ttf")
@@ -1343,9 +1437,10 @@ def main():
              page_settings_location, page_about, page_about_cars, page_boot_cars, page_boot_strip, page_overtake, page_debug, page_offseason,
              overlay_detail, overlay_detail_loading, overlay_detail_rookie, overlay_alert, overlay_milestone,
              page_race_with_icon, overlay_update_checking, overlay_update_available,
-             overlay_update_installing, overlay_update_failed]
+             overlay_update_installing, overlay_update_failed, page_dino_walks, page_dino_poses]
     if a.gif:
         animation_gifs(ctx)
+        dino_gif(ctx)
     made = []
     for fn in pages:
         try:

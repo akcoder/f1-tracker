@@ -21,6 +21,7 @@ URL = "https://cdn.jsdelivr.net/npm/@mdi/svg@7.4.47/meta.json"
 ICONS = {
     "auto_dim":      ("brightness-auto",   "Auto-dim display"),
     "auto_off":      ("power-sleep",       "Auto off"),
+    "dinosaur":      ("paw",               "Dinosaur (a footprint)"),
     "brightness":    ("brightness-6",      "Brightness"),
     "carousel_secs": ("timer-outline",     "Carousel interval"),
     "carousel_what": ("view-carousel",     "Carousel content"),
