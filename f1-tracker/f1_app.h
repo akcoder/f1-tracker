@@ -313,9 +313,7 @@ inline bool tap_consumed() {
 
 // 6.11 / decision 53: the whole row is the tap target. Opens the driver card
 // for the row at `idx` of whatever the order currently holds.
-inline void open_driver(int idx) {
-  if (idx < 0 || idx >= g.data.n_entries) return;
-  const auto &e = g.data.entries[idx];
+inline void open_entry(const store::Entry &e) {
   const drivers::Profile *prof = nullptr;
   for (int i = 0; i < drivers::N; i++)
     if (e.code[0] && strcmp(drivers::P[i].code, e.code) == 0) { prof = &drivers::P[i]; break; }
@@ -328,6 +326,47 @@ inline void open_driver(int idx) {
                          body, sizeof(body));
   detail::show(title, body, prof ? prof->iso3 : e.iso3,
                prof ? portraits::find(prof->driver_id) : nullptr);
+}
+
+inline void open_driver(int idx) {
+  if (idx < 0 || idx >= g.data.n_entries) return;
+  open_entry(g.data.entries[idx]);
+}
+
+// A championship row: the same card, with the standing in place of a grid slot.
+inline void open_standing(int idx) {
+  if (idx < 0 || idx >= g.data.n_standings) return;
+  const auto &s = g.data.standings[idx];
+  store::Entry e;
+  e.pos = 0;
+  std::snprintf(e.code, sizeof(e.code), "%s", s.code);
+  std::snprintf(e.name, sizeof(e.name), "%s", s.name);
+  std::snprintf(e.team, sizeof(e.team), "%s", s.team);
+  std::snprintf(e.iso3, sizeof(e.iso3), "%s", s.iso3);
+  open_entry(e);
+}
+
+// The standings label is the tap target; the row is worked out from the touch point
+// on the same line pitch place_flags uses. Added once, on first data.
+inline void wire_standings_tap() {
+  static bool done = false;
+  lv_obj_t *l = g.w.standings;
+  if (done || l == nullptr) return;
+  done = true;
+  lv_obj_add_flag(l, LV_OBJ_FLAG_CLICKABLE);
+  lv_obj_add_event_cb(l, [](lv_event_t *) {
+    lv_indev_t *in = lv_indev_active();
+    if (in == nullptr || g.w.standings == nullptr) return;
+    lv_point_t p;
+    lv_indev_get_point(in, &p);
+    const lv_font_t *font = lv_obj_get_style_text_font(g.w.standings, LV_PART_MAIN);
+    const int pitch = lv_font_get_line_height(font) +
+                      lv_obj_get_style_text_line_space(g.w.standings, LV_PART_MAIN);
+    lv_area_t a;
+    lv_obj_get_coords(g.w.standings, &a);
+    if (pitch <= 0 || p.y < a.y1) return;
+    open_standing((p.y - a.y1) / pitch);
+  }, LV_EVENT_SHORT_CLICKED, nullptr);
 }
 
 // Tapping the map opens the circuit card (6.11).
@@ -535,6 +574,7 @@ inline void refresh_data() {
                          s2.pos, s2.name, s2.points, s2.wins ? "W" : " ");
     }
     lv_label_set_text(g.w.standings, b);
+    wire_standings_tap();
     update_standing_flags();
   }
 }
