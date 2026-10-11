@@ -13,7 +13,11 @@
 #include "freertos/task.h"
 
 #include "f1_headshot.h"
-#include "f1_jpg.h"
+#if __has_include("esphome/components/tracker_common/tracker_jpg.h")
+#include "esphome/components/tracker_common/tracker_jpg.h"
+#else
+#include "tracker_jpg.h"             // host tests: -I the tracker-common component dir
+#endif
 #include "f1_portraits.h"
 
 namespace f1 {
@@ -44,12 +48,12 @@ inline void on_rows(int done, void *ctx) {
 }
 inline void task(void *arg) {
   auto *ph = static_cast<Photo *>(arg);
-  jpg::Progress pr;
+  tracker::jpg::Progress pr;
   pr.rows = on_rows;
   pr.ctx = ph;
   pr.cancel = &ph->cancel;
-  if (ph->half) jpg::decode_half(ph->p->jpeg, ph->p->len, ph->buf, ph->w, ph->h, &pr);
-  else jpg::decode_full(ph->p->jpeg, ph->p->len, ph->buf, ph->w, ph->h, &pr);
+  if (ph->half) tracker::jpg::decode_half(ph->p->jpeg, ph->p->len, ph->buf, ph->w, ph->h, &pr);
+  else tracker::jpg::decode_full(ph->p->jpeg, ph->p->len, ph->buf, ph->w, ph->h, &pr);
   ph->running.store(false);
   vTaskDelete(nullptr);
 }

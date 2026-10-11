@@ -1,10 +1,12 @@
-// f1_jpg.h: the half-size progressive decoder, against all 48 compiled portraits.
+// tracker_jpg.h: the half-size progressive decoder, against all 48 compiled portraits.
 // Host build of LVGL's TJpgDec (see the Makefile); the device uses the ROM's.
+#include <cmath>
 #include <cstdio>
+#include <cstring>
 #include <vector>
 
-#define F1_HOST_TEST 1
-#include "../f1-tracker/f1_jpg.h"
+#define TRACKER_HOST_TEST 1
+#include "tracker_jpg.h"
 #include "../f1-tracker/f1_portraits.h"
 
 static int fails = 0, checks = 0;
@@ -26,6 +28,7 @@ static void on_rows(int done, void *ctx) {
 
 int main() {
   using namespace f1;
+  using namespace tracker;
   std::vector<uint16_t> full((size_t) TW * TH);
   for (int i = 0; i < portraits::N; i++) {
     const auto &p = portraits::P[i];
@@ -128,6 +131,58 @@ int main() {
   const uint8_t junk[16] = {1, 2, 3};
   CHECK(jpg::decode_half(junk, sizeof(junk), buf.data(), TW, TH) != nullptr, "junk is refused");
   CHECK(jpg::decode_half(v->jpeg, v->len, buf.data(), 200, 300) != nullptr, "a target larger than half the picture is refused");
+
+  // decode_copy: 1:1 into part of a larger picture. With the same size it equals decode_full.
+  {
+    constexpr int CW = 240, CH = 320, STRIDE = 300;
+    std::vector<uint16_t> full2((size_t) CW * CH, SENTINEL), big((size_t) STRIDE * CH, SENTINEL);
+    CHECK(jpg::decode_full(v->jpeg, v->len, full2.data(), CW, CH) == nullptr, "copy: reference");
+    CHECK(jpg::decode_copy(v->jpeg, v->len, big.data(), STRIDE, CW, CH) == nullptr, "copy: decodes");
+    bool same = true, margin = true;
+    for (int y = 0; y < CH; y++)
+      for (int x = 0; x < STRIDE; x++) {
+        const uint16_t g = big[(size_t) y * STRIDE + x];
+        if (x < CW) same &= g == full2[(size_t) y * CW + x]; else margin &= g == SENTINEL;
+      }
+    CHECK(same, "copy: pixels equal decode_full");
+    CHECK(margin, "copy: the stride's margin is untouched");
+    bool stop = false;
+    jpg::Progress pc; pc.cancel = &stop; stop = true;
+    const char *ec = jpg::decode_copy(v->jpeg, v->len, big.data(), STRIDE, CW, CH, &pc);
+    CHECK(ec && std::strcmp(ec, "cancelled") == 0, "copy: cancel");
+  }
+
+  // decode_fit: a box filter to any size. Its average colour stays that of the picture, the
+  // progress is monotone and ends at the height, and a cancel is honoured.
+  {
+    constexpr int FW = 200, FH = 266;
+    std::vector<uint16_t> fit((size_t) FW * FH, SENTINEL), acc((size_t) FW * FH * 3), ref2((size_t) 240 * 320);
+    CHECK(jpg::decode_full(v->jpeg, v->len, ref2.data(), 240, 320) == nullptr, "fit: reference");
+    auto rows_fit = [](int done, void *ctx) { ((std::vector<int> *) ctx)->push_back(done); };
+    std::vector<int> seen;
+    jpg::Progress pf; pf.rows = rows_fit; pf.ctx = &seen;
+    int sw = 0, sh = 0;
+    const char *ef = jpg::decode_fit(v->jpeg, v->len, fit.data(), FW, FH, acc.data(), &pf, &sw, &sh);
+    CHECK(ef == nullptr, "fit: decodes (%s)", ef ? ef : "");
+    CHECK(sw == 240 && sh == 320, "fit: reports the source size %dx%d", sw, sh);
+    CHECK(!seen.empty() && seen.back() == FH, "fit: the last report is the whole picture");
+    bool mono2 = true;
+    for (size_t i = 1; i < seen.size(); i++) mono2 &= seen[i] >= seen[i - 1];
+    CHECK(mono2, "fit: progress never goes back");
+    auto mean = [](const std::vector<uint16_t> &b, double *r, double *g, double *bl) {
+      double R = 0, G = 0, B = 0;
+      for (uint16_t p : b) { R += (p >> 11) << 3; G += ((p >> 5) & 63) << 2; B += (p & 31) << 3; }
+      *r = R / b.size(); *g = G / b.size(); *bl = B / b.size();
+    };
+    double r1, g1, b1, r2, g2, b2;
+    mean(fit, &r1, &g1, &b1); mean(ref2, &r2, &g2, &b2);
+    CHECK(std::abs(r1 - r2) < 6 && std::abs(g1 - g2) < 6 && std::abs(b1 - b2) < 6,
+          "fit: average colour %.0f/%.0f/%.0f vs %.0f/%.0f/%.0f", r1, g1, b1, r2, g2, b2);
+    bool stop = true;
+    jpg::Progress pc2; pc2.cancel = &stop;
+    const char *ec2 = jpg::decode_fit(v->jpeg, v->len, fit.data(), FW, FH, acc.data(), &pc2);
+    CHECK(ec2 && std::strcmp(ec2, "cancelled") == 0, "fit: cancel");
+  }
 
   std::printf("%d checks, %d failures\n", checks, fails);
   return fails ? 1 : 0;

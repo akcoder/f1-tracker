@@ -65,7 +65,6 @@ esphome:
     - f1-tracker/f1_team.h
     - f1-tracker/f1_roster.h
     - f1-tracker/f1_boot.h
-    - f1-tracker/f1_sun.h
     - f1-tracker/f1_cars.h         # generated: tools/gen_cars.py
     - f1-tracker/f1_logomark.h     # generated: tools/gen_logo.py, the logo outline the cars follow
     - f1-tracker/f1_animlogic.h
@@ -76,10 +75,8 @@ esphome:
     - f1-tracker/f1_json.h
     - f1-tracker/f1_store.h
     - f1-tracker/f1_order.h
-    - f1-tracker/f1_jpg.h          # the portrait decoder (top-down)
     - f1-tracker/f1_photo.h        # a portrait decoding in the background, redrawn as rows arrive
     - f1-tracker/f1_detail.h
-    - f1-tracker/f1_png.h          # streaming PNG decoder (palette + transparency), for headshots
     - f1-tracker/f1_headshot.h     # runtime headshots for drivers with no compiled portrait
     - f1-tracker/f1_net.h
     - f1-tracker/f1_app.h
@@ -2039,7 +2036,7 @@ interval:
           if (!t.is_valid()) return;
           // UI-44: the position is read from the ENTITIES every pass, never cached - the
           // settings page, the web UI and Home Assistant can all change it.
-          id(sun_elevation).publish_state(f1::sun::elevation(
+          id(sun_elevation).publish_state(tracker::sun::elevation(
               (double) t.timestamp, (double) id(obs_lat).state, (double) id(obs_lon).state));
           f1::display::g_state.window.enabled = id(auto_off).state;
           f1::display::g_state.window.from_hour = (uint8_t) id(off_from).state;
