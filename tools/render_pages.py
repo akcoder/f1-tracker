@@ -722,7 +722,7 @@ def page_about(ctx):
     cx, cy, cw, ch = box(G, "about_close")
     cx = W + cx - cw
     d.rounded_rectangle([cx, cy, cx + cw, cy + ch], 8, fill=(0x1A, 0x25, 0x47))
-    _pair(d, cx, cy, cw, ch, "Close", 0xF0156, 16)
+    d.text((cx + cw // 2, cy + ch // 2), "Close", font=FONT[16], fill=TEXT, anchor="mm")
     def centred(wid, text, size, fill):
         x, y, w, h = box(G, wid)
         d.text((x + w // 2, y), text, font=FONT[size], fill=fill, anchor="ma")
