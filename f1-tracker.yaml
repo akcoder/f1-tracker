@@ -12,7 +12,7 @@ substitutions:
   obs_lat: "61.581"
   obs_lon: "-149.439"
   tracker_common_url: https://github.com/akcoder/tracker-common
-  tracker_common_ref: v0.4.4     # a tag, so a change in tracker-common cannot break this build
+  tracker_common_ref: v0.4.5     # a tag, so a change in tracker-common cannot break this build
   tracker_common_refresh: 1d
   manifest_url: https://akcoder.github.io/f1-tracker/manifest.json   # UI-68: built and published by the Firmware workflow
   # The board package's tunables (tracker-common/boards/guition-4848s040.yaml):
