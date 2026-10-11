@@ -2,7 +2,7 @@
 CXX      ?= c++
 CXXFLAGS ?= -std=c++17 -O1 -g -Wall -Wextra -Werror -Wno-unused-parameter
 HDRS     := $(wildcard ../f1-tracker/*.h)
-BINS     := test_m1 test_state test_json test_watch test_birthday test_display test_champ test_team test_extras test_rollover test_net test_boot test_sun test_update test_anim test_png test_headshot
+BINS     := test_m1 test_state test_json test_watch test_birthday test_display test_champ test_team test_extras test_rollover test_net test_boot test_sun test_anim test_png test_headshot
 
 # test_jpg needs LVGL's TJpgDec from an ESPHome build (see the end of this file)
 TJPG_SRC := $(firstword $(wildcard ../.esphome/build/f1-tracker/managed_components/lvgl__lvgl/src/libs/tjpgd))
@@ -54,9 +54,6 @@ test_boot: test_boot.cpp $(HDRS)
 	$(CXX) $(CXXFLAGS) -o $@ $<
 
 test_sun: test_sun.cpp $(HDRS)
-	$(CXX) $(CXXFLAGS) -o $@ $<
-
-test_update: test_update.cpp $(HDRS)
 	$(CXX) $(CXXFLAGS) -o $@ $<
 
 # f1_jpg.h's host build uses LVGL's TJpgDec from the last ESPHome build (the .esphome

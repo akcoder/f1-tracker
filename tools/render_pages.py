@@ -12,7 +12,7 @@ without a board (section 14.1).
 
   python3 tools/render_pages.py --font /path/to/RobotoMono.ttf
 """
-import argparse, io, json, math, os, re, sys, textwrap
+import argparse, glob, io, json, math, os, re, sys, textwrap
 from PIL import Image, ImageDraw, ImageFont
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -610,9 +610,23 @@ def _slider(d, px, py, wid, G, frac):
     d.rounded_rectangle([x, y, x + int(w * frac), y + h], h // 2, fill=BORDER)
 
 
+def _tracker_update_h():
+    """tracker_update.h of tracker-common: $TRACKER_COMMON, a sibling checkout, or the copy
+    ESPHome fetched for the last build."""
+    rel = os.path.join("components", "tracker_common", "tracker_update.h")
+    cands = [os.path.join(os.environ["TRACKER_COMMON"], rel)] if os.environ.get("TRACKER_COMMON") else []
+    cands.append(os.path.join(ROOT, "..", "tracker-common", rel))
+    cands += sorted(glob.glob(os.path.join(ROOT, ".esphome", "external_components", "*", rel)))
+    for c in cands:
+        if os.path.isfile(c):
+            return c
+    raise DriftError("tracker_update.h not found: check out tracker-common beside this repo, "
+                     "or set TRACKER_COMMON")
+
+
 def update_consts():
-    """The card's geometry, read from f1_update.h so the render cannot drift from it."""
-    src = open(os.path.join(ROOT, "f1-tracker", "f1_update.h"), encoding="utf-8").read()
+    """The card's geometry, read from tracker-common's tracker_update.h so the render cannot drift."""
+    src = open(_tracker_update_h(), encoding="utf-8").read()
     out = {}
     for m in re.finditer(r"inline constexpr int ([^;]+);", src):
         for part in m.group(1).split(","):
@@ -623,7 +637,7 @@ def update_consts():
             "ICON_W", "ICON_H", "ICON_X", "ICON_Y")
     missing = [k for k in need if k not in out]
     if missing:
-        raise DriftError(f"f1_update.h no longer defines {missing}")
+        raise DriftError(f"tracker_update.h no longer defines {missing}")
     return out
 
 
