@@ -14,8 +14,9 @@ substitutions:
   backlight_min: "0.10"       # HW-6: lowest duty still visible; raise if the panel
                               # goes dark at the bottom of the brightness slider
   tracker_common_url: https://github.com/akcoder/tracker-common
-  tracker_common_ref: v0.1.0     # a tag, so a change in tracker-common cannot break this build
+  tracker_common_ref: v0.2.0     # a tag, so a change in tracker-common cannot break this build
   tracker_common_refresh: 1d
+  manifest_url: https://akcoder.github.io/f1-tracker/manifest.json   # UI-68: built and published by the Firmware workflow
   carousel_default: "45"      # UI-20: seconds per card (brief asked 30 s - 1 min)
 
 # The firmware-update card and the web page's icon and logo link are shared with
@@ -174,7 +175,7 @@ esphome:
             }
             f1::detail::setup(id(detail_panel), id(detail_title), id(detail_body),
                               id(detail_flag), id(detail_photo), id(detail_credit));
-            tracker::upd::set_source("https://github.com/akcoder/f1-tracker/releases/latest/download/manifest.json");
+            tracker::upd::set_source("${manifest_url}");
             tracker::upd::init(id(fw_update), id(setup_title)->get_lv_font(), id(mono16)->get_lv_font(),
                           id(mono12)->get_lv_font(), &lv_font_montserrat_28);   // UI-68
             f1::anim::init(id(wifi_page)->obj, id(boot_mark), id(about_page)->obj, id(about_mark));
@@ -352,11 +353,9 @@ update:
     id: fw_update
     name: Firmware Update
     icon: mdi:cloud-download
-    # The manifest lives WITH the binaries, as a release asset: ESPHome's
-    # updater merges builds[].ota.path with this URL and has no absolute-URL
-    # branch, so a manifest on Pages could not point at a release.
-    # /releases/latest/download/ is a stable 302 to the newest release.
-    source: https://github.com/akcoder/f1-tracker/releases/latest/download/manifest.json
+    # The Firmware workflow (.github/workflows/firmware.yml, as sky-tracker's) publishes the
+    # manifest with the binaries on Pages; the release notes are the release body.
+    source: ${manifest_url}
     update_interval: never    # driven by our own hourly interval, so the check
                               # can also be triggered from the settings screen
     web_server: {sorting_group_id: grp_system, sorting_weight: 0}
@@ -1859,20 +1858,22 @@ lvgl:
             text_font: mono12
             text_color: 0x7E8BB3
             text_align: CENTER
-        - label:
+        - label:                # as sky-tracker's About: a small orange heading, then four lines
+            id: about_device_hdr
             x: 16
-            y: 240
-            text: "\U000F061A"
-            text_font: mdi18
-            text_color: 0x7E8BB3
+            y: 238
+            text: "THIS DEVICE"
+            text_font: mono12
+            text_color: 0xFF8A1F
         - label:
             id: about_device
-            x: 44
-            y: 242
-            width: 424
+            x: 16
+            y: 258
+            width: 452
             text: ""
-            text_font: mono12
-            text_color: 0xC9D3F2
+            text_font: mono14
+            text_color: 0xDCE4F8
+            long_mode: WRAP
         - label:
             id: about_data
             x: 16
@@ -2041,19 +2042,15 @@ interval:
       - lambda: |-
           if (!id(about_page)->is_showing()) return;
           char b[64];
-          snprintf(b, sizeof(b), "ESPHome %s, built %s", ESPHOME_VERSION, __DATE__);
+          char built[16];
+          tracker::about::tidy_date(__DATE__, built, sizeof(built));
+          snprintf(b, sizeof(b), "ESPHome %s, built %s", ESPHOME_VERSION, built);
           lv_label_set_text(id(about_build), b);
-          static char d[360];
-          const uint32_t s = esphome::millis() / 1000;
+          static char d[200];
           const std::string ip = id(ip_addr).state, ss = id(wifi_ssid_info).state;
-          char up[24];
-          if (s >= 86400) snprintf(up, sizeof(up), "%ud %uh", (unsigned) (s / 86400), (unsigned) ((s % 86400) / 3600));
-          else snprintf(up, sizeof(up), "%uh %02um", (unsigned) (s / 3600), (unsigned) ((s % 3600) / 60));
-          snprintf(d, sizeof(d),
-                   "This device\n  Name   %s\n  IP     %s\n  Wi-Fi  %s  %d dBm\n  MAC    %s\n  Up     %s",
-                   App.get_name().c_str(), ip.empty() ? "-" : ip.c_str(),
-                   ss.empty() ? "-" : ss.c_str(), (int) id(wifi_comp).wifi_rssi(),
-                   get_mac_address_pretty().c_str(), up);
+          tracker::about::device_text(d, sizeof(d), App.get_name().c_str(), ip.c_str(), ss.c_str(),
+                                      (int) id(wifi_comp).wifi_rssi(), get_mac_address_pretty().c_str(),
+                                      esphome::millis() / 1000.0);
           lv_label_set_text(id(about_device), d);
   - interval: 1s                # UI-27: debug page, only while it is showing
     then:

@@ -46,7 +46,7 @@ compiled in, and none are needed to install.
 github://akcoder/f1-tracker/f1-tracker.yaml@main
 ```
 
-**Updates** are published to this repo's Pages site. The device checks hourly,
+**Updates** are built by the repo's Firmware workflow when a release is published, and served from its Pages site. The device checks hourly,
 and there's a *Check for updates* button on the settings screen. Nothing is
 installed without being asked.
 

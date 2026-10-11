@@ -1,0 +1,101 @@
+name: Firmware
+
+# Builds f1-tracker.yaml for every published release, attaches the binaries to the
+# release and publishes them with their manifest on GitHub Pages, where the devices'
+# update check (and Home Assistant) find them. Tag releases with the fw_version in the
+# YAML, e.g. 0.1.0. (Same workflow as sky-tracker's: the binaries live on Pages and in the
+# release, never in the repository.)
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: firmware
+  cancel-in-progress: false
+
+jobs:
+  build:
+    uses: esphome/workflows/.github/workflows/build.yml@main
+    with:
+      files: f1-tracker.yaml
+      esphome-version: 2026.9.1
+      release-summary: ${{ github.event.release.body }}
+      release-url: ${{ github.event.release.html_url }}
+      release-version: ${{ github.event.release.tag_name }}
+
+  # The release gets the manifest and the two .bin files (OTA and USB factory image) with their
+  # checksums. The 33 MB .elf (debug symbols, only for decoding a crash backtrace) stays in the
+  # build job's artifact, which GitHub keeps for 90 days.
+  release-assets:
+    if: github.event_name == 'release'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: files
+          merge-multiple: true
+      - name: Collect the firmware (no .elf)
+        env:
+          VERSION: ${{ github.event.release.tag_name }}
+        run: |
+          shopt -s nullglob
+          mkdir output
+          for dir in files/*/"$VERSION"; do
+            device=$(basename "$(dirname "$dir")")
+            cp "$dir/manifest.json" "output/$device.manifest.json"
+            for bin in "$dir"/*.bin; do
+              name=$(basename "$bin")
+              md5sum "$bin" | head -c 32 > "output/$name.md5"
+              sha256sum "$bin" | head -c 64 > "output/$name.sha256"
+              cp "$bin" output/
+            done
+          done
+          ls -la output
+          test -n "$(ls output/*.bin)"
+      - name: Attach to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          VERSION: ${{ github.event.release.tag_name }}
+        run: gh release upload "$VERSION" output/* --clobber
+
+  pages:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: docs
+      - uses: actions/download-artifact@v4
+        with:
+          path: files
+          merge-multiple: true
+      - name: Put the newest build at the site root
+        run: |
+          manifest=$(find files -name manifest.json | head -n 1)
+          test -n "$manifest"
+          mkdir -p site
+          cp -r "$(dirname "$manifest")"/* site/
+          rm -f site/*.elf   # debug symbols: not needed to install (kept in the build artifact)
+          cp docs/index.html docs/favicon.svg docs/logo.png site/   # the install page
+          ls -la site
+          cat site/manifest.json
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - id: deploy
+        uses: actions/deploy-pages@v4

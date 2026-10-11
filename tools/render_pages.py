@@ -705,7 +705,7 @@ def page_race_with_icon(ctx):
 def page_about(ctx):
     G = ctx["geo"]
     require(G, "page-12-about", "about_close", "about_mark", "about_title", "about_f1", "about_name", "about_version",
-            "about_by", "about_build", "about_device", "about_data", "about_legal")
+            "about_by", "about_build", "about_device_hdr", "about_device", "about_data", "about_legal")
     img = Image.new("RGB", (W, H), BG); d = ImageDraw.Draw(img)
     mark = os.path.join(ROOT, "reference", "logo", "boot-200.png")
     mx, my, _, _ = box(G, "about_mark")
@@ -723,14 +723,13 @@ def page_about(ctx):
     _title(img, d, tx + tw // 2, ty + th // 2)
     centred("about_version", "Version 0.1.0", 14, TEXT)
     centred("about_by", "by Dan Morphis", 14, MUTED)
-    centred("about_build", "ESPHome 2026.9.1, built Oct  8 2026", 12, MUTED)
+    centred("about_build", "ESPHome 2026.9.1, built Oct 8 2026", 12, MUTED)
+    hx, hy, _, _ = box(G, "about_device_hdr")
+    d.text((hx, hy), "THIS DEVICE", font=FONT[12], fill=(0xFF, 0x8A, 0x1F))
     dx, dy, dw, dh = box(G, "about_device")
-    mdi = _mdi(18)
-    if mdi: d.text((16, dy - 2), chr(0xF061A), font=mdi, fill=MUTED)
     d.multiline_text((dx, dy),
-        "This device\n  Name   f1-tracker-9cad68\n  IP     192.168.1.52\n"
-        "  Wi-Fi  home-ssid  -52 dBm\n  MAC    24:EC:4A:9C:AD:68\n  Up     3h 12m",
-        font=FONT[12], fill=TEXT, spacing=5)
+        "f1-tracker-9cad68  192.168.1.52\nWi-Fi home-ssid  -52 dBm\nMAC 24:EC:4A:9C:AD:68\nUp 3h 12m",
+        font=FONT[14], fill=(0xDC, 0xE4, 0xF8), spacing=2)
     x, y, w, h = box(G, "about_data")
     d.multiline_text((x, y),
         "Data from\n  Jolpica, jolpi.ca  and  OpenF1, openf1.org  (CC BY-NC-SA 4.0)\n"
