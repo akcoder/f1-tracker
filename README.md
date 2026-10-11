@@ -17,6 +17,8 @@ The rest of the year it rotates through three kinds of card — the map and fact
 of **every circuit**, a profile of **every current driver**, and an **F1 legend**
 — with portraits, career records and a line on why they matter.
 
+Now and then a dinosaur walks across the screen, stops, and roars in a speech bubble (a switch in the settings turns it off).
+
 It watches one driver (**Max Verstappen** by default) and tells you when they're
 racing, where they start and how they finished. On a driver's birthday their
 card is badged in gold and shown nine times more often than usual.

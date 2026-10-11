@@ -7,7 +7,6 @@ docs/f1-tracker.ota.bin
 secrets.yaml
 test_birthday
 test_champ
-test_display
 test_json
 test_state
 test_team
@@ -25,4 +24,4 @@ tests/test_jpg
 tests/test_anim
 tests/test_png
 tests/test_headshot
-test_sun
+test_dino

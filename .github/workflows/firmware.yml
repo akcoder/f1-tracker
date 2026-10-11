@@ -79,7 +79,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          sparse-checkout: docs
+          sparse-checkout: |
+            docs
+            f1-tracker.yaml
       - uses: actions/download-artifact@v4
         with:
           path: files
@@ -91,7 +93,10 @@ jobs:
           mkdir -p site
           cp -r "$(dirname "$manifest")"/* site/
           rm -f site/*.elf   # debug symbols: not needed to install (kept in the build artifact)
-          cp docs/index.html docs/favicon.svg docs/logo.png site/   # the install page
+          # the install page: tracker-common's template and docs/site.json, at the tag the YAML pins
+          ref=$(sed -n 's/^  tracker_common_ref: *\([^ #]*\).*/\1/p' f1-tracker.yaml | head -n 1)
+          git clone --depth 1 --branch "$ref" https://github.com/akcoder/tracker-common tracker-common
+          python3 tracker-common/tools/make_site.py docs/site.json site
           ls -la site
           cat site/manifest.json
       - uses: actions/upload-pages-artifact@v3
