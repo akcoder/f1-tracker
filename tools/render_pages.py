@@ -603,7 +603,7 @@ def _sw(d, px, py, wid, G, on):
 def _field(d, px, py, wid, G, text):
     x, y, w, h = box(G, wid, px, py)
     d.rectangle([x, y, x + w, y + h], fill=(0x0E, 0x18, 0x36), outline=(0x3A, 0x4E, 0x86), width=2)
-    d.text((x + 8, y + h // 2), text, font=FONT[14], fill=(0xEE, 0xF2, 0xFF), anchor="lm")
+    d.text((x + 8, y + h // 2), text, font=FONT[16], fill=(0xEE, 0xF2, 0xFF), anchor="lm")
 
 
 def _slider(d, px, py, wid, G, frac):
@@ -705,7 +705,7 @@ def page_race_with_icon(ctx):
 def page_about(ctx):
     G = ctx["geo"]
     require(G, "page-12-about", "about_close", "about_mark", "about_title", "about_f1", "about_name", "about_version",
-            "about_by", "about_build", "about_device_hdr", "about_device", "about_data", "about_legal")
+            "about_hdr", "about_by", "about_build", "about_device_hdr", "about_device", "about_data_hdr", "about_data", "about_legal")
     img = Image.new("RGB", (W, H), BG); d = ImageDraw.Draw(img)
     mark = os.path.join(ROOT, "reference", "logo", "boot-200.png")
     mx, my, _, _ = box(G, "about_mark")
@@ -721,7 +721,9 @@ def page_about(ctx):
         d.text((x + w // 2, y), text, font=FONT[size], fill=fill, anchor="ma")
     tx, ty, tw, th = box(G, "about_title")
     _title(img, d, tx + tw // 2, ty + th // 2)
-    centred("about_version", "Version 0.1.0", 14, TEXT)
+    hx, hy, _, _ = box(G, "about_hdr")
+    d.text((hx, hy), "ABOUT", font=FONT[16], fill=(0xFF, 0x8A, 0x1F))
+    centred("about_version", "Version 0.1.0", 16, (0xDC, 0xE4, 0xF8))
     centred("about_by", "by Dan Morphis", 14, MUTED)
     centred("about_build", "ESPHome 2026.9.1, built Oct 8 2026", 12, MUTED)
     hx, hy, _, _ = box(G, "about_device_hdr")
@@ -730,12 +732,13 @@ def page_about(ctx):
     d.multiline_text((dx, dy),
         "f1-tracker-9cad68  192.168.1.52\nWi-Fi home-ssid  -52 dBm\nMAC 24:EC:4A:9C:AD:68\nUp 3h 12m",
         font=FONT[14], fill=(0xDC, 0xE4, 0xF8), spacing=2)
+    hx, hy, _, _ = box(G, "about_data_hdr")
+    d.text((hx, hy), "DATA FROM", font=FONT[12], fill=(0xFF, 0x8A, 0x1F))
     x, y, w, h = box(G, "about_data")
     d.multiline_text((x, y),
-        "Data from\n  Jolpica, jolpi.ca  and  OpenF1, openf1.org  (CC BY-NC-SA 4.0)\n"
-        "  Portraits: Wikimedia Commons, credited on each card\n"
-        "  Flags: flag-icons (MIT)   Circuits: f1-circuits (MIT)",
-        font=FONT[12], fill=MUTED, spacing=5)
+        "Jolpica jolpi.ca, OpenF1 openf1.org (CC BY-NC-SA)\nPortraits: Wikimedia Commons, credited on each card\n"
+        "Flags: flag-icons (MIT)  Circuits: f1-circuits (MIT)",
+        font=FONT[14], fill=TEXT, spacing=2)
     x, y, w, h = box(G, "about_legal")
     d.multiline_text((x, y),
         "Unofficial and not affiliated with Formula 1, the FIA or any\nteam. The F1 logo and names are trademarks of their owners.",
@@ -752,16 +755,16 @@ def page_settings(ctx):
     G = ctx["geo"]
     img, d, px, py = _settings_frame(ctx, "page-9-settings", 0,
         ("sw_autodim", "sw_autooff", "sl_bright", "ta_off_from", "ta_off_to"))
-    _row_icon(d, px, py, 6, 0xF00E1); d.text((px + 44, py + 6), "Auto-dim display", font=FONT[14], fill=TEXT)
+    _row_icon(d, px, py, 6, 0xF00E1); d.text((px + 44, py + 6), "Auto-dim display", font=FONT[16], fill=TEXT)
     _sw(d, px, py, "sw_autodim", G, True)
-    _row_icon(d, px, py, 56, 0xF0904); d.text((px + 44, py + 56), "Auto off overnight", font=FONT[14], fill=TEXT)
+    _row_icon(d, px, py, 56, 0xF0904); d.text((px + 44, py + 56), "Auto off overnight", font=FONT[16], fill=TEXT)
     _sw(d, px, py, "sw_autooff", G, True)
-    _row_icon(d, px, py, 106, 0xF0594); d.text((px + 44, py + 106), "Off from", font=FONT[14], fill=TEXT)
+    _row_icon(d, px, py, 106, 0xF0594); d.text((px + 44, py + 106), "Off from", font=FONT[16], fill=TEXT)
     _field(d, px, py, "ta_off_from", G, "23")
-    d.text((px + 224, py + 106), "until", font=FONT[14], fill=MUTED)
+    d.text((px + 224, py + 106), "until", font=FONT[16], fill=MUTED)
     _field(d, px, py, "ta_off_to", G, "7")
     d.text((px + 364, py + 106), "local h", font=FONT[12], fill=MUTED)
-    _row_icon(d, px, py, 162, 0xF00DF); d.text((px + 44, py + 162), "Brightness", font=FONT[14], fill=TEXT)
+    _row_icon(d, px, py, 162, 0xF00DF); d.text((px + 44, py + 162), "Brightness", font=FONT[16], fill=TEXT)
     _slider(d, px, py, "sl_bright", G, 0.8)
     return img, "page-9-settings"
 
@@ -770,12 +773,12 @@ def page_settings_race(ctx):
     G = ctx["geo"]
     img, d, px, py = _settings_frame(ctx, "page-9b-settings-race", 1,
         ("sl_carousel", "lbl_carousel", "sw_alerts", "sw_milestone"))
-    _row_icon(d, px, py, 6, 0xF051B); d.text((px + 44, py + 6), "Carousel", font=FONT[14], fill=TEXT)
-    d.text((px + 160, py + 6), "45 s", font=FONT[14], fill=MUTED)
+    _row_icon(d, px, py, 6, 0xF051B); d.text((px + 44, py + 6), "Carousel", font=FONT[16], fill=TEXT)
+    d.text((px + 160, py + 6), "45 s", font=FONT[16], fill=MUTED)
     _slider(d, px, py, "sl_carousel", G, 0.29)
-    _row_icon(d, px, py, 56, 0xF009E); d.text((px + 44, py + 56), "Watched driver alerts", font=FONT[14], fill=TEXT)
+    _row_icon(d, px, py, 56, 0xF009E); d.text((px + 44, py + 56), "Watched driver alerts", font=FONT[16], fill=TEXT)
     _sw(d, px, py, "sw_alerts", G, True)
-    _row_icon(d, px, py, 106, 0xF053A); d.text((px + 44, py + 106), "Milestones only", font=FONT[14], fill=TEXT)
+    _row_icon(d, px, py, 106, 0xF053A); d.text((px + 44, py + 106), "Milestones only", font=FONT[16], fill=TEXT)
     _sw(d, px, py, "sw_milestone", G, False)
     return img, "page-9b-settings-race"
 
@@ -784,10 +787,10 @@ def page_settings_location(ctx):
     G = ctx["geo"]
     img, d, px, py = _settings_frame(ctx, "page-9c-settings-location", 2,
         ("ta_lat", "ta_lon", "settings_kb"))
-    _row_icon(d, px, py, 10, 0xF0F57); d.text((px + 44, py + 10), "Latitude", font=FONT[14], fill=TEXT)
+    _row_icon(d, px, py, 10, 0xF0F57); d.text((px + 44, py + 10), "Latitude", font=FONT[16], fill=TEXT)
     _field(d, px, py, "ta_lat", G, "61.580")
     d.text((px + 320, py + 12), "N+  S-", font=FONT[12], fill=MUTED)
-    _row_icon(d, px, py, 60, 0xF0F5A); d.text((px + 44, py + 60), "Longitude", font=FONT[14], fill=TEXT)
+    _row_icon(d, px, py, 60, 0xF0F5A); d.text((px + 44, py + 60), "Longitude", font=FONT[16], fill=TEXT)
     _field(d, px, py, "ta_lon", G, "-149.440")
     d.text((px + 320, py + 62), "E+  W-", font=FONT[12], fill=MUTED)
     d.multiline_text((px + 16, py + 104),
@@ -1056,7 +1059,7 @@ def page_debug(ctx):
             "  Carousel: CIRCUIT 14/40\n"
             "  Jolpica 41 fetches, last 3 h\n"
             "  OpenF1 skipped (window) x6")
-    d.multiline_text((8, 36), body, font=FONT[12], fill=TEXT, spacing=4)
+    d.multiline_text((8, 32), body, font=FONT[16], fill=TEXT, spacing=2)
     return img, "page-10-debug"
 
 

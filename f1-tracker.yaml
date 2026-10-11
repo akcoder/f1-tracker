@@ -1552,13 +1552,13 @@ lvgl:
             scrollable: false
             widgets:
               - label: {x: 16, y: 6, text: "\U000F00E1", text_font: mdi18, text_color: 0x7E8BB3}
-              - label: {x: 44, y: 6, text: "Auto-dim display", text_font: mono14, text_color: 0xC9D3F2}
+              - label: {x: 44, y: 6, text: "Auto-dim display", text_font: mono16, text_color: 0xC9D3F2}
               - switch: {id: sw_autodim, x: 380, y: 0, width: 72, height: 32}
               - label: {x: 16, y: 56, text: "\U000F0904", text_font: mdi18, text_color: 0x7E8BB3}
-              - label: {x: 44, y: 56, text: "Auto off overnight", text_font: mono14, text_color: 0xC9D3F2}
+              - label: {x: 44, y: 56, text: "Auto off overnight", text_font: mono16, text_color: 0xC9D3F2}
               - switch: {id: sw_autooff, x: 380, y: 50, width: 72, height: 32}
               - label: {x: 16, y: 106, text: "\U000F0594", text_font: mdi18, text_color: 0x7E8BB3}
-              - label: {x: 44, y: 106, text: "Off from", text_font: mono14, text_color: 0xC9D3F2}
+              - label: {x: 44, y: 106, text: "Off from", text_font: mono16, text_color: 0xC9D3F2}
               - textarea:
                   id: ta_off_from
                   x: 150
@@ -1570,7 +1570,7 @@ lvgl:
                   one_line: true
                   max_length: 2
                   accepted_chars: "0123456789"
-                  text_font: mono14
+                  text_font: mono16
                   text_color: 0xEEF2FF
                   bg_color: 0x0E1836
                   border_color: 0x3A4E86
@@ -1578,7 +1578,7 @@ lvgl:
                   on_click:
                     - lvgl.keyboard.update: { id: settings_kb, textarea: ta_off_from }
                     - lvgl.widget.show: settings_kb
-              - label: {x: 224, y: 106, text: "until", text_font: mono14, text_color: 0x7E8BB3}
+              - label: {x: 224, y: 106, text: "until", text_font: mono16, text_color: 0x7E8BB3}
               - textarea:
                   id: ta_off_to
                   x: 290
@@ -1590,7 +1590,7 @@ lvgl:
                   one_line: true
                   max_length: 2
                   accepted_chars: "0123456789"
-                  text_font: mono14
+                  text_font: mono16
                   text_color: 0xEEF2FF
                   bg_color: 0x0E1836
                   border_color: 0x3A4E86
@@ -1600,7 +1600,7 @@ lvgl:
                     - lvgl.widget.show: settings_kb
               - label: {x: 364, y: 106, text: "local h", text_font: mono12, text_color: 0x7E8BB3}
               - label: {x: 16, y: 162, text: "\U000F00DF", text_font: mdi18, text_color: 0x7E8BB3}
-              - label: {x: 44, y: 162, text: "Brightness", text_font: mono14, text_color: 0xC9D3F2}
+              - label: {x: 44, y: 162, text: "Brightness", text_font: mono16, text_color: 0xC9D3F2}
               - slider:
                   id: sl_bright
                   x: 150
@@ -1635,8 +1635,8 @@ lvgl:
             scrollable: false
             widgets:
               - label: {x: 16, y: 6, text: "\U000F051B", text_font: mdi18, text_color: 0x7E8BB3}
-              - label: {x: 44, y: 6, text: "Carousel", text_font: mono14, text_color: 0xC9D3F2}
-              - label: {id: lbl_carousel, x: 160, y: 6, text: "45 s", text_font: mono14, text_color: 0x7E8BB3}
+              - label: {x: 44, y: 6, text: "Carousel", text_font: mono16, text_color: 0xC9D3F2}
+              - label: {id: lbl_carousel, x: 160, y: 6, text: "45 s", text_font: mono16, text_color: 0x7E8BB3}
               - slider:
                   id: sl_carousel
                   x: 236
@@ -1648,10 +1648,10 @@ lvgl:
                   on_value:
                     - lambda: f1::ui::settings_labels(id(lbl_carousel), (int) x);
               - label: {x: 16, y: 56, text: "\U000F009E", text_font: mdi18, text_color: 0x7E8BB3}
-              - label: {x: 44, y: 56, text: "Watched driver alerts", text_font: mono14, text_color: 0xC9D3F2}
+              - label: {x: 44, y: 56, text: "Watched driver alerts", text_font: mono16, text_color: 0xC9D3F2}
               - switch: {id: sw_alerts, x: 380, y: 50, width: 72, height: 32}
               - label: {x: 16, y: 106, text: "\U000F053A", text_font: mdi18, text_color: 0x7E8BB3}
-              - label: {x: 44, y: 106, text: "Milestones only", text_font: mono14, text_color: 0xC9D3F2}
+              - label: {x: 44, y: 106, text: "Milestones only", text_font: mono16, text_color: 0xC9D3F2}
               - switch: {id: sw_milestone, x: 380, y: 100, width: 72, height: 32}
 
         - obj:
@@ -1668,7 +1668,7 @@ lvgl:
             scrollable: false
             widgets:
               - label: {x: 16, y: 10, text: "\U000F0F57", text_font: mdi18, text_color: 0x7E8BB3}
-              - label: {x: 44, y: 10, text: "Latitude", text_font: mono14, text_color: 0xC9D3F2}
+              - label: {x: 44, y: 10, text: "Latitude", text_font: mono16, text_color: 0xC9D3F2}
               - textarea:
                   id: ta_lat
                   x: 160
@@ -1680,7 +1680,7 @@ lvgl:
                   one_line: true
                   max_length: 8
                   accepted_chars: "-.0123456789"
-                  text_font: mono14
+                  text_font: mono16
                   text_color: 0xEEF2FF
                   bg_color: 0x0E1836
                   border_color: 0x3A4E86
@@ -1690,7 +1690,7 @@ lvgl:
                     - lvgl.widget.show: settings_kb
               - label: {x: 320, y: 12, text: "N+  S-", text_font: mono12, text_color: 0x7E8BB3}
               - label: {x: 16, y: 60, text: "\U000F0F5A", text_font: mdi18, text_color: 0x7E8BB3}
-              - label: {x: 44, y: 60, text: "Longitude", text_font: mono14, text_color: 0xC9D3F2}
+              - label: {x: 44, y: 60, text: "Longitude", text_font: mono16, text_color: 0xC9D3F2}
               - textarea:
                   id: ta_lon
                   x: 160
@@ -1702,7 +1702,7 @@ lvgl:
                   one_line: true
                   max_length: 8
                   accepted_chars: "-.0123456789"
-                  text_font: mono14
+                  text_font: mono16
                   text_color: 0xEEF2FF
                   bg_color: 0x0E1836
                   border_color: 0x3A4E86
@@ -1806,6 +1806,13 @@ lvgl:
             on_click:
               - lambda: id(from_about) = true;      # return to Settings as it was left
               - lvgl.page.show: settings_page
+        - label:                # as sky/plane: the page name, small and orange, top left
+            id: about_hdr
+            x: 8
+            y: 12
+            text: "ABOUT"
+            text_font: mono16
+            text_color: 0xFF8A1F
         - image:
             id: about_mark
             src: about_logo
@@ -1837,13 +1844,13 @@ lvgl:
             y: 174
             width: 480
             text: "Version ${fw_version}"
-            text_font: mono14
-            text_color: 0xC9D3F2
+            text_font: mono16
+            text_color: 0xDCE4F8
             text_align: CENTER
         - label:
             id: about_by
             x: 0
-            y: 194
+            y: 196
             width: 480
             text: "by Dan Morphis"
             text_font: mono14
@@ -1852,7 +1859,7 @@ lvgl:
         - label:
             id: about_build
             x: 0
-            y: 216
+            y: 218
             width: 480
             text: ""
             text_font: mono12
@@ -1875,13 +1882,20 @@ lvgl:
             text_color: 0xDCE4F8
             long_mode: WRAP
         - label:
+            id: about_data_hdr
+            x: 16
+            y: 336
+            text: "DATA FROM"
+            text_font: mono12
+            text_color: 0xFF8A1F
+        - label:
             id: about_data
             x: 16
-            y: 352
+            y: 354
             width: 452
-            text: "Data from\n  Jolpica, jolpi.ca  and  OpenF1, openf1.org  (CC BY-NC-SA 4.0)\n  Portraits: Wikimedia Commons, credited on each card\n  Flags: flag-icons (MIT)   Circuits: f1-circuits (MIT)"
-            text_font: mono12
-            text_color: 0x7E8BB3
+            text: "Jolpica jolpi.ca, OpenF1 openf1.org (CC BY-NC-SA)\nPortraits: Wikimedia Commons, credited on each card\nFlags: flag-icons (MIT)  Circuits: f1-circuits (MIT)"
+            text_font: mono14
+            text_color: 0xC9D3F2
         - label:                # 3.7.5: the trademark non-affiliation notice
             id: about_legal
             x: 16
@@ -1909,7 +1923,7 @@ lvgl:
             y: 32
             width: 464
             text: ""
-            text_font: mono12
+            text_font: mono16
             text_color: 0xC9D3F2
         - button:
             align: TOP_RIGHT
