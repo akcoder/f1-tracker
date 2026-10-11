@@ -659,9 +659,9 @@ def _card(mode):
         nx, ny = x0 + (cw - c["NOTES_W"]) // 2, y0 + c["NOTES_Y"]
         d.rounded_rectangle([nx, ny, nx + c["NOTES_W"], ny + c["NOTES_H"]], 8, fill=(0x0A, 0x11, 0x28))
         d.multiline_text((nx + 8, ny + 8),
-            "- Settings in three tabs, with a keyboard\n- About screen\n- Auto-dim from your latitude and\n  longitude\n"
+            "- Settings in three tabs, with a\n  keyboard\n- About screen\n- Auto-dim from your latitude and\n  longitude\n"
             "- Firmware updates show what is new,\n  and never offer an older version",
-            font=FONT[12], fill=TEXT, spacing=5)
+            font=FONT[16], fill=TEXT, spacing=4)
         button(0, "Not now", (0x1A, 0x25, 0x47)); button(1, "Update", BORDER); name = "overlay-update-available"
     elif mode == "installing":
         line("Updating firmware", 16, 22, WHITE); line("Downloading", l1y, 16, (0xDC, 0xE4, 0xF8))
