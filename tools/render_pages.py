@@ -762,7 +762,7 @@ def page_settings(ctx):
     G = ctx["geo"]
     img, d, px, py = _settings_frame(ctx, "page-9-settings", 0,
         ("sw_autodim", "sw_autooff", "sl_bright", "ta_off_from", "ta_off_to"))
-    _row_icon(d, px, py, 6, 0xF00E1); d.text((px + 44, py + 6), "Auto-dim display", font=FONT[16], fill=TEXT)
+    _row_icon(d, px, py, 6, 0xF00E1); d.text((px + 44, py + 6), "Auto bright", font=FONT[16], fill=TEXT); d.text((px + 44, py + 28), "dims after sunset", font=FONT[12], fill=MUTED)
     _sw(d, px, py, "sw_autodim", G, True)
     _row_icon(d, px, py, 56, 0xF0904); d.text((px + 44, py + 56), "Auto off overnight", font=FONT[16], fill=TEXT)
     _sw(d, px, py, "sw_autooff", G, True)

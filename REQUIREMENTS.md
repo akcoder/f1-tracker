@@ -17,7 +17,7 @@ Appendix A. See `tracker-common/docs/requirements-style.md`.
 - Animated boot and About logos: start lights on boot only, three cars lapping the Monza outline at changing speeds with overtaking, the F1 logo in the title (MOTION-2 to MOTION-3; decisions 190-192, 44, 191).
 - The country flag beside each driver and constructor on the championship page (decision 188).
 - The board, the diagnostics, auto-dim and the install page now come from `tracker-common` v0.4.0, and every firmware install shows the one card (BUILD-14, BUILD-15; decision 200).
-- The backlight number is `Backlight` as in sky-tracker, and the fallback AP starts 30 s after Wi-Fi fails (decision 201).
+- The auto switch is `Auto Brightness`, off by default, as in sky-tracker (decision 202); the backlight number is `Backlight`, and the fallback AP starts 30 s after Wi-Fi fails (decision 201).
 - Titles in sentence case: About, Display, Race, Location, This device, Data from (UI-194; decision 199).
 - Private data (location, local paths) moved out of this document into the git-ignored `REQUIREMENTS.private.md`.
 
@@ -349,6 +349,7 @@ with an HTML error page. It is not a candidate.
 |---|---|---|---|---|
 | `/ergast/f1/current/next/?format=json` | 200 | **821 B** | 0.3 s | one race, full session times |
 | 201 | **The backlight is the same entity set on every tracker** (`tracker-common` v0.4.2): the globals `bright_day`, `bright_day_open`, `bright_on_open`, the `Backlight` number `backlight_pct` (was `Brightness` here; with auto-dim on it sets the DAYTIME level and the light follows it scaled by the night factor, as sky-tracker's did), the light's slider sync (new here: HA and web changes now move the settings slider) and the touch wake come from `boards/backlight.yaml`; the project sets `tracker::display::auto_on` and `factor_now` once. **The fallback AP starts 30 s after Wi-Fi fails and Wi-Fi never reboots the device** (`ap_timeout`, `wifi_reboot_timeout` in the board package, from sky-tracker; ESPHome's 90 s and 15 min were the defaults this project had kept) | 2026-10-11 | **asked for by owner**, implements 200 |
+| 202 | **The auto switch is sky-tracker's `Auto Brightness`** (`tracker-common` v0.4.3, in `boards/backlight.yaml`): id `auto_bright`, default OFF, turning it on takes the current brightness as the daytime level; the settings row reads `Auto bright` with the hint `dims after sunset`. Was `auto_dim`, `Auto-dim Display`, default on. Supersedes the wording of decision 44's auto-dim entity | 2026-10-11 | **asked for by owner**, implements 201 |
 | `/ergast/f1/2026/races/?format=json&limit=40` | 200 | 14.3 KB | 0.33 s | **23 rounds** |
 | `/ergast/f1/2026/circuits/?format=json&limit=100` | 200 | 5.3 KB | 0.70 s | **24 circuits**, with lat/lon + country |
 | `/ergast/f1/2026/drivers/?format=json&limit=100` | 200 | 5.6 KB | 0.67 s | **32 drivers** |
