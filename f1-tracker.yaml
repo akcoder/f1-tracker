@@ -12,7 +12,7 @@ substitutions:
   obs_lat: "61.581"
   obs_lon: "-149.439"
   tracker_common_url: https://github.com/akcoder/tracker-common
-  tracker_common_ref: v0.4.0     # a tag, so a change in tracker-common cannot break this build
+  tracker_common_ref: v0.4.1     # a tag, so a change in tracker-common cannot break this build
   tracker_common_refresh: 1d
   manifest_url: https://akcoder.github.io/f1-tracker/manifest.json   # UI-68: built and published by the Firmware workflow
   # The board package's tunables (tracker-common/boards/guition-4848s040.yaml):
@@ -40,7 +40,7 @@ packages:
   tracker_common_pkg:         # the fonts, the board and the diagnostics every tracker shares (decision 194)
     url: ${tracker_common_url}
     ref: ${tracker_common_ref}
-    files: [fonts.yaml, boards/guition-4848s040.yaml, diagnostics.yaml]   # fonts, the board, the diagnostics
+    files: [fonts.yaml, boards/guition-4848s040.yaml, boards/guition-4848s040-sdkconfig.yaml, boards/ble-improv.yaml, diagnostics.yaml]
     refresh: ${tracker_common_refresh}
 
 esphome:
