@@ -1,0 +1,30 @@
+{
+  "name": "F1 Tracker",
+  "slug": "f1-tracker",
+  "repo": "akcoder/f1-tracker",
+  "tagline": "A Formula 1 season on a 480&times;480 touchscreen.",
+  "description": "A Formula 1 season on a 480x480 touchscreen: the grid, the circuits, the drivers. Made for ESPHome.",
+  "ap_name": "F1 Tracker - XXXX",
+  "logo": "logo.png",
+  "favicon": "favicon.svg",
+  "hero": {"file": "page-2-race.png", "alt": "The race page: circuit map, state line and top five"},
+  "features": [
+    {"title": "On a race weekend", "text": "the circuit map for the track, the drivers in starting order, a flag for each driver and for the course."},
+    {"title": "Otherwise", "text": "a carousel of every circuit with its facts, every current driver, and the legends, with portraits."},
+    {"title": "Watches one driver", "text": "and tells you when they are racing, where they start, and how they finished."},
+    {"title": "Championship tables", "text": "permutations, a post-race summary, and a birthday card when it is one."}
+  ],
+  "after_features": "  <img class=\"shot\" src=\"boot-cars.gif\" alt=\"The boot screen: start lights and cars lapping the logo\">\n",
+  "sources": [
+    {"name": "jolpi.ca", "url": "https://jolpi.ca/", "used": "calendar, drivers, results, standings", "licence": "CC BY-NC-SA 4.0"},
+    {"name": "openf1.org", "url": "https://openf1.org/", "used": "session data", "licence": "CC BY-NC-SA 4.0"},
+    {"name": "f1-circuits", "url": "https://github.com/bacinger/f1-circuits", "used": "circuit geometry", "licence": "MIT"},
+    {"name": "flag-icons", "url": "https://github.com/lipis/flag-icons", "used": "country flags", "licence": "MIT"},
+    {"name": "Wikimedia Commons", "url": "https://commons.wikimedia.org/", "used": "portraits", "licence": "per image, credited on the card"}
+  ],
+  "sources_note": "All free, no API key needed.",
+  "footer": "    <p>Not affiliated with, endorsed by, or connected to Formula 1.\n       <em>F1</em>, <em>FORMULA 1</em> and <em>FIA</em> are trademarks of their\n       respective owners. Personal, non-commercial use. MIT licence.</p>\n",
+  "ota_file": "f1-tracker-esp32s3.ota.bin",
+  "sdcard": false,
+  "assets": ["favicon.svg", "logo.png", "renders/page-2-race.png", "renders/boot-cars.gif"]
+}

@@ -16,6 +16,7 @@ Appendix A. See `tracker-common/docs/requirements-style.md`.
 - Driver pictures: the detail card and the carousel decode the compiled portrait top-down (MOTION-4); a driver with none gets a headshot from the F1 media server on the carousel card and on the detail card (MOTION-4a; decisions 193, 198). Tapping a driver on the championship page opens the detail card.
 - Animated boot and About logos: start lights on boot only, three cars lapping the Monza outline at changing speeds with overtaking, the F1 logo in the title (MOTION-2 to MOTION-3; decisions 190-192, 44, 191).
 - The country flag beside each driver and constructor on the championship page (decision 188).
+- The board, the diagnostics, auto-dim and the install page now come from `tracker-common` v0.4.0, and every firmware install shows the one card (BUILD-14, BUILD-15; decision 200).
 - Titles in sentence case: About, Display, Race, Location, This device, Data from (UI-194; decision 199).
 - Private data (location, local paths) moved out of this document into the git-ignored `REQUIREMENTS.private.md`.
 
@@ -2225,6 +2226,9 @@ BUILD-11  Releases are built by the Firmware workflow (`.github/workflows/firmwa
 BUILD-12  Binaries are never committed.
 
 
+BUILD-14  [x] The hardware is the shared board package, `tracker-common/boards/guition-4848s040.yaml`: the ESP32-S3 and its sdkconfig, PSRAM, the console on UART0, the API, Wi-Fi with Improv (BLE and USB serial), the captive portal, the web server base, time, `http_request`, the panel, the GT911, the 30 kHz backlight and its light, and the three OTA platforms; `diagnostics.yaml` adds the IP, SSID, ESPHome version, Wi-Fi signal, uptime and free memory entities. This project sets the tunables it differs on through `substitutions:` (`tcp_window`, `tcp_mbox`, `tcp_sack`, `http_timeout`, `timezone`, `ap_name`) and extends a block with `id: !extend` (the touch handler) (decision 200).
+BUILD-15  [x] The install page is built from `tracker-common`'s template and `docs/site.json` by the Firmware workflow; the page's Wi-Fi paragraph (Improv in the install dialog, or the fallback access point) is the shared one (decision 200).
+
 ### 7.1 Boot ordering
 | `on_boot` priority | Action |
 |---|---|
@@ -2553,6 +2557,7 @@ exists.
 | 197 | **Font roles, one set across the trackers** (audit against `sky-tracker` and `plane-tracker`): page names (`About`, `Display`, `Debug`) mono16 orange; settings rows, labels and text fields **mono16** (were mono14), hints mono12; About: `Version` mono16, `This device` and `Data from` mono12 orange headings over mono14 bodies, `About` header top left; debug page body **mono16** (was mono12); card titles mono18, card bodies mono14, order rows mono12 (22 rows need it); boot/About title Roboto 50 for f1 only (sized to the F1 logo, sky/plane use Roboto 34). Not shared: sky's mono15 alerts and mono72 countdown | 2026-10-10 | **asked for by owner**, implements 194 |
 | 198 | **The detail card shows a headshot for a driver with no compiled portrait** (a tap in the order list or the championship table): the same F1 media-server picture as the carousel (decision 193), wanted when the card opens, shown as its rows arrive and scaled from 206 to 120 px beside the text, credited `photo: formula1.com` (decision 72). Closing the card cancels nothing the network task is doing; the picture stays cached for the next card | 2026-10-10 | **asked for by owner**, closes the gap left by 188 |
 | 199 | **Titles are sentence case** (`About`, `Display`, `Race`, `Location`, `This device`, `Data from`), not capitals, on every page and in `tracker-common`'s shared text; abbreviations and acronyms keep theirs. The owner's convention for the three trackers, passed on by the `sky-tracker` session (its commit 2bba6b3). Supersedes the capitals in decisions 187, 196 and 197 | 2026-10-11 | **asked for by owner**, implements UI-194 |
+| 200 | **More is shared through `tracker-common` v0.4.0**: the board (`boards/guition-4848s040.yaml`, including Improv, the 30 kHz backlight - sky-tracker adopts it - and its tunables as substitutions), the diagnostic entities, the auto-dim curve, Auto Off and the 30 s backlight pass (`tracker_display.h`, with its tests; `f1_display.h` is gone), the install page template (`site/index.template.html`, `tools/make_site.py`, `docs/site.json`; `docs/index.html` is gone) and **one install card for every firmware install**: the old Uploading/Upgrading panel (`ota_panel`) is gone, the ESPHome and web-upload OTA drive the same card as the internet update, and this project's data task pauses and resumes through `tracker::upd::ota_hook_begin` and `ota_hook_error`. Supersedes the OTA panel of FAIL-12 | 2026-10-11 | **asked for by owner**, implements BUILD-14, BUILD-15 |
 
 ## Appendix B. Feature ideas
 Ranked by how well each fits what the device is for. The brief asked for ideas;
