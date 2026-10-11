@@ -175,7 +175,7 @@ appliance and a project.
 | `/ergast/f1/current/last/` | season 2026, round 15 | most recent completed round |
 | `/ergast/f1/2027/races/` | `total = 0` | a future season simply does not exist until it is published |
 
-RACE-13a  Resolve the season from `/current/`. , which names it in a
+RACE-13a  Resolve the season from `/current/`, which names it in a
           response of a few hundred bytes. Re-resolve on the ordinary `IDLE` /
           `OFF_SEASON` cadence (§6a.1) — a season changes once a year, so this costs
           nothing.
@@ -1121,7 +1121,7 @@ UI-4   Live track status is out of scope under free tiers —
        on the post-session summary (§B.1) rather than the header. If it is ever
        shown live, it must be a coloured dot **plus a word**, never colour
        alone.
-UI-5   A countdown in `SESSION_SOON`. , to the next session, labelled
+UI-5   A countdown in `SESSION_SOON`, to the next session, labelled
        with which session it is. This is the state the device will sit in most
        often during a race week and it should be the best-looking screen on it.
 UI-76  Both flags appear on this page: the **circuit country flag** in the
@@ -1482,7 +1482,7 @@ UI-40a  Give every font the shared glyph set. `plane-tracker`
         a clock-only `mono24` set drew `UPGRADING` as boxes. Our strings are
         driver names, team names and circuit names from a live feed — they
         **will** contain characters nobody predicted.
-UI-40b  Accented characters are guaranteed here. , unlike in either
+UI-40b  Accented characters are guaranteed here, unlike in either
         sibling. **Settled at M0: use `glyphsets: [GF_Latin_Core]`**, ESPHome's
         own mechanism (via `esphome-glyphsets`), rather than a hand-built literal
         string. 319 codepoints, declared once as a YAML anchor and reused across
@@ -1493,7 +1493,7 @@ UI-40b  Accented characters are guaranteed here. , unlike in either
         (`Hülkenberg`, `Autódromo José Carlos Pace`, `Nürburgring`,
         `Hermanos Rodríguez`), so `sky-tracker`'s ASCII set would have drawn a box
         mid-name.
-UI-40c  Roboto Mono is missing 12 of `GF_Latin_Core`'s codepoints. , and
+UI-40c  Roboto Mono is missing 12 of `GF_Latin_Core`'s codepoints, and
         the build warns about it. All twelve are **combining diacritical marks**
         (U+0302 circumflex, U+0304 macron, U+0306 breve, …), which no monospace
         face ships as standalone glyphs. **Harmless for our data**, which uses
@@ -1687,7 +1687,7 @@ UI-161  **Each event fires once.** Latch it against a `(round, session, event)`
 UI-162  **Keep the alert text in a data file**, not scattered through the code, so
         lines can be added over seasons and pushed by OTA. Same rule
         `plane-tracker` records for its own quiet lines.
-UI-50b  The ambient marker is the feature most of the time. , and it is
+UI-50b  The ambient marker is the feature most of the time, and it is
         the one worth polishing. His row highlighted on the order page and his
         flag in the header is what a glance actually wants; the strip is for the
         handful of moments that deserve one.
