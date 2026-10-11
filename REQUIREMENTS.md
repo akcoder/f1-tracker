@@ -10,7 +10,7 @@ Appendix A. See `tracker-common/docs/requirements-style.md`.
 
 ## Changes in rev 27
 - 0.1.0 (released): the first release, built by the Firmware workflow and published on GitHub Pages (BUILD-11). Nothing has run on a board yet (VER-5).
-- Rev 27 reorganises this document into the tracker spec style: areas 0-10 in `sky-tracker`'s order, one ID per requirement (the 345 checklist lines that had none got one; every existing ID keeps its number), the old section numbers mapped to the new ones everywhere they were cited, the decision table moved to Appendix A, the feature ideas, open questions and milestones to Appendices B-D. The checkbox state of each line is dropped; what is verified and what is not is stated in VER-5.
+- Rev 27 reorganises this document into the tracker spec style: areas 0-10 in `sky-tracker`'s order, one ID per requirement, with its checkbox kept (the 345 checklist lines that had none got one; every existing ID keeps its number), the old section numbers mapped to the new ones everywhere they were cited, the decision table moved to Appendix A, the feature ideas, open questions and milestones to Appendices B-D. The old checkbox of each line is kept, after its ID (`[x]` done, `[ ]` open); what has not been verified on a board is stated in VER-5.
 - Update screen: the card, the icon beside the gear, the install card, release notes from the GitHub release (UI-68 in `sky-tracker`; decisions 183-184, 195); the update card, the web page patches, the JPEG and PNG decoders, the sun maths, the panel soft reset, the boot status state machine, the About text, the shared fonts and the glyph check now live in `tracker-common` (BUILD-10; decision 194).
 - About page and font roles one set across the trackers: the `ABOUT` header, `THIS DEVICE` and `DATA FROM` headings, settings rows and text fields at 16 px, the debug page at 16 px; the Close button has no icon (decisions 196, 197).
 - Driver pictures: the detail card and the carousel decode the compiled portrait top-down (MOTION-4); a driver with none gets a headshot from the F1 media server on the carousel card and on the detail card (MOTION-4a; decisions 193, 198). Tapping a driver on the championship page opens the detail card.
@@ -53,9 +53,9 @@ Two mature projects by the same author drive this board, and both are on disk:
 | `sky-tracker` | `<sky-tracker>/sky-tracker.yaml` + `sky-tracker/*.h` (paths in `REQUIREMENTS.private.md`) | **UI cues, flags, platform config, settings page, web UI.** Installed and working (rev 4, fw 4.5.34) |
 | `plane-tracker` | `<plane-tracker>/` (path in `REQUIREMENTS.private.md`) | **Document style, requirement IDs, and 65 hard-won decisions** already distilled from `sky-tracker` |
 
-CTX-1  Treat `sky-tracker`'s pin map, `sdkconfig_options` and LVGL tuning as
+CTX-1  [ ] Treat `sky-tracker`'s pin map, `sdkconfig_options` and LVGL tuning as
        **authoritative** over any community config or default.
-CTX-2  Read `plane-tracker`'s decision log (its §10, 65 rows) before
+CTX-2  [ ] Read `plane-tracker`'s decision log (its §10, 65 rows) before
        implementing anything in §4 or §4.15. Most of what this project needs was
        already discovered and paid for there; several rows are bugs that took a
        device to find.
@@ -67,12 +67,12 @@ Both sibling projects tag every non-obvious line with an ID — `HW-6`, `UI-16`,
 `PERF-8`, `NET-2`, `DATA-10`, `FAIL-10`, `ARCH-3`, `BUILD-1` — and the code
 comments cite them.
 
-CTX-3  **Use the same prefixes**, so all three projects read alike. Two
+CTX-3  [ ] **Use the same prefixes**, so all three projects read alike. Two
        project-specific prefixes are added, in the same spirit as
        `sky-tracker`'s `MOTION-`:
        **`RACE-`** for the weekend state machine and session logic (§1.1), and
        **`MAP-`** for circuit-trace generation and drawing (§3.9, §4.5).
-CTX-4  Carry the `substitutions:` + `fw_version` pattern across, bump it on
+CTX-4  [ ] Carry the `substitutions:` + `fw_version` pattern across, bump it on
        every install, and surface it in HA, on the settings page and on the
        Wi-Fi status page.
 
@@ -99,39 +99,39 @@ OFF_SEASON ─> IDLE ─> RACE_WEEK ─> SESSION_SOON ─> SESSION_LIVE ─┐
 | `RACE_LIVE` | now ∈ [start, start + 3 h] of the Race | Race Day page, running order |
 | `POST_SESSION` | OpenF1's window closed (session end + 30 min) < 12 h ago — decision 60 | Race Day page, final classification |
 
-RACE-15  **"Race day" is a state, not a date comparison.** The brief says "on race
+RACE-15  [ ] **"Race day" is a state, not a date comparison.** The brief says "on race
          day"; the device is far from the races, which are in Melbourne, Suzuka and
          Las Vegas. A UTC race start of `04:00Z` is the previous *evening*
          locally. Driving the UI off the device's local calendar date would show
          the race-day screen on the wrong day for roughly half the calendar.
          **Derive state from the session timestamps, in UTC, never from a local
          date.** This is the single most likely bug in this project.
-RACE-14  A Sprint is a first-class race day. (decision 90). It has its
+RACE-14  [ ] A Sprint is a first-class race day. (decision 90). It has its
          own grid, its own result and its own classification, so it drives the
          same `RACE_LIVE` → `POST_SESSION` path as the Grand Prix and gets the
          full race page. The header says **`SPRINT`** so the two are never
          confused, and a sprint weekend therefore has **two** race days.
-RACE-16  Sprint sessions appear as `Sprint` and `SprintQualifying` in the Jolpica
+RACE-16  [ ] Sprint sessions appear as `Sprint` and `SprintQualifying` in the Jolpica
          round, and **only on sprint weekends** (§3.5) — `ThirdPractice` is absent
          on those. Drive it off whichever session objects exist.
-RACE-17  The watched-driver alerts (§4.14) fire for the Sprint too, which is the
+RACE-17  [ ] The watched-driver alerts (§4.14) fire for the Sprint too, which is the
          main practical consequence: twice the alerts on a sprint weekend. The
          `Show sprint sessions` setting (§4.15) gates it for anyone who disagrees.
-RACE-18  **Milestone counting must not double-count.** A sprint win is not a Grand
+RACE-18  [ ] **Milestone counting must not double-count.** A sprint win is not a Grand
          Prix win in the career totals, and Jolpica keeps them in separate
          endpoints (`/sprint/` vs `/results/`). The generated win total (§3.10.2)
          comes from `/results/` only, so a sprint victory must not fire a
          "nth win" milestone.
-RACE-19  `RACE_LIVE` has no reliable end time in the Jolpica feed (no duration).
+RACE-19  [ ] `RACE_LIVE` has no reliable end time in the Jolpica feed (no duration).
          Bound it with **3 h** from the start, and leave it early if the
          classification is final.
-RACE-20  OpenF1's `date_end` for the Race session is a better bound when it is
+RACE-20  [ ] OpenF1's `date_end` for the Race session is a better bound when it is
          known — it is in the `sessions` list, which is fetched outside the live
          window (NET-14). Prefer it; fall back to the 3 h window.
-RACE-21  Expose the current state as a **diagnostic text sensor** — it explains
+RACE-21  [ ] Expose the current state as a **diagnostic text sensor** — it explains
          everything else the device is doing, and it is the first thing to look at
          when the wrong page is up.
-RACE-22  A **manual override** in settings (`Force page: Auto / Race Day /
+RACE-22  [ ] A **manual override** in settings (`Force page: Auto / Race Day /
          Carousel`) so the race-day screen can be seen in February. Reverts to
          `Auto` on reboot, deliberately — a forced page is a debugging tool, not a
          mode.
@@ -141,17 +141,17 @@ The device queries both services directly over HTTPS. There is no companion
 host. Responses are small (§3.1), the parsing is shallow, and nothing needs a
 database.
 
-ARCH-4  Favour a **streaming/selective parser** over a full DOM. The 48 KB
+ARCH-4  [ ] Favour a **streaming/selective parser** over a full DOM. The 48 KB
         `sessions` response carries ~20 fields per row and we use 8.
-ARCH-5  Size buffers for the **48 KB worst case**, not the 821 B best one.
-ARCH-6  Mirror the siblings' split: **YAML shell + C++ headers.**
+ARCH-5  [ ] Size buffers for the **48 KB worst case**, not the 821 B best one.
+ARCH-6  [ ] Mirror the siblings' split: **YAML shell + C++ headers.**
         `f1_net.h` (fetch, parse, both sources, merge), `f1_state.h` (the state
         machine + poll scheduling), `f1_map.h` (projection + trace drawing),
         `f1_circuits.h` + `f1_facts.h` (generated), `f1_flags.h` (copied from
         `sky_flags.h`), `f1_diag.h` (copied; the web page patches are in `tracker-common`, decision 194).
-ARCH-7  Hand widget pointers and a config struct into C++ from an `on_boot`
+ARCH-7  [ ] Hand widget pointers and a config struct into C++ from an `on_boot`
         lambda at priority −100, as both siblings do.
-ARCH-8  Record the **source version at the top of each copied file** (e.g. "from
+ARCH-8  [ ] Record the **source version at the top of each copied file** (e.g. "from
         sky-tracker 4.5.34"), so a later divergence can be diffed rather than
         guessed at. Copy, do not factor a shared library — `plane-tracker`
         decision 31, and the same reasoning applies a third time.
@@ -175,31 +175,31 @@ appliance and a project.
 | `/ergast/f1/current/last/` | season 2026, round 15 | most recent completed round |
 | `/ergast/f1/2027/races/` | `total = 0` | a future season simply does not exist until it is published |
 
-RACE-13a  Resolve the season from `/current/`, which names it in a
+RACE-13a  [ ] Resolve the season from `/current/`, which names it in a
           response of a few hundred bytes. Re-resolve on the ordinary `IDLE` /
           `OFF_SEASON` cadence (§6a.1) — a season changes once a year, so this costs
           nothing.
-RACE-23  **RACE-13b: `/current/next/` returning empty is the end-of-season
+RACE-23  [ ] **RACE-13b: `/current/next/` returning empty is the end-of-season
          signal**, not an error. Measured shape: an empty `Races` array. When it
          is empty and the last round has run, the device is in `OFF_SEASON` and
          waits for `/current/` to name a new season.
-RACE-13c  The gap between seasons is months, and it is normal. From
+RACE-13c  [ ] The gap between seasons is months, and it is normal. From
           the last race until the next calendar is published, there is no future
           session anywhere. Measured today: no 2027 calendar and no 2027 entry list
           exist. **This must not look like a fault** — it is not a "no data" state
           (§4.12), it is `OFF_SEASON`, and the carousel runs the whole time on
           compiled-in data (§1.4).
-RACE-24  **`OFF_SEASON` is therefore a first-class screen**, not a placeholder.
+RACE-24  [ ] **`OFF_SEASON` is therefore a first-class screen**, not a placeholder.
          It is where the device spends a good part of every year and it is the
          state it will be in when first switched on. Show the completed season's
          champion and final standings, and the carousel; say *"2026 season
          complete — 2027 calendar not yet published"* rather than anything that
          reads as broken.
-RACE-25  **Compile in whatever is newest at build time and record the season in
+RACE-25  [ ] **Compile in whatever is newest at build time and record the season in
          the generated header** (§1.4). A fetched season always supersedes it. A
          device flashed in one year and never rebuilt follows the calendar
          forward on its own.
-RACE-26  **A season rollover must need no firmware update.** Make this an explicit
+RACE-26  [ ] **A season rollover must need no firmware update.** Make this an explicit
          host test: feed the state machine a `current` that advances a year
          mid-run and assert the calendar, the entry list, the driver carousel and
          the watched-driver resolution all follow.
@@ -208,7 +208,7 @@ RACE-26  **A season rollover must need no firmware update.** Make this an explic
 Tracking the current season at runtime collides with two things that are
 generated at build time (§3.10), and both need handling.
 
-RACE-27  **RACE-13d: resolve the legend/current-driver overlap at _runtime_, not
+RACE-27  [ ] **RACE-13d: resolve the legend/current-driver overlap at _runtime_, not
          at build time.** This **corrects decision 86.** If the overlap were baked
          and the season advanced without a rebuild, a driver who retired would be
          suppressed from the legend rotation (because the build marked him
@@ -219,19 +219,19 @@ RACE-27  **RACE-13d: resolve the legend/current-driver overlap at _runtime_, not
          in the entry list → driver card with a `LEGEND` badge; not in it →
          legend card. Hamilton retiring then moves him into the legend rotation on
          the next poll, with no rebuild.
-RACE-13e  A driver with no compiled profile still gets a card. A
+RACE-13e  [ ] A driver with no compiled profile still gets a card. A
           rookie who joins after the firmware was built has no portrait and no
           career record. Render a **text-only card** from the live entry list —
           name, flag, number, team — and omit the portrait and the stats rather
           than skipping the driver. The card degrades to exactly what is known,
           which for a rookie is very nearly everything anyway.
-RACE-28  Show the **profile data's build date** on the debug page beside the
+RACE-28  [ ] Show the **profile data's build date** on the debug page beside the
          calendar's source and age (§1.4), so a device running two-year-old
          portraits is visible rather than mysterious.
-RACE-29  **Portraits are the one thing a rebuild is genuinely needed for.** Say so
+RACE-29  [ ] **Portraits are the one thing a rebuild is genuinely needed for.** Say so
          in the README rather than pretending otherwise: the device follows the
          season on its own, and an occasional reflash refreshes the faces.
-RACE-30  Keep the **2026 fixtures as test data** (`reference/samples/`). They are
+RACE-30  [ ] Keep the **2026 fixtures as test data** (`reference/samples/`). They are
          a complete real season's shapes, they exercise every data-quality case in
          §3.5, and they are now also the **rollover fixture** — a season that ends
          while a newer one does not yet exist is precisely the edge case above.
@@ -239,16 +239,16 @@ RACE-30  Keep the **2026 fixtures as test data** (`reference/samples/`). They ar
 ### 1.4 The season calendar is compiled in, then refreshed (DATA-3)
 A generated header carries the calendar as built, and the network refreshes it.
 
-DATA-13  `tools/gen_calendar.py` → `f1-tracker/f1_calendar.h` — rounds, session
+DATA-13  [ ] `tools/gen_calendar.py` → `f1-tracker/f1_calendar.h` — rounds, session
          times, `circuitId`, country, all from Jolpica at build time.
-DATA-14  At boot the device **has a usable season immediately**, before Wi-Fi.
+DATA-14  [ ] At boot the device **has a usable season immediately**, before Wi-Fi.
          A fetched calendar supersedes it in RAM; the compiled one is the floor.
-DATA-15  This is what makes §2.3 (no data partition) cost nothing: the thing
+DATA-15  [ ] This is what makes §2.3 (no data partition) cost nothing: the thing
          worth caching is baked in instead.
-DATA-16  Show **which calendar is in use** on the debug page (`compiled` /
+DATA-16  [ ] Show **which calendar is in use** on the debug page (`compiled` /
          `fetched, age N h`). A device quietly running a stale compiled calendar
          in August is otherwise invisible.
-DATA-17  Bump the generated calendar on every firmware build so an OTA also
+DATA-17  [ ] Bump the generated calendar on every firmware build so an OTA also
          refreshes the floor.
 
 ## 2. Hardware constraints (HW)
@@ -272,29 +272,29 @@ Identical to `sky-tracker`, which drives this exact board in production, and to
 | Spare UART RX | `GPIO42` — **unused here** |
 | Board / flash | `esp32-s3-devkitc-1`, 16 MB |
 
-HW-7   A soft panel reset is required _before_ the SPI bus comes up. —
+HW-7   [ ] A soft panel reset is required _before_ the SPI bus comes up. —
        `on_boot` priority **1100** (SPI is 1000). `sky-tracker` calls
        `sat::panel_soft_reset(39, 48, 47)` from a header we do not have yet.
        `plane-tracker` omitted it and left it as the first thing to look at if
        the panel fails to initialise. **Port it properly here** rather than
        inheriting that open question twice.
-HW-8   **No ambient light sensor is fitted** (confirmed on `sky-tracker`), so
+HW-8   [ ] **No ambient light sensor is fitted** (confirmed on `sky-tracker`), so
        auto-dim is sun-scheduled, not sensed (§4.8).
-HW-9   No GPS and no compass. Both sibling projects support them optionally; this
+HW-9   [ ] No GPS and no compass. Both sibling projects support them optionally; this
        project has no use for either, and the lat/lon it does hold is incidental
        (§0). Leave the pins free and the code out.
-HW-10  Confirm the board **revision** against the silkscreen before trusting the
+HW-10  [ ] Confirm the board **revision** against the silkscreen before trusting the
        model defaults.
 
 ### 2.2 Host toolchain
-HW-11  ESPHome in a **dedicated venv**, as `plane-tracker` did — not the
+HW-11  [ ] ESPHome in a **dedicated venv**, as `plane-tracker` did — not the
        `radioconda` environment, to avoid dependency conflicts.
-BUILD-2  There is no board to flash yet. (decision 84). Everything up
+BUILD-2  [ ] There is no board to flash yet. (decision 84). Everything up
          to and including `esphome config` and `esphome compile` runs on this
          host; nothing is installed. The milestones are ordered around that
          (§D), and the hardware-gated items are collected in §D.1 so they are
          not mistaken for forgotten work.
-HW-12  Serial port, when a board arrives: `plane-tracker` uses
+HW-12  [ ] Serial port, when a board arrives: `plane-tracker` uses
        `/dev/cu.usbserial-21340` on this host, and only one board can hold it at
        a time.
 
@@ -308,12 +308,12 @@ for a different reason worth recording: our static assets — circuit traces
 (§1.4) — belong in **program flash**, and our network data is small and
 refreshable.
 
-HW-13  Keeping the default table leaves **larger OTA app slots**, which matters:
+HW-13  [ ] Keeping the default table leaves **larger OTA app slots**, which matters:
        the firmware carries LVGL, TLS, ArduinoJson, 4 bpp fonts, flags, circuit
        traces and a curated facts table.
-HW-14  Settle this **before first flash** — OTA cannot move partitions, so
+HW-14  [ ] Settle this **before first flash** — OTA cannot move partitions, so
        reversing it later means a USB cable trip.
-HW-15  Consequence: no durable cache for *fetched* data. Mitigated, not ignored
+HW-15  [ ] Consequence: no durable cache for *fetched* data. Mitigated, not ignored
        — the compiled-in calendar (§1.4) means a cold boot with no network still
        knows the season and can run the circuit carousel. That is a materially
        better offline story than either sibling has, and it comes free.
@@ -323,14 +323,14 @@ HW-15  Consequence: no durable cache for *fetched* data. Mitigated, not ignored
 **30 kHz** because 1 kHz is audible: the backlight converter's inductor whines
 loudest at low duty, which is exactly where dimming parks it.
 
-HW-16  Use **30 kHz**. This device will sit dimmed overnight for most of the
+HW-16  [ ] Use **30 kHz**. This device will sit dimmed overnight for most of the
        year at the deployment latitude (§4.8; value in `REQUIREMENTS.private.md`), so it lands squarely in the whine band.
 
 ### 2.5 `logger: hardware_uart: UART0`
 The S3's default console is USB Serial/JTAG on GPIO19/20, and **GPIO19 is the
 GT911's SDA**. Leaving the default collides with touch.
 
-HW-17  Set `hardware_uart: UART0` explicitly (`plane-tracker` decision 41).
+HW-17  [ ] Set `hardware_uart: UART0` explicitly (`plane-tracker` decision 41).
 
 ## 3. Data (DATA)
 
@@ -408,14 +408,14 @@ with a selective parser.
 Jolpica publishes results after the fact; OpenF1 publishes positions as they
 change. Nothing else is needed from it when no session is live.
 
-DATA-18  Keep the two behind **one narrow interface** so either can be swapped,
+DATA-18  [ ] Keep the two behind **one narrow interface** so either can be swapped,
          and record **which source last updated** each field.
-DATA-19  Handle them failing **independently** — the circuit carousel must keep
+DATA-19  [ ] Handle them failing **independently** — the circuit carousel must keep
          running on a compiled-in calendar even if both are unreachable (§1.4).
-DATA-20  `http_request:` is included **even though the C++ task issues the
+DATA-20  [ ] `http_request:` is included **even though the C++ task issues the
          requests** (ARCH-3), purely to pull in `esp_http_client`, `esp-tls`, the
          certificate bundle and ArduinoJson. Both siblings do this.
-NET-12  Keep the TLS session open between fetches. `plane-tracker`
+NET-12  [ ] Keep the TLS session open between fetches. `plane-tracker`
         decision 65 measured a fresh handshake at ~1.2 s of crypto, and with
         `CONFIG_SPIRAM_XIP_FROM_PSRAM` that crypto runs on the same bus the RGB
         panel needs — the measured cause of `lvgl took a long time (1231 ms)`
@@ -465,41 +465,41 @@ NET-12  Keep the TLS session open between fetches. `plane-tracker`
 ### 3.5 Data-quality handling (required)
 Each of these was **observed in the live data on 2026-10-01** and will occur.
 
-DATA-21  **`Driver.nationality` is absent for 9 of the 32 drivers** in the 2026
+DATA-21  [ ] **`Driver.nationality` is absent for 9 of the 32 drivers** in the 2026
          list (`paul_aron`, `dino_beganovic`, `luke_browning`, `jak_crawford`,
          `leonardo_fornaroli`, `colton_herta`, `ryo_hirakawa`, `ayumu_iwasa`,
          `frederik_vesti` — the newly added entries). The field is **missing
          entirely**, not null. Every read must tolerate it, and a driver with no
          resolvable nationality **draws no flag rather than a wrong one**.
-DATA-22  **OpenF1's driver `country_code` is `null` for every 2026 row.** It is
+DATA-22  [ ] **OpenF1's driver `country_code` is `null` for every 2026 row.** It is
          not a usable nationality source. Driver flags come from Jolpica's
          demonym, full stop.
-DATA-23  **Nationality is a demonym, not a code** — `"British"`, `"Dutch"`,
+DATA-23  [ ] **Nationality is a demonym, not a code** — `"British"`, `"Dutch"`,
          `"Monegasque"`, `"Thai"`. A **demonym → ISO 3166-1 alpha-3 table** is
          required (§4.6). Keep it in one editable table and expect to add rows.
-DATA-24  **The race name and the circuit can disagree on country.** Observed:
+DATA-24  [ ] **The race name and the circuit can disagree on country.** Observed:
          2026 round 16 is served as `raceName: "Bahrain Grand Prix in Malaysia"`
          with `circuitId: "sepang"`, `Location.country: "Malaysia"`. The circuit
          flag must come from **`Circuit.Location.country`**, never from the race
          name. A name-derived flag would have drawn Bahrain over a Malaysian
          circuit.
-DATA-25  **The calendar is provisional and can be internally odd.** The 2026
+DATA-25  [ ] **The calendar is provisional and can be internally odd.** The 2026
          `races` endpoint returns **23 rounds** while `circuits` returns **24**,
          and the round list does not match the published calendar in every slot.
          Treat the calendar as data to be refreshed, never as a constant, and do
          not assert "round N is X" anywhere in the UI beyond what the feed says.
-DATA-26  **Session keys vary by round.** `Sprint` and `SprintQualifying` are
+DATA-26  [ ] **Session keys vary by round.** `Sprint` and `SprintQualifying` are
          present only on sprint weekends; `ThirdPractice` is absent on them. Drive
          the state machine off whichever session objects exist, not a fixed five.
-DATA-27  **Times are UTC with a trailing `Z`** and arrive as a separate `date` and
+DATA-27  [ ] **Times are UTC with a trailing `Z`** and arrive as a separate `date` and
          `time` pair that must be joined. A round can also carry a `date` with no
          `time` — treat the start as unknown rather than midnight.
-DATA-28  **`alt`-style surprises:** `Results[].grid` is `"0"` for a pit-lane
+DATA-28  [ ] **`alt`-style surprises:** `Results[].grid` is `"0"` for a pit-lane
          start. Do not render `P0`.
-DATA-29  **OpenF1 `position` is event-driven**, so a driver who never changes
+DATA-29  [ ] **OpenF1 `position` is event-driven**, so a driver who never changes
          position after the start has exactly one row. Absence of recent rows
          means "unchanged", **not** "missing" (§3.6).
-DATA-30  **DATA-6: car numbers are reassigned between seasons, so they are not an
+DATA-30  [ ] **DATA-6: car numbers are reassigned between seasons, so they are not an
          identity.** Measured in the 2026 data: **Lando Norris carries `1`**
          (reigning champion) and **Max Verstappen carries `3`** — not the `1` he
          held as champion, nor his permanent `33`. A watched-driver feature keyed
@@ -508,11 +508,11 @@ DATA-30  **DATA-6: car numbers are reassigned between seasons, so they are not a
          is stable for the life of the dataset, and resolve the per-session OpenF1
          `driver_number` through the 3-letter acronym when a live row must be
          matched.
-DATA-31  **DATA-7: `permanentNumber` and `code` are absent for historical
+DATA-31  [ ] **DATA-7: `permanentNumber` and `code` are absent for historical
          drivers.** Measured: Ayrton Senna's row carries only `driverId`, `url`,
          `givenName`, `familyName`, `dateOfBirth` and `nationality` — no number
          and no acronym. Legend cards (§3.10) must render without either.
-DATA-32  **DATA-8: pole counts from the API are wrong for anyone who raced before
+DATA-32  [ ] **DATA-8: pole counts from the API are wrong for anyone who raced before
          1994**, because Ergast-lineage qualifying data starts there. Measured
          against known career totals:
 
@@ -531,17 +531,17 @@ DATA-32  **DATA-8: pole counts from the API are wrong for anyone who raced befor
          embarrassing thing this device could display. **Hand-curate poles for
          every driver whose career began before 1994, or omit the line entirely
          for them** (§3.10.2).
-DATA-33  **Wins and starts are correct across every era** — verified against known
+DATA-33  [ ] **Wins and starts are correct across every era** — verified against known
          totals for Fangio (24/51), Clark (25/72), Senna (41/162), Prost (51/202),
          Schumacher (91/308), Hamilton (106/395) and Verstappen (71/248). Results
          data runs from 1950, so only qualifying is affected by DATA-8.
-DATA-12  OpenF1's track temperature drops to exactly `0.0`. Measured:
+DATA-12  [ ] OpenF1's track temperature drops to exactly `0.0`. Measured:
          2 of 168 weather rows in session 11377, with the air at 26 °C. Ignore a
          zero track reading beside warm air, or the summary says "Track 0–48".
-DATA-34  **OpenF1 returns HTTP 404 for a filter with no matches** — `flag=RED` on
+DATA-34  [ ] **OpenF1 returns HTTP 404 for a filter with no matches** — `flag=RED` on
          a race with no red flag gave `{"detail":"No results found."}`. That is an
          empty result, not an error (decision 176).
-DATA-35  Treat an empty or unparseable body as a **failed poll**: keep the
+DATA-35  [ ] Treat an empty or unparseable body as a **failed poll**: keep the
          existing state, do not clear it, retry on the next cycle.
 
 ### 3.6 Starting order — where it actually comes from
@@ -571,21 +571,21 @@ OpenF1's `position` is unreadable until 30 minutes after the race, by which
 point Jolpica's results — one 13 KB request, no window, `grid` and `status` and
 gaps together — give everything RACE-11 gives and more.
 
-DATA-36  **Poll both and take whichever arrives first.** Jolpica is volunteer-run
+DATA-36  [ ] **Poll both and take whichever arrives first.** Jolpica is volunteer-run
          with no publishing-time guarantee (§3.7.1); OpenF1's data becomes free on
          a fixed schedule. Neither is reliably faster, the two agree on the grid,
          and merging whichever lands first is a few lines.
-DATA-37  **Keep RACE-11 and its test.** The mechanism is measured, the fixture is
+DATA-37  [ ] **Keep RACE-11 and its test.** The mechanism is measured, the fixture is
          committed, and it is the only independent cross-check that Jolpica's
          `grid` field is right. A silent disagreement between the two sources is
          worth a log line.
 
-DATA-38  **Label the provisional case on screen.** A qualifying classification
+DATA-38  [ ] **Label the provisional case on screen.** A qualifying classification
          presented as a grid is exactly the kind of error that looks like correct
          data. Show `GRID (PROVISIONAL)` until RACE-11 or the results confirm it.
-DATA-39  Once the race is running, the same `position` feed gives the **running
+DATA-39  [ ] Once the race is running, the same `position` feed gives the **running
          order**, so the page has two modes (§4.3) off one data path.
-DATA-40  A pit-lane start is `grid: "0"` in Jolpica and simply the back of the
+DATA-40  [ ] A pit-lane start is `grid: "0"` in Jolpica and simply the back of the
          earliest-position ordering in OpenF1. Render it as `PIT`, not `P0`.
 
 ### 3.7 Terms of use and attribution — read and approved 2026-10-01
@@ -611,15 +611,15 @@ Source: `github.com/jolpica/jolpica-f1/blob/main/TERMS.md` (last updated
 interval in `POST_SESSION`, i.e. **6 requests/hour** against a 500/hour ceiling —
 0.2 % of the sustained budget. Nothing in this design comes near either limit.
 
-DATA-4  Their published limits "will decrease in the future" as token
+DATA-4  [ ] Their published limits "will decrease in the future" as token
         access and a non-Ergast replacement API roll out. Treat the current
         headroom as temporary and keep the poll table (§6a.1) as the single place
         to retune. Do not spend the headroom on convenience polling.
-DATA-41  Their rate-limit guide asks callers to **implement a cache** and **use
+DATA-41  [ ] Their rate-limit guide asks callers to **implement a cache** and **use
          efficient queries with filters and offsets**. Decision 12 (the
          compiled-in calendar) and §6a.1's state-driven intervals already satisfy
          this. Record the alignment so it is not accidentally undone.
-DATA-42  **No uptime or correctness guarantee** makes §1.4 load-bearing rather
+DATA-42  [ ] **No uptime or correctness guarantee** makes §1.4 load-bearing rather
          than a nicety: the device must be fully useful with Jolpica down.
 
 #### 3.7.2 OpenF1
@@ -657,31 +657,31 @@ only.** The design response is NET-14 in §6a.1.1 — compute the window and nev
 request inside it — and §6a.1.2 states plainly what that costs. Everything the
 original brief asked for is unaffected.
 
-DATA-43  **Measured caveat:** every OpenF1 figure in §3.1 was measured on
+DATA-43  [ ] **Measured caveat:** every OpenF1 figure in §3.1 was measured on
          **historical** data (session 11377, five days old). The behaviour of an
          unauthenticated request *inside* a live window is **unmeasured**, which
          is now a defensive concern rather than a design one (§6a.1.1).
-DATA-44  **No token, no auth, nothing in `secrets.yaml` for either source.** Both
+DATA-44  [ ] **No token, no auth, nothing in `secrets.yaml` for either source.** Both
          free tiers are unauthenticated, which removes a whole class of secret
          handling from this project.
-DATA-45  Free-tier limits are **3 req/s and 30 req/min**. Our busiest state is 18
+DATA-45  [ ] Free-tier limits are **3 req/s and 30 req/min**. Our busiest state is 18
          requests per *hour* (§6a.1.2). The rate limit is not a constraint on this
          design; the live window is the only one that was, and NET-14 settles it.
 
 #### 3.7.3 Attribution, NonCommercial and ShareAlike (DATA-5)
 Both datasets are **CC BY-NC-SA 4.0**, which has three live terms for us.
 
-DATA-46  **BY — attribution is mandatory.** OpenF1's FAQ says credits are not
+DATA-46  [ ] **BY — attribution is mandatory.** OpenF1's FAQ says credits are not
          required while its footer licenses the data CC BY-NC-SA 4.0; those
          conflict, and the cost of attributing anyway is a line of text.
          **Attribute both**, on screen in a small footer —
          `Data: jolpi.ca · openf1.org` — and with **clickable links to both** in
          the web UI. `plane-tracker` decision 32 learned that a device-only credit
          does not satisfy an "include a link" clause.
-DATA-47  **NC — non-commercial.** This is a personal device. Record it so the
+DATA-47  [ ] **NC — non-commercial.** This is a personal device. Record it so the
          constraint is not forgotten if the project is ever published or sold as a
          kit, which the licence would forbid without permission from both.
-DATA-48  **SA — ShareAlike, and this one is easy to miss.** Decision 21 noted that
+DATA-48  [ ] **SA — ShareAlike, and this one is easy to miss.** Decision 21 noted that
          the MIT circuit geometry imposes no licence on the firmware. **That does
          not extend to the Jolpica-derived data we compile in.** The generated
          calendar (§1.4) and the lap records, most-wins and race counts in the
@@ -689,29 +689,29 @@ DATA-48  **SA — ShareAlike, and this one is easy to miss.** Decision 21 noted 
          inside the firmware. Immaterial for a personal device; if this is ever
          published, **those generated data files carry CC BY-NC-SA 4.0** while the
          code does not.
-DATA-49  **Keep the licence boundary visible in the tree**: generated headers
+DATA-49  [ ] **Keep the licence boundary visible in the tree**: generated headers
          sourced from Jolpica get a CC BY-NC-SA 4.0 notice in their header
          comment, emitted by the generator, not added by hand.
 
 #### 3.7.4 Failure handling required by the terms
-DATA-50  **Never retry a 4xx tightly.** Treat 4xx as *fatal for that request
+DATA-50  [ ] **Never retry a 4xx tightly.** Treat 4xx as *fatal for that request
          shape* — log it, surface it, back off exponentially to minutes. Only 5xx
          and network errors get brisk retries. Jolpica blocks for abuse **without
          notice**, and a bad-request loop would look exactly like the service
          being down.
-DATA-51  **Distinguish 429 from a network failure in the UI** ("rate limited" vs
+DATA-51  [ ] **Distinguish 429 from a network failure in the UI** ("rate limited" vs
          "no data"); they need opposite responses. Jolpica returns 429 with
          *"Request was throttled"*.
-DATA-52  **Distinguish "live data not available on this tier" from both** (§4.3,
+DATA-52  [ ] **Distinguish "live data not available on this tier" from both** (§4.3,
          RACE-12). Three failure states that look similar and mean different
          things is exactly the trap §4.12 exists to avoid.
 
 #### 3.7.5 Trademarks
-DATA-53  `F1`, `FORMULA 1`, `FORMULA ONE`, `FIA FORMULA ONE WORLD CHAMPIONSHIP`,
+DATA-53  [ ] `F1`, `FORMULA 1`, `FORMULA ONE`, `FIA FORMULA ONE WORLD CHAMPIONSHIP`,
          `GRAND PRIX` and the team names are trademarks of Formula One Licensing
          B.V. and others. Both data sources carry an explicit non-affiliation
          disclaimer; **carry the same one** in `README.md` and on the debug page.
-DATA-54  **Do not use the F1 logo or wordmark anywhere in the UI**, and name the
+DATA-54  [ ] **Do not use the F1 logo or wordmark anywhere in the UI**, and name the
          device plainly.
 
 ### 3.8 Licensing posture — accepted by the owner 2026-10-01
@@ -727,15 +727,15 @@ three licences contemplate.
 | flag-icons | MIT | retain the notice |
 | Commons photographs | mostly CC BY-SA / CC BY | **credit the photographer on the card** (§3.10.3) |
 
-DATA-55  Acceptance is **recorded, not assumed**: every obligation above is a
+DATA-55  [ ] Acceptance is **recorded, not assumed**: every obligation above is a
          checkbox elsewhere in this document, and the build fails on an
          unattributable photograph (§3.10.3).
-DATA-56  **One thing acceptance cannot do**, stated plainly so it is not
+DATA-56  [ ] **One thing acceptance cannot do**, stated plainly so it is not
          rediscovered: F1's own media CDN (`media.formula1.com`, OpenF1's
          `headshot_url`) carries **no public licence to accept**. That is why
          §3.10.3 sources portraits from Commons instead — not caution, but the
          availability of actual terms to comply with.
-DATA-57  If this project is ever published, shared as a kit, or sold, **NC makes
+DATA-57  [ ] If this project is ever published, shared as a kit, or sold, **NC makes
          that a different question** and both data sources must be contacted.
          Recorded in §3.7.3 as well, because it is the obligation most easily
          forgotten years later.
@@ -785,27 +785,27 @@ The set even carries **`es-2026` (Circuito de Madring)**, the new 2026 venue.
 | Points per circuit, min / median / max | 81 / 116 / **203** (Paul Ricard) |
 | All 40 as `int16` x,y pairs | **19,176 B (19.2 KB)** |
 
-MAP-6  Store as `int16` x,y in a **pre-projected, pre-fitted local frame**
+MAP-6  [ ] Store as `int16` x,y in a **pre-projected, pre-fitted local frame**
        (§3.9.4), not as floats and not as lon/lat. 19.2 KB of flash for every
        circuit F1 has raced on is not worth optimising further.
-MAP-7  **Ship all 40**, not just the current calendar. The carousel is better
+MAP-7  [ ] **Ship all 40**, not just the current calendar. The carousel is better
        for having Kyalami, Watkins Glen and Estoril in it, the cost is 8 KB, and
        a calendar change cannot then strand the device without a map.
 
 #### 3.9.3 Offline generation (MAP-2)
-MAP-8  `tools/gen_circuits.py` reads the vendored GeoJSON and emits
+MAP-8  [ ] `tools/gen_circuits.py` reads the vendored GeoJSON and emits
        `f1-tracker/f1_circuits.h`: per circuit, the `id`, a `circuitId` cross-
        reference for Jolpica, the point count, the fitted rotation (§3.9.4) and
        the `int16` point array.
-MAP-9  **Map `circuitId` → trace `id` at build time**, by centroid against
+MAP-9  [ ] **Map `circuitId` → trace `id` at build time**, by centroid against
        Jolpica's `Circuit.Location`, and **emit the table**. Doing this at
        runtime would mean carrying lat/lon for 40 circuits and a nearest-
        neighbour search for no benefit. The build-time match is already
        measured at ≤1.1 km (§3.9.2).
-MAP-10  **Fail the build on an unmatched calendar circuit**, listing it. A
+MAP-10  [x] **Fail the build on an unmatched calendar circuit**, listing it. A
         silently missing map is the failure mode to prevent, and this is the only
         place it can be caught. Built at M1; all 23 rounds match.
-MAP-11  **MAP-2a: a distance threshold alone cannot separate a true match from a
+MAP-11  [x] **MAP-2a: a distance threshold alone cannot separate a true match from a
         false one, so known-distinct neighbours are named explicitly.** Found at
         M1: `zeltweg` matched `at-1969` at **2.4 km** — Zeltweg Airfield hosted
         the 1964 Austrian GP and the Red Bull Ring was built beside it in 1969;
@@ -813,32 +813,32 @@ MAP-11  **MAP-2a: a distance threshold alone cannot separate a true match from a
         threshold separates the two cases. The generator carries a small
         `EXCLUDE` set with the reason recorded per row. Worst match is now
         **1.3 km**.
-MAP-12  Assert **non-degenerate geometry** per circuit — at least 60 points, a
+MAP-12  [ ] Assert **non-degenerate geometry** per circuit — at least 60 points, a
         bounding box over 200 m on both axes, and a closed loop (first and last
         point within ~100 m) for everything except the one-off street layouts.
         `plane-tracker` learned this the hard way: a silently blank icon is
         invisible rather than obviously broken (its §5.11.3).
 
 #### 3.9.4 Projection and fit (MAP-3)
-MAP-13  Project each trace to a local plane about its own centroid:
+MAP-13  [ ] Project each trace to a local plane about its own centroid:
         `x = (lon − lon₀)·cos(lat₀)`, `y = (lat − lat₀)`. **The `cos(lat₀)` term
         is mandatory** — at Silverstone (52 N) omitting it stretches the circuit
         east-west by 1.6×, and at Montréal (45.5 N) by 1.4×. `plane-tracker`
         sidestepped projection entirely by plotting from `dst`/`dir`; we cannot,
         so this is the one place that distortion has to be got right.
-MAP-14  Compute the **minimum-area bounding rectangle** offline and bake a
+MAP-14  [ ] Compute the **minimum-area bounding rectangle** offline and bake a
         per-circuit **rotation** so each map fills its box. North-up wastes most
         of the box on long thin layouts (Spa, Jeddah, Baku, Las Vegas).
-MAP-15  **Draw a small north arrow** whenever the baked rotation is non-zero.
+MAP-15  [x] **Draw a small north arrow** whenever the baked rotation is non-zero.
         **Measured at M1: no circuit is north-up.** The closest is Istanbul at
         **4.75°**, and the spread runs to **168.5°** (Monaco). So the arrow is
         **permanent furniture, not an occasional cue** — design it as part of the
         card rather than as an exception. A 2° snap tolerance is applied anyway so
         a future trace that genuinely wants no rotation suppresses the arrow
         instead of pointing almost-straight-up.
-MAP-16  Normalise to a fixed `int16` range at generation time so the device only
+MAP-16  [ ] Normalise to a fixed `int16` range at generation time so the device only
         scales and translates — no per-circuit float work at draw time.
-MAP-17  Preserve **aspect ratio**. A circuit squeezed to fill a square box is
+MAP-17  [ ] Preserve **aspect ratio**. A circuit squeezed to fill a square box is
         unrecognisable, which defeats the whole point.
 
 #### 3.9.5 Curated circuit facts (MAP-4)
@@ -852,23 +852,23 @@ gives three, and the interesting ones are in neither.
 country, locality, and the round's date.
 
 **Computable offline from Jolpica, baked into the facts table:**
-MAP-18  **All-time circuit lap record** — `/{season}/{round}/fastest/1/results/`
+MAP-18  [ ] **All-time circuit lap record** — `/{season}/{round}/fastest/1/results/`
         across every season the circuit has hosted. Measured at 1.2 KB per
         round, so this is a few hundred cheap requests **once, at build time**,
         and never on the device.
-MAP-19  **Most wins at this circuit**, and **most poles** — same method.
-MAP-20  **Number of races held**, and the **most recent winner**.
+MAP-19  [ ] **Most wins at this circuit**, and **most poles** — same method.
+MAP-20  [ ] **Number of races held**, and the **most recent winner**.
 
 **Hand-curated, with a source recorded per row:**
-MAP-21  **Number of turns**, **DRS zones**, **race laps** and **race distance**.
+MAP-21  [ ] **Number of turns**, **DRS zones**, **race laps** and **race distance**.
         None of these is in any feed. **Do not compute turns from the trace** —
         curvature-extrema counting on a 116-point median trace disagrees with the
         published count often enough to be worse than useless, and a wrong turn
         count is the sort of thing a reader will spot instantly.
-MAP-22  Keep the facts in **one editable table** in `f1_facts.h`, generated with
+MAP-22  [ ] Keep the facts in **one editable table** in `f1_facts.h`, generated with
         a `// source:` comment per hand-entered value, as `sky_lore.h` does for
         its constellation cards.
-MAP-23  Facts render as **two to four short lines**, rotating if there are more
+MAP-23  [ ] Facts render as **two to four short lines**, rotating if there are more
         than fit. `sky_lore.h`'s shape — a small struct of `const char *` fields —
         is the right model to copy.
 
@@ -900,71 +900,71 @@ response.** This is the whole technique:
 | Championships | iterate `/{season}/driverStandings/1/` for 1950–2026 and collect the winner | ✅ ~77 small requests, once |
 | Seasons, teams, first/last race | `/drivers/{id}/results/?limit=1` + `offset` | ✅ |
 
-DATA-58  `tools/gen_drivers.py` emits `f1-tracker/f1_drivers.h` and
+DATA-58  [ ] `tools/gen_drivers.py` emits `f1-tracker/f1_drivers.h` and
          `f1_legends.h`. **Rate-limit the generator to well inside 4 req/s and
          500 req/hour** (§3.7.1) and **cache every response on disk**, so a rerun
          costs nothing. A generator that hammers a volunteer-run service is the
          easiest way to get this project's IP blocked.
-DATA-59  **Poles are hand-curated for every pre-1994 driver** (DATA-8), entered
+DATA-59  [ ] **Poles are hand-curated for every pre-1994 driver** (DATA-8), entered
          with a `// source:` comment per value as §3.9.5 does for circuit facts.
          The generator must **refuse to emit an API pole count for a driver whose
          first season precedes 1994** — a build-time guard, not a convention,
          because this is the one field that will otherwise be silently wrong.
-DATA-60  Assert at build time that every curated driver has **non-zero wins or a
+DATA-60  [ ] Assert at build time that every curated driver has **non-zero wins or a
          recorded reason for zero**. A legend with 0 wins is possible (Chris Amon)
          but should be deliberate, not a failed lookup.
-DATA-61  Legend cards also carry a **short curated line on why they matter** — one
+DATA-61  [ ] Legend cards also carry a **short curated line on why they matter** — one
          or two sentences, in the shape of `sky_lore.h`'s constellation cards,
          which is the right precedent in this family for exactly this kind of
          prose.
 
 #### 3.10.3 Photographs
-DATA-62  **Source: Wikimedia Commons, baked into the firmware at build time.**
+DATA-62  [ ] **Source: Wikimedia Commons, baked into the firmware at build time.**
          `sky_photos.h` already does precisely this for the planet images —
          fetched once, scaled to display size, stored as baseline JPEG, with
          per-image credits in the header comment. Follow that pattern exactly.
-DATA-63  **Coverage checked 2026-10-01: every current driver and every proposed
+DATA-63  [ ] **Coverage checked 2026-10-01: every current driver and every proposed
          legend has a page image on their English Wikipedia article.** The
          per-image licence was not resolved during this survey — a batched query
          returned **HTTP 429**, and per §3.7.4 a 4xx is not retried tightly. The
          generator resolves it properly (next item).
-DATA-64  **The generator records the licence and the photographer for every image**
+DATA-64  [ ] **The generator records the licence and the photographer for every image**
          via the Commons `imageinfo` API (`extmetadata.LicenseShortName`,
          `extmetadata.Artist`), writes both into the generated header, and
          **fails the build on an image it cannot attribute.** Most Commons F1
          photography is CC BY-SA or CC BY, both of which require credit.
-DATA-65  **Display the photographer's credit on the card**, small. This is the
+DATA-65  [ ] **Display the photographer's credit on the card**, small. This is the
          same requirement `plane-tracker` records for aircraft photos (its §5.12),
          and here it is mandatory rather than courteous.
-DATA-66  **Batch and rate-limit the Commons queries**, one request for many
+DATA-66  [ ] **Batch and rate-limit the Commons queries**, one request for many
          titles. The 429 above was earned by a per-driver loop; the API accepts
          `titles=A|B|C` and should be used that way.
-DATA-67  **Do not use OpenF1's `headshot_url`.** Measured, it points at
+DATA-67  [ ] **Do not use OpenF1's `headshot_url`.** Measured, it points at
          `media.formula1.com/.../d_driver_fallback_image.png/...` — F1's own media
          CDN, carrying no public licence, and the path is a fallback transform
          that may not even resolve to a real portrait. Commons has an actual
          licence we can comply with; this does not.
-DATA-68  **Decision 91: portraits are 240×320**, stored as baseline JPEG and
+DATA-68  [ ] **Decision 91: portraits are 240×320**, stored as baseline JPEG and
          decoded with the copied `sky_jpg.h` on display. The brief asked to *show
          picture and profile data* — the picture is the feature, and 150×200 is
          31 % of a 480 px width, which reads as a thumbnail beside the text rather
          than a portrait. 240×320 is half the screen width and carries the card.
-DATA-69  A decode is one JPEG per card, i.e. once per 15–120 s, so the larger size
+DATA-69  [ ] A decode is one JPEG per card, i.e. once per 15–120 s, so the larger size
          costs nothing at runtime. A 240×320 RGB565 decode buffer is **150 KB**,
          which comes from PSRAM and is **reused**, never reallocated per card
          (§6).
-DATA-70  **Budget — and the constraint is the app partition, not total flash.**
+DATA-70  [ ] **Budget — and the constraint is the app partition, not total flash.**
          54 portraits at 240×320, baseline JPEG q≈0.9, run **25–40 KB each →
          1.4–2.2 MB**. The earlier "trivial against 16 MB" framing was wrong: with
          the default partition table (§2.3) the 16 MB is split into **two OTA
          app slots of roughly 6.5–7.8 MB**, and the firmware must fit in **one**.
          Against a slot, 2 MB of portraits is **25–30 %** — fine, but not
          negligible, and not a number to let drift.
-DATA-71  **The generator reports the total and fails above 3 MB.** If it is ever
+DATA-71  [ ] **The generator reports the total and fails above 3 MB.** If it is ever
          approached, the escape hatches in order: drop legend portraits to
          180×240 while keeping current drivers at 240×320; then lower JPEG
          quality; then trim the legends list (§3.10.4), which is one table.
-DATA-72  **Measure the real figure at M2** and replace the estimate here. The
+DATA-72  [ ] **Measure the real figure at M2** and replace the estimate here. The
          range above is from JPEG rules of thumb, not from these images.
 
 #### 3.10.4 Who counts as a legend — settled
@@ -996,25 +996,25 @@ Checked against the 2026 entry list: **three listed legends are still
 racing** — `alonso`, `hamilton` and `max_verstappen`. That set changes on its
 own as drivers retire, which is why the rule is evaluated at runtime.
 
-DATA-73  **Show each driver once.** A driver in both sets gets their
+DATA-73  [ ] **Show each driver once.** A driver in both sets gets their
          **current-driver card**, not a second legend card, and that card carries
          a **`LEGEND` badge** beside the `DRIVER` type badge (§4.4, UI-20b) plus
          the full career record. One card, both facts.
-DATA-74  **Resolve the overlap at _runtime_ against the live entry list**
+DATA-74  [ ] **Resolve the overlap at _runtime_ against the live entry list**
          (RACE-13d) — **not** at build time, which was decision 86's original
          wording and is wrong for a device that follows the season (§1.3.1).
          The legend record is **always compiled in**, including for drivers
          currently racing; which card renders is decided per card, per poll.
-DATA-75  **`max_verstappen` is therefore listed in the legends table too**, not
+DATA-75  [ ] **`max_verstappen` is therefore listed in the legends table too**, not
          omitted. He is a four-time champion on record; the runtime rule shows him
          as a driver card while he is racing and moves him to the legend rotation
          the day he stops, with no rebuild and no edit.
-DATA-76  **This cannot be left to drift**, and runtime resolution is what prevents
+DATA-76  [ ] **This cannot be left to drift**, and runtime resolution is what prevents
          it: there is no build step that can go stale, and a retirement is picked
          up on the next entry-list poll.
-DATA-77  Keep the table **editable, with the group recorded per row**, so the
+DATA-77  [ ] Keep the table **editable, with the group recorded per row**, so the
          carousel can weight or filter by group later.
-DATA-7  Applies to most of this list. — no `code`, no
+DATA-7  [ ] Applies to most of this list. — no `code`, no
         `permanentNumber` for the pre-1980s drivers. **DATA-8 applies to all but
         five**: everyone except Hamilton, Vettel, Räikkönen, Button and
         Jacques Villeneuve began before 1994, so their pole counts are curated or
@@ -1038,11 +1038,11 @@ takes its own taps via `on_short_click`.
 | `about_page` | no (`skip`) | **About** button, lower right of the settings page (UI-67) |
 | `debug_page` | no (`skip`) | **long-press** the gear |
 
-UI-2a  The rotation order changes with state. The *first* page after
+UI-2a  [ ] The rotation order changes with state. The *first* page after
        a flip from `wifi_page` is whichever page the state machine says is
        primary. The pages themselves do not move; only which one the device
        rests on does.
-NET-2b  / BOOT-2: the boot page. (decision 178), ported from
+NET-2b  [x] / BOOT-2: the boot page. (decision 178), ported from
         `sky-tracker` 4.6.27 (its NET-2b, NET-2c and BOOT-2) and driven by
         `f1_boot.h`, which is pure and host-tested:
         - a centred 380 px column: the mark (200 px), **"F1 Tracker"**
@@ -1066,9 +1066,9 @@ NET-2b  / BOOT-2: the boot page. (decision 178), ported from
         default), its GPS/compass lines (no such hardware here), the launch
         animation over the boot screen, and UI-72's 60 s idle close of other pages,
         which is a settings behaviour rather than a boot one.
-UI-73  With a detail card open, a tap anywhere — **including the gear** —
+UI-73  [ ] With a detail card open, a tap anywhere — **including the gear** —
        closes the card rather than acting. Both siblings do this.
-UI-74  **Corner furniture is screen-fixed.** The clock and gear must not move
+UI-74  [ ] **Corner furniture is screen-fixed.** The clock and gear must not move
        with a rotated map (§3.9.4).
 
 ### 4.2 Race Day page (UI-1)
@@ -1099,36 +1099,36 @@ across two pages (§4.3) with the map page carrying a top-5 strip.
 └──────────────────────────────────────────────┘ ⚙
 ```
 
-UI-3   The header's state line is the page's most important element.
+UI-3   [ ] The header's state line is the page's most important element.
        It tells the reader whether the order below is an entry list, a
        prediction or a result. Under free tiers it is driven by the **clock and
        the calendar**, never by lap data:
        `LIGHTS OUT IN 02:14:30` / `QUALIFYING IN 00:42:10` /
        `RACE UNDER WAY · 01:12 ELAPSED` / `RESULTS IN ~00:18` /
        `GRID (PROVISIONAL)` / `FINAL` / `NEXT: R15 BAKU, 6 DAYS`.
-UI-3a  `RESULTS IN ~mm:ss` is the state that replaces live timing.
+UI-3a  [ ] `RESULTS IN ~mm:ss` is the state that replaces live timing.
        Once the race has started, the device knows exactly when the data becomes
        readable: session end + 30 min (§6a.1.1). Counting down to the result is
        truthful, useful, and the only thing on this page that moves during a
        race. It turns the free tier's one limitation into a legible behaviour
        rather than a dead screen.
-UI-75  **Never show `LAP n/m`.** Lap data is inside the live window and the
+UI-75  [ ] **Never show `LAP n/m`.** Lap data is inside the live window and the
        device does not have it. A lap counter that is wrong or frozen is the
        worst possible element on this page.
-UI-4   Live track status is out of scope under free tiers —
+UI-4   [ ] Live track status is out of scope under free tiers —
        `race_control` is inside the live window. It returns **after** the
        session, so the flags, safety cars and red flags that *occurred* belong
        on the post-session summary (§B.1) rather than the header. If it is ever
        shown live, it must be a coloured dot **plus a word**, never colour
        alone.
-UI-5   A countdown in `SESSION_SOON`, to the next session, labelled
+UI-5   [ ] A countdown in `SESSION_SOON`, to the next session, labelled
        with which session it is. This is the state the device will sit in most
        often during a race week and it should be the best-looking screen on it.
-UI-76  Both flags appear on this page: the **circuit country flag** in the
+UI-76  [ ] Both flags appear on this page: the **circuit country flag** in the
        header, and a **driver nationality flag** per row (§4.6).
-UI-77  The top-5 strip is a **summary, not a list** — it must not try to be
+UI-77  [ ] The top-5 strip is a **summary, not a list** — it must not try to be
        §4.3. Five rows, nothing scrollable.
-UI-78  Facts shown here are the short ones. The full set lives on the circuit
+UI-78  [ ] Facts shown here are the short ones. The full set lives on the circuit
        page (§4.4).
 
 ### 4.3 Order page (UI-10)
@@ -1143,19 +1143,19 @@ current.
  22  18   [BR] DRU      Cadillac      +1 LAP
 ```
 
-UI-79  **UI-10a: build rows as lightweight containers in C++, not an LVGL
+UI-79  [ ] **UI-10a: build rows as lightweight containers in C++, not an LVGL
        `table`.** `sky-tracker` uses a `table` for its satellite list, and it is
        the right choice there because every cell is text. Ours is not: each row
        needs a **flag image** and a **team-colour bar**, neither of which a
        table cell holds. 22 rows × 4 children is 88 static objects, which is
        affordable precisely because nothing here moves per-frame (§6.1).
-UI-10b  22 rows fit at `mono12` with the TEAM column. Measured, not
+UI-10b  [ ] 22 rows fit at `mono12` with the TEAM column. Measured, not
         estimated — see §4.3.1. The fallback of dropping TEAM is **not needed**.
-UI-10c  The order page is the single source of truth for position.
+UI-10c  [ ] The order page is the single source of truth for position.
         `plane-tracker` decision 47 and 57 both came from two places counting the
         same thing and disagreeing. The race page's state line, the top-5 strip
         and this page must all read **one** ordered array, never the raw feed.
-RACE-12  Four order modes, one data path. (§3.6). The mode is chosen
+RACE-12  [ ] Four order modes, one data path. (§3.6). The mode is chosen
          by state, never by the user, and **the mode's name is always on screen**
          so the order is never ambiguous:
 
@@ -1167,37 +1167,37 @@ RACE-12  Four order modes, one data path. (§3.6). The mode is chosen
 | `GRID` | 30 min after the race | Jolpica results / RACE-11 |
 | `FINAL` | 30 min after the race | Jolpica results — carries `status` (`DNF`, `+1 LAP`, `ACCIDENT`) and gaps |
 
-UI-80  **There is no `RUNNING` mode.** Live order needs OpenF1's paid tier,
+UI-80  [ ] **There is no `RUNNING` mode.** Live order needs OpenF1's paid tier,
        which is declined (decision 58). The order page is honest about this
        rather than holding stale data behind a live-looking label: during a
        session it keeps showing `GRID (PROVISIONAL)` — which is *correct and
        current information*, not a degraded substitute — and the race page
        header carries the session's progress by clock, not by lap (§4.2).
-UI-81  **Do not build a "live timing unavailable" apology.** An earlier draft
+UI-81  [ ] **Do not build a "live timing unavailable" apology.** An earlier draft
        had a `LIVE TIMING UNAVAILABLE` banner and a `Live timing` switch; both
        are removed. A device that never attempts live timing has nothing to
        report as missing, and a permanent banner about an absent feature is
        worse than no banner. The settings page and the diagnostics lose their
        live-timing entries entirely.
-UI-82  **The transition at window-close is the page's one real moment.** Going
+UI-82  [ ] **The transition at window-close is the page's one real moment.** Going
        from `GRID (PROVISIONAL)` to `GRID` + `FINAL` is when the page changes
        from a prediction to a result. Make it feel deliberate — a fade, the mode
        label changing, and the finishing order animating in from the grid order
        if it is cheap. This is the closest the free tier gets to drama and it
        costs nothing.
-UI-83  **Never present held data as current.** `GRID (PROVISIONAL)` is current
+UI-83  [ ] **Never present held data as current.** `GRID (PROVISIONAL)` is current
        until the race result exists. But if the newest Jolpica parse is older
        than several poll intervals, say so in the status line (§4.12) —
        `plane-tracker` decision 50: an HTTP 200 carrying nothing is not fresh
        data.
-UI-84  **Gap column**: `interval` from OpenF1 is 3.5 MB per session (§3.1), so
+UI-84  [ ] **Gap column**: `interval` from OpenF1 is 3.5 MB per session (§3.1), so
        it is **not** fetched wholesale. Either narrow it hard to the newest rows
        or leave the column blank. **Blank is acceptable**; a wrong gap is not.
-UI-85  ~~Highlight position changes with a green/red tint per poll~~ —
+UI-85  [ ] ~~Highlight position changes with a green/red tint per poll~~ —
        **superseded** (decision 58): there is no live poll for it to tint. The
        grid → `FINAL` transition above carries the same information once, as
        places gained and lost against the grid (§B.1).
-UI-86  A **retirement** keeps its row, greyed, with the status word (`DNF`,
+UI-86  [ ] A **retirement** keeps its row, greyed, with the status word (`DNF`,
        `ACCIDENT`, `+1 LAP`) rather than vanishing.
 
 #### 4.3.1 The layout is measured, not estimated (answers open question 3)
@@ -1227,25 +1227,25 @@ python3 tools/mock_order_page.py --font /path/to/RobotoMono.ttf
 | d | 17 px | yes | y=434 | fits; 17 px is the natural line, so no padding at all |
 | **RECOMMENDED** | **18 px** | **yes** | y=472 | **fits**, and spends the slack on the state line |
 
-UI-87  **Decision 88: 22 rows at `mono12`, 18 px per row, TEAM column kept.**
+UI-87  [x] **Decision 88: 22 rows at `mono12`, 18 px per row, TEAM column kept.**
        18 px gives 1 px of padding over the 17 px natural line, which the render
        shows is enough. 19 px puts P22 flush against the bottom edge and 17 px
        removes padding entirely.
-UI-88  **Spend the 22 px of slack on the state line** (UI-3), which §4.2 calls
+UI-88  [ ] **Spend the 22 px of slack on the state line** (UI-3), which §4.2 calls
        the page's most important element. The recommended render promotes it to
        `mono15` on its own line with the countdown in `mono12` beneath, and
        still ends at y=472.
-UI-10d  The GAP column is never empty except in `ENTRY LIST`. — a
+UI-10d  [ ] The GAP column is never empty except in `ENTRY LIST`. — a
         finding from the render, which initially showed race gaps against a
         provisional grid. In `GRID (PROVISIONAL)` and `GRID` it carries the
         **gap to pole**, computed from Jolpica's Q1/Q2/Q3 times, which are free
         and have no live window. In `FINAL` it carries the race gap. This is
         strictly better than the blank column decision 31 settled for, because
         the data was there all along; decision 31 was about *live* intervals.
-UI-89  **The render confirms decision 35 was necessary**: `HÜLKENBERG` appears
+UI-89  [ ] **The render confirms decision 35 was necessary**: `HÜLKENBERG` appears
        in the real entry list. `sky-tracker`'s ASCII glyph set would have drawn
        a box in the middle of a driver's name.
-UI-90  **Still verify on hardware** (§D.1). LVGL's text metrics are not PIL's,
+UI-90  [ ] **Still verify on hardware** (§D.1). LVGL's text metrics are not PIL's,
        and 1 px of padding is not much margin. But the layout question — *does
        it fit with TEAM, or must a column go* — is now answered, and the answer
        is that it fits.
@@ -1254,87 +1254,87 @@ UI-90  **Still verify on hardware** (§D.1). LVGL's text metrics are not PIL's,
 The default screen for most of the year. **Three card types, one rotation:**
 circuits, current drivers and legends.
 
-UI-91  Rotate **one card at a time**, advancing on a timer. **Interval is a
+UI-91  [ ] Rotate **one card at a time**, advancing on a timer. **Interval is a
        setting: 15–120 s, step 15, default 45 s** — the brief asked for 30 s to
        1 minute, and the range brackets it.
-UI-20a  Card types are interleaved deterministically, not shuffled.
+UI-20a  [ ] Card types are interleaved deterministically, not shuffled.
         With 40 circuits, 22 drivers and ~32 legends, a random draw clusters —
         three legends in a row, then eleven circuits. Walk the three lists in
         parallel on a fixed pattern (**circuit → driver → circuit → legend**,
         repeating), so each type appears at a predictable rhythm and every card
         is reached. Each list advances its own cursor, so the lists need not be
         the same length.
-UI-92  **Setting: `Carousel content`** — `all` (default) / `circuits only` /
+UI-92  [ ] **Setting: `Carousel content`** — `all` (default) / `circuits only` /
        `drivers only` / `legends only` / `circuits + drivers`. The brief asked
        for circuits *and* drivers *and* legends, so `all` ships as the default;
        the filters exist because a season tracker someone uses daily should be
        tunable.
-UI-93  **Circuit card:** the **map** (large, §4.5), the **circuit name**, the
+UI-93  [ ] **Circuit card:** the **map** (large, §4.5), the **circuit name**, the
        **country flag** and country, the locality, and **the facts** (§3.9.5).
-UI-94  **Driver card:** the **portrait** (§3.10.3), full name, **nationality
+UI-94  [ ] **Driver card:** the **portrait** (§3.10.3), full name, **nationality
        flag**, car number, team, age from `dateOfBirth`, and the career record —
        starts, wins, poles, podiums, championships (§3.10.2). Plus the
        **current season**: championship position and points, which is the only
        part a live fetch improves (free, no window — Jolpica standings).
-UI-95  **Legend card:** the **portrait**, full name, **nationality flag**, the
+UI-95  [ ] **Legend card:** the **portrait**, full name, **nationality flag**, the
        **era** (`1984–1994`), the career record, championships with the years,
        and the **curated line on why they matter** (§3.10.2).
-UI-96  **Legend cards must render with no car number and no acronym** — DATA-7,
+UI-96  [ ] **Legend cards must render with no car number and no acronym** — DATA-7,
        measured absent for historical drivers.
-UI-97  **Omit the poles line entirely for pre-1994 drivers** unless a curated
+UI-97  [ ] **Omit the poles line entirely for pre-1994 drivers** unless a curated
        value exists (DATA-8). A blank is correct; a zero is a lie.
-UI-98  **Photographer credit on every card carrying a photograph** (§3.10.3),
+UI-98  [ ] **Photographer credit on every card carrying a photograph** (§3.10.3),
        small, bottom of the card.
-UI-20b  The three card types must be instantly distinguishable. — a
+UI-20b  [ ] The three card types must be instantly distinguishable. — a
         glance should never leave a reader unsure whether they are looking at a
         circuit or a person. Use a consistent **type badge** in the same corner
         on all three (`CIRCUIT` / `DRIVER` / `LEGEND`) rather than relying on
         layout alone, because a portrait and a map already differ so much that
         the *layout* carries no signal when the card changes.
-UI-99  **Circuit order is calendar order**, and in `RACE_WEEK` the cycle
+UI-99  [ ] **Circuit order is calendar order**, and in `RACE_WEEK` the cycle
        **starts at the next round** so the upcoming circuit is the first thing
        seen. Driver order is championship order; legend order is the curated
        table's order.
-UI-100  **UI-20c: in `RACE_WEEK`, bias the driver cards toward this weekend's
+UI-100  [ ] **UI-20c: in `RACE_WEEK`, bias the driver cards toward this weekend's
         entry list** and the circuit cards toward the next round. The carousel
         should feel like it knows what is coming up.
-UI-20d  Cross-link the watched driver into the circuit cards. The
+UI-20d  [ ] Cross-link the watched driver into the circuit cards. The
         facts table is generated offline (§3.9.5) and already aggregates per-circuit
         winners, so *"Verstappen has won here 3 times"* costs nothing and ties
         the two features together. Omit the line where he has never won there
         rather than printing a zero.
-UI-101  **Mark the next round** on its card (`NEXT · R14 · Mar 8`) and mark
+UI-101  [ ] **Mark the next round** on its card (`NEXT · R14 · Mar 8`) and mark
         circuits not on the current calendar (`not on the 2026 calendar`). Both
         matter: the set ships all 40 (§3.9.2), so without the second label the
         device looks like it has invented races.
-UI-102  A tap flips pages as everywhere else. **Hold** to pause the carousel on
+UI-102  [ ] A tap flips pages as everywhere else. **Hold** to pause the carousel on
         the current circuit — and show that it is paused.
-UI-103  **Transition is a fade, not a slide.** A slide drags a full-screen dirty
+UI-103  [ ] **Transition is a fade, not a slide.** A slide drags a full-screen dirty
         area across the panel at 12 MHz pclk; a cross-fade on a static image is
         cheap and reads as deliberate. `sky-tracker` uses `FADE_IN` at 200 ms for
         every page change; match it.
-UI-104  Setting: **`Carousel: calendar order / random / current season only`**.
-UI-105  The carousel must run **with no network at all** (§1.4). This is the
+UI-104  [ ] Setting: **`Carousel: calendar order / random / current season only`**.
+UI-105  [ ] The carousel must run **with no network at all** (§1.4). This is the
         state the device spends most of the year in and it should be the most
         robust thing it does.
 
 ### 4.5 Drawing the circuit map (MAP-5)
-MAP-24  One **`lv_line`** per circuit, built from the generated `int16` points
+MAP-24  [ ] One **`lv_line`** per circuit, built from the generated `int16` points
         scaled into the map box. Line width ~3 px, rounded caps, anti-aliased by
         LVGL's draw unit. A single widget for a 203-point trace.
-MAP-25  **Split the trace into three `lv_line`s for sector colours** only if
+MAP-25  [ ] **Split the trace into three `lv_line`s for sector colours** only if
         sector boundaries are available. They are not in the GeoJSON, so this is
         deferred — not designed around.
-MAP-26  Mark **start/finish** with a short perpendicular tick at point 0, and the
+MAP-26  [ ] Mark **start/finish** with a short perpendicular tick at point 0, and the
         **racing direction** with a small chevron. Both come free from the trace.
-MAP-5a  An `lv_line` invalidates its whole bounding box. At ~300×300
+MAP-5a  [ ] An `lv_line` invalidates its whole bounding box. At ~300×300
         that is 39 % of the screen, or ~175 KB of PSRAM framebuffer traffic per
         redraw. This is fine at one redraw per 45 s and **not** fine if anything
         makes it redraw per-frame. Keep the map in its own container and never
         put a moving widget inside its bounds.
-MAP-27  **Pit lane is not in the data** — the GeoJSON is a single `LineString`.
+MAP-27  [ ] **Pit lane is not in the data** — the GeoJSON is a single `LineString`.
         Out of scope (§10); do not fake it.
-MAP-28  Budget the map box at ~**300×300 px** on the race page and up to
+MAP-28  [ ] Budget the map box at ~**300×300 px** on the race page and up to
         **400×320** on the carousel card, where it is the subject rather than one
         element among several.
 
@@ -1359,62 +1359,62 @@ nationality and every 2026 circuit country against the 79 available:
 | 16 driver nationalities (23 drivers with the field) | **15 present**, `MCO` missing |
 | 20 distinct circuit countries | **19 present**, `MCO` missing |
 
-UI-106  **Add `MCO`** (Monaco) — needed twice over, for Leclerc and for the
+UI-106  [ ] **Add `MCO`** (Monaco) — needed twice over, for Leclerc and for the
         Monaco Grand Prix. Regenerate from the same flag-icons 7.5.0 source at
         the same two sizes so the set stays homogeneous.
-UI-107  Add `BHR` and `SAU` at the same time. They are absent from the 23-round
+UI-107  [ ] Add `BHR` and `SAU` at the same time. They are absent from the 23-round
         2026 feed but the calendar is provisional (§3.5) and both are long-
         standing venues; a missing flag on the Bahrain GP would be a silly way to
         discover this.
-UI-108  Build the **demonym → ISO3 table** required by §3.5 as a generated,
+UI-108  [ ] Build the **demonym → ISO3 table** required by §3.5 as a generated,
         sorted table with binary search, as `plane-tracker` does for its 375-row
         designator map. Seed it from the observed 2026 values and assert in tests
         that **every nationality in the captured driver fixture resolves**.
-UI-109  A driver with no nationality, or a demonym with no mapping, **draws no
+UI-109  [ ] A driver with no nationality, or a demonym with no mapping, **draws no
         flag** — never a placeholder that could be mistaken for a country.
         Log it once so the table can be extended.
-UI-110  Record the flag-icons licence and version in `reference/CREDITS.md`, as
+UI-110  [ ] Record the flag-icons licence and version in `reference/CREDITS.md`, as
         `plane-tracker` does for its icon artwork.
 
 ### 4.7 Clock and session times (UI-8)
-UI-111  **Current local time in the upper-right corner**, `mono24`, showing
+UI-111  [ ] **Current local time in the upper-right corner**, `mono24`, showing
         `--:--` before time sync. Port `sky-tracker`'s widget directly, including
         the `y` offset that aligns the digit tops with the title's capitals.
-UI-112  Format is a **three-state dropdown**, as `plane-tracker` settled (its
+UI-112  [ ] Format is a **three-state dropdown**, as `plane-tracker` settled (its
         decision 21): **24 h local** (default) / 12 h local / **UTC-Zulu**
         (`2235Z`, no colon, trailing `Z`).
-UI-113  Monospace keeps the glyph count stable so the clock does not jitter.
+UI-113  [ ] Monospace keeps the glyph count stable so the clock does not jitter.
         Roboto Mono is monospaced by construction.
-UI-114  Omit seconds. They force a 1 Hz redraw of the corner for no value.
-UI-115  **Session times are the interesting case here, and they are not the
+UI-114  [ ] Omit seconds. They force a 1 Hz redraw of the corner for no value.
+UI-115  [ ] **Session times are the interesting case here, and they are not the
         clock.** Every session time arrives in **UTC** (§3.3) and must be shown in
         the reader's local time, or the countdown is meaningless. Convert once,
         centrally.
-UI-8a  Offer track local time too. OpenF1 `sessions` carries
+UI-8a  [ ] Offer track local time too. OpenF1 `sessions` carries
        `gmt_offset` (measured, e.g. `"03:00:00"`), so showing "14:00 local ·
        03:00 your time · 11:00 at the track" costs nothing and is genuinely
        useful for a global calendar. A good candidate for the detail card rather
        than the header.
-UI-116  Time source: **SNTP** plus a second `time:` platform `homeassistant`, so
+UI-116  [ ] Time source: **SNTP** plus a second `time:` platform `homeassistant`, so
         the clock sets as soon as HA connects without waiting on SNTP. **Gate
         SNTP on Wi-Fi** (`sky-tracker`'s NET-8): hold at boot, kick from
         `on_connect`, hold on `on_disconnect`.
-UI-117  Timezone: the owner's IANA zone (see `REQUIREMENTS.private.md`), handling DST automatically. ESPHome's
+UI-117  [ ] Timezone: the owner's IANA zone (see `REQUIREMENTS.private.md`), handling DST automatically. ESPHome's
         `timezone:` must be a **literal**, so it is compile-time — see the
         caveat in §4.8.
-UI-118  Show a clear **unsynced** indication rather than a plausible-but-wrong
+UI-118  [ ] Show a clear **unsynced** indication rather than a plausible-but-wrong
         time. The state machine depends on the clock, so an unsynced clock must
         also suppress the state machine rather than letting it guess.
 
 ### 4.8 Auto-dimming — the only use of latitude and longitude (UI-44)
 This is why the device stores a position at all.
 
-UI-119  **Checkbox: `Auto-dim display`, default on.** When off, the backlight
+UI-119  [ ] **Checkbox: `Auto-dim display`, default on.** When off, the backlight
         stays at the manually set brightness.
-UI-120  **No ambient light sensor is fitted** (§2.1), and the backlight **is**
+UI-120  [ ] **No ambient light sensor is fitted** (§2.1), and the backlight **is**
         PWM-capable, so "auto" means **sun-scheduled** and it can genuinely *dim*
         rather than merely switch off.
-UI-121  The Sun's elevation is **computed on-device from the latitude and longitude
+UI-121  [x] The Sun's elevation is **computed on-device from the latitude and longitude
         entities** and the clock - no network call, no extra configuration.
         `f1_sun.h` is `sky-tracker`'s `astro::sun` / `gmst_deg` / `horizontal`
         (Astronomical Almanac low-precision formulae, ~0.01 deg, equation of time
@@ -1422,7 +1422,7 @@ UI-121  The Sun's elevation is **computed on-device from the latitude and longit
         read from the entities on **every** pass, never cached (decision 180), and
         `Sun Elevation` is a diagnostic entity so a wrong position is a number, not
         a mysteriously dim screen.
-UI-122  **Port `sky-tracker`'s UI-44 implementation**, which already works:
+UI-122  [ ] **Port `sky-tracker`'s UI-44 implementation**, which already works:
         - a `monochromatic` light on the `ledc` output, marked `internal: true`,
           with a **1–100 % `number` entity** as the user-facing control, so HA and
           the web UI stay clean;
@@ -1438,51 +1438,51 @@ UI-122  **Port `sky-tracker`'s UI-44 implementation**, which already works:
           does not fight the user's slider;
         - the user's slider sets the **daytime** level while auto is on, not the
           current level — a subtle distinction that must be preserved.
-UI-123  **This matters far more at high latitude than at mid-latitudes.** Day length at
+UI-123  [ ] **This matters far more at high latitude than at mid-latitudes.** Day length at
         the default position runs from **~19.1 h** at the summer solstice to
         **~4.9 h** at the winter solstice. A fixed clock-time schedule would be
         wrong most of the year, which is the whole argument for deriving it from
         the sun.
-UI-124  Ramp transitions over seconds. An abrupt backlight jump reads as a fault.
-UI-125  **Touching the screen while dimmed wakes to full brightness** for a
+UI-124  [ ] Ramp transitions over seconds. An abrupt backlight jump reads as a fault.
+UI-125  [ ] **Touching the screen while dimmed wakes to full brightness** for a
         timeout, then returns to dim.
-UI-126  **UI-44a: the lat/lon and the timezone are independent, and that is a
+UI-126  [ ] **UI-44a: the lat/lon and the timezone are independent, and that is a
         trap.** The position is a runtime entity; the timezone is a compile-time
         literal. Move the position to Melbourne and the sun times will be
         correct in UTC while the clock stays on the home time zone, so the display will
         dim at the right absolute moment and the wrong apparent hour. **State
         this on the settings page** next to the coordinate fields — one line, so
         nobody has to discover it.
-UI-44b  Decline the DMS entry widget. Both siblings carry a
+UI-44b  [ ] Decline the DMS entry widget. Both siblings carry a
         decimal⟷DMS toggle with hemisphere buttons and a three-field entry per
         axis. Here the coordinates are not the instrument — they feed one
         brightness curve — and the toggle is a page's worth of widgets and a
         round-tripping precision test for no benefit. **Decimal degrees only**,
         two fields, `accepted_chars` restricted to digits, `-` and `.`. The port
         remains available if it is ever wanted.
-UI-127  Validation: lat ±90, lon ±180. Clamp with visible feedback, and
+UI-127  [ ] Validation: lat ±90, lon ±180. Clamp with visible feedback, and
         **range-check the restored values at boot** (§6a.1).
-UI-128  **Night Mode is declined** (§4.13, decision 83). Auto-dim is the whole
+UI-128  [ ] **Night Mode is declined** (§4.13, decision 83). Auto-dim is the whole
         of this project's dusk behaviour: the panel gets dimmer, and it stays in
         colour.
 
 ### 4.9 Typography (UI-40)
-UI-40d  Sentence case. (decision 153). Capitals are reserved for driver
+UI-40d  [ ] Sentence case. (decision 153). Capitals are reserved for driver
         surnames in the order list and standings, and for abbreviations.
-UI-129  **Render all text with 4 bpp fonts.** **ESPHome's font default is
+UI-129  [ ] **Render all text with 4 bpp fonts.** **ESPHome's font default is
         `bpp: 1`**; `sky-tracker` annotates every single font block with that
         fact, which suggests it was learned the hard way. Set it explicitly on
         every font.
-UI-130  **Use `sky-tracker`'s exact font stack**: `Roboto Mono` from
+UI-130  [ ] **Use `sky-tracker`'s exact font stack**: `Roboto Mono` from
         `gfonts://`, with the glyph string defined once as a YAML anchor
         (`&glyphs`) and reused (`*glyphs`) across sizes. It runs 12/14/15/16/18/24;
         we likely need 12, 14, 16, 18 and 24.
-UI-40a  Give every font the shared glyph set. `plane-tracker`
+UI-40a  [ ] Give every font the shared glyph set. `plane-tracker`
         decision 51: a reduced set only pays off if the strings never change, and
         a clock-only `mono24` set drew `UPGRADING` as boxes. Our strings are
         driver names, team names and circuit names from a live feed — they
         **will** contain characters nobody predicted.
-UI-40b  Accented characters are guaranteed here, unlike in either
+UI-40b  [x] Accented characters are guaranteed here, unlike in either
         sibling. **Settled at M0: use `glyphsets: [GF_Latin_Core]`**, ESPHome's
         own mechanism (via `esphome-glyphsets`), rather than a hand-built literal
         string. 319 codepoints, declared once as a YAML anchor and reused across
@@ -1493,7 +1493,7 @@ UI-40b  Accented characters are guaranteed here, unlike in either
         (`Hülkenberg`, `Autódromo José Carlos Pace`, `Nürburgring`,
         `Hermanos Rodríguez`), so `sky-tracker`'s ASCII set would have drawn a box
         mid-name.
-UI-40c  Roboto Mono is missing 12 of `GF_Latin_Core`'s codepoints, and
+UI-40c  [ ] Roboto Mono is missing 12 of `GF_Latin_Core`'s codepoints, and
         the build warns about it. All twelve are **combining diacritical marks**
         (U+0302 circumflex, U+0304 macron, U+0306 breve, …), which no monospace
         face ships as standalone glyphs. **Harmless for our data**, which uses
@@ -1504,26 +1504,26 @@ UI-40c  Roboto Mono is missing 12 of `GF_Latin_Core`'s codepoints, and
         Unicode NFC is far too heavy for this device; a small fold table covering
         the Latin-1 base+mark pairs is enough, since that is the whole range our
         content occupies. Assert it in the host tests with an NFD fixture.
-UI-131  **`tools/check_glyphs.py` is built and gates `deploy.sh`** (decision 140).
+UI-131  [x] **`tools/check_glyphs.py` is built and gates `deploy.sh`** (decision 140).
         It resolves each label's *effective* font — the gear is measured against
         `montserrat_28`, not against Roboto Mono — and covers the **generated**
         tables as well as the YAML and the C++ headers. 1,901 strings, 99 distinct
         characters, 0 missing.
-UI-132  For glyph iconography, load **Material Design Icons from a `type: web`
+UI-132  [ ] For glyph iconography, load **Material Design Icons from a `type: web`
         URL** with an explicit codepoint list per size, as `sky-tracker` does.
         Flags remain bitmaps (§4.6).
 
 ### 4.10 Team colours (UI-32)
-UI-133  OpenF1 `drivers` carries **`team_colour`** as a 6-hex RGB string,
+UI-133  [ ] OpenF1 `drivers` carries **`team_colour`** as a 6-hex RGB string,
         measured present (e.g. McLaren `F47600`, Red Bull `4781D7`). Use it for a
         **3–4 px colour bar** at the left of each order row.
-UI-134  It is a live value, so it tracks livery changes with no firmware update.
+UI-134  [ ] It is a live value, so it tracks livery changes with no firmware update.
         **Cache the last known colour per team** so the bar survives a failed
         poll, and fall back to a neutral grey — never to a wrong team's colour.
-UI-135  **Do not colour the text** with it. Several team colours have poor
+UI-135  [ ] **Do not colour the text** with it. Several team colours have poor
         contrast on black (dark blues especially) and the driver name must stay
         readable. A bar is decoration; the text is information.
-UI-136  **Team colours survive intact**, because Night Mode is declined (§4.13).
+UI-136  [ ] **Team colours survive intact**, because Night Mode is declined (§4.13).
         This is part of why it was declined: `plane-tracker` decision 56 found
         that multiplying red over a blue gives black, so a red palette would make
         half the grid's colour bars vanish. On a device whose job includes
@@ -1531,37 +1531,37 @@ UI-136  **Team colours survive intact**, because Night Mode is declined (§4.13)
         trade.
 
 ### 4.11 Detail cards (UI-24)
-UI-137  Tapping a driver row opens a card: full name, number, acronym, team,
+UI-137  [ ] Tapping a driver row opens a card: full name, number, acronym, team,
         nationality + flag, grid position, finishing position and gap once the
         result exists, and status. **No live position and no tyre compound** —
         both are inside OpenF1's live window (decision 58); a post-session tyre
         strip is §B.1's job. Tapping the circuit map opens a card with the full
         facts set (§3.9.5) and the session times in all three zones (§4.7).
-UI-138  Touch targets are **finger-sized** — a ~40×40 px minimum hit box, and
+UI-138  [ ] Touch targets are **finger-sized** — a ~40×40 px minimum hit box, and
         **the whole row is the target**, not just the text. `plane-tracker`
         decision 53: to a finger the label is part of the thing, and it is the
         larger of the two.
-UI-139  Clear dismissal: a tap anywhere closes the card (§4.1).
-UI-140  **The portrait is the compiled-in Commons image** (§3.10.3), with its
+UI-139  [ ] Clear dismissal: a tap anywhere closes the card (§4.1).
+UI-140  [ ] **The portrait is the compiled-in Commons image** (§3.10.3), with its
         credit. **No runtime photo fetch, and never OpenF1's `headshot_url`**
         (decision 73). **Clear the image the instant the selection changes** so
         a previous driver's photo is never shown against new data
         (`plane-tracker` decision 45).
-UI-141  The card must be fully useful with no photo at all (RACE-13e).
-UI-142  **UI-24a: entry and card boxes carry explicit `pad_top`/`pad_bottom` and
+UI-141  [ ] The card must be fully useful with no photo at all (RACE-13e).
+UI-142  [ ] **UI-24a: entry and card boxes carry explicit `pad_top`/`pad_bottom` and
         a 44 px height.** `plane-tracker` decision 46: relying on the LVGL
         theme's own padding clipped the bottom of every field.
 
 ### 4.12 Status line (UI-25)
-UI-143  A small status line under the title carries **faults only** — no data, no
+UI-143  [ ] A small status line under the title carries **faults only** — no data, no
         Wi-Fi, rate limited, API error, clock unsynced, stale calendar. Each must
         be **distinguishable from the others**.
-UI-144  `plane-tracker` decision 57: the status line must **not** carry a tally
+UI-144  [ ] `plane-tracker` decision 57: the status line must **not** carry a tally
         that something else also counts. Two disagreeing numbers are worse than
         one.
-UI-145  **Distinguish "nothing happening" from "no data".** In `IDLE` the correct
+UI-145  [ ] **Distinguish "nothing happening" from "no data".** In `IDLE` the correct
         message is the next round and its countdown, not an error.
-UI-146  **Data age** is stamped on every **successful parse**, not on an HTTP 200
+UI-146  [ ] **Data age** is stamped on every **successful parse**, not on an HTTP 200
         (`plane-tracker` decision 50 — a 200 carrying garbage is not fresh data).
         Show it on the debug page and in the status line when it exceeds the
         expected poll interval by a wide margin.
@@ -1577,20 +1577,20 @@ sport**, and at the deployment latitude a dusk-triggered red palette would hold 
 for up to **19 hours a day in December** (§4.8) — the device would be red far
 more often than not, which is an aesthetic decision disguised as a feature.
 
-UI-147  **Remove it from the settings page and the entity list.** Not shipped
+UI-147  [ ] **Remove it from the settings page and the entity list.** Not shipped
         disabled — absent. A switch for a feature nobody will turn on is
         clutter, and §4.15's page is already long.
-UI-148  **Auto-dim stays** (§4.8) and is the right answer to the same problem:
+UI-148  [ ] **Auto-dim stays** (§4.8) and is the right answer to the same problem:
         the display gets dimmer after sunset, it just stays in colour. Team
         colours (§4.10) and both sets of flags (§4.6) are load-bearing on this
         device in a way they are not on a radar scope, and a red palette
         destroys all three.
-UI-149  One consequence worth keeping: `plane-tracker` decision 61 found that a
+UI-149  [ ] One consequence worth keeping: `plane-tracker` decision 61 found that a
         palette setter must apply **unconditionally**, because an early-out on an
         unchanged palette left widgets showing the colours written literally into
         the YAML. **That applies to any theming this project does**, dimming
         included — so the lesson is inherited even though the feature is not.
-UI-150  Also inherited: team colours must **not** be the only signal (§4.10).
+UI-150  [ ] Also inherited: team colours must **not** be the only signal (§4.10).
         That requirement stands on contrast grounds alone, with no palette
         switching involved.
 
@@ -1605,16 +1605,16 @@ a constant.
 **not** hold `1` (Norris does, as reigning champion) and he does not hold his
 permanent `33`.
 
-UI-151  **The watched driver is stored as a `driverId`.** A number-keyed watch
+UI-151  [ ] **The watched driver is stored as a `driverId`.** A number-keyed watch
         would have followed Norris in 2026 and someone else in 2027 — a bug that
         produces plausible, confidently wrong output (DATA-6).
-UI-152  Resolve to a live `driver_number` only where an OpenF1 row must be
+UI-152  [ ] Resolve to a live `driver_number` only where an OpenF1 row must be
         matched, and do it through the acronym for that session.
-UI-153  Default `max_verstappen`, settable from a `select`. **ESPHome `select`
+UI-153  [ ] Default `max_verstappen`, settable from a `select`. **ESPHome `select`
         options are compile-time** (decision 109), so the list is generated from
         the **compiled driver table**, not the live entry list; a driver who
         joins after the build is selectable only after the next one.
-DATA-10  The season driver list is not the race entry list. Measured:
+DATA-10  [ ] The season driver list is not the race entry list. Measured:
          Jolpica's 2026 `drivers` endpoint returns **32 rows**, of which only
          **23 carry a `code` and a `permanentNumber`** — the other 9 are reserve
          and rookie entries with no number, no acronym and no nationality
@@ -1642,20 +1642,20 @@ works at all under decision 58.
 | Career milestone | `MAX — 72ND WIN` / `250TH START` | generated totals + this result |
 | Championship | `MAX IS WORLD CHAMPION` | standings |
 
-UI-154  **UI-50a: never say he is on track when only the clock says so and the
+UI-154  [ ] **UI-50a: never say he is on track when only the clock says so and the
         session was cancelled.** `is_cancelled` is in the OpenF1 session data
         (§3.4) and a cancelled session must suppress the alert.
-UI-155  **A withdrawal is not a result.** If he is in the entry list but absent
+UI-155  [ ] **A withdrawal is not a result.** If he is in the entry list but absent
         from the classification, say nothing rather than inventing a DNF.
 
 #### 4.14.3 Alert design — the rules matter more than the list
 `plane-tracker`'s §5.13 established the house rules for anything that
 interrupts, and they apply directly:
 
-UI-156  **Never cover the instrument.** The alert is a **strip**, not a modal,
+UI-156  [ ] **Never cover the instrument.** The alert is a **strip**, not a modal,
         and **nothing ever needs dismissing**. The circuit map, the order list and
         the carousel keep working underneath.
-UI-157  **Rare beats frequent.** An alert on every poll becomes wallpaper within
+UI-157  [ ] **Rare beats frequent.** An alert on every poll becomes wallpaper within
         a week. Three tiers, with hard rules:
 
 
@@ -1665,7 +1665,7 @@ UI-157  **Rare beats frequent.** An alert on every poll becomes wallpaper within
 | **Event** | session start, grid set, result | a **full-width banner** across the upper third, in his team's colour, with his flag at card size and the message in `mono24`. Holds **~30 s**, then collapses into the ambient marker |
 | **Milestone** | a win, a round-number win/start/pole, a title | a **full-screen takeover** for ~8 s — flag, portrait, the number — then it collapses to the banner, which is **held until the next session** |
 
-UI-158  **UI-50c: loud is safe on this device, and that is not a general
+UI-158  [ ] **UI-50c: loud is safe on this device, and that is not a general
         licence.** `plane-tracker`'s rule is never to cover the instrument,
         because on a radar scope the aircraft are live and covering them loses
         information. **Here nothing underneath is changing** — the grid is
@@ -1673,30 +1673,30 @@ UI-158  **UI-50c: loud is safe on this device, and that is not a general
         — so a banner or a brief takeover costs the reader nothing. The tier
         above is deliberately louder than the sibling projects would allow, and
         the reason it is allowed is specific to this device.
-UI-159  **Nothing ever requires dismissing**, loud or not. Every tier
+UI-159  [ ] **Nothing ever requires dismissing**, loud or not. Every tier
         self-retires on a timer, and **a tap dismisses early** rather than being
         the only way out. A banner that needs acknowledging is a different and
         much worse thing than a banner that is simply large.
-UI-160  **The takeover is milestone-only**, and milestones are rare by
+UI-160  [ ] **The takeover is milestone-only**, and milestones are rare by
         construction — a win, a round number, a title. If it ever fires twice in
         a weekend, the latch (below) is broken.
 
-UI-161  **Each event fires once.** Latch it against a `(round, session, event)`
+UI-161  [ ] **Each event fires once.** Latch it against a `(round, session, event)`
         key held in a `restore_value` global so a reboot mid-weekend does not
         replay the whole set. This is the most likely bug in the feature.
-UI-162  **Keep the alert text in a data file**, not scattered through the code, so
+UI-162  [ ] **Keep the alert text in a data file**, not scattered through the code, so
         lines can be added over seasons and pushed by OTA. Same rule
         `plane-tracker` records for its own quiet lines.
-UI-50b  The ambient marker is the feature most of the time, and it is
+UI-50b  [ ] The ambient marker is the feature most of the time, and it is
         the one worth polishing. His row highlighted on the order page and his
         flag in the header is what a glance actually wants; the strip is for the
         handful of moments that deserve one.
-UI-163  **Promoted from §B.2.** This was listed as the optional "favourite
+UI-163  [ ] **Promoted from §B.2.** This was listed as the optional "favourite
         driver" idea. It is now a requirement, and the §B.2 entry is retired.
-UI-164  A **`Watched driver alerts` checkbox**, default on, and a separate
+UI-164  [ ] A **`Watched driver alerts` checkbox**, default on, and a separate
         **`Milestone alerts only`** option for someone who wants the rare tier
         without the per-session one. Offering the choice costs one switch.
-UI-165  **`Alert style`: `loud` (default) / `quiet`.** `quiet` demotes the event
+UI-165  [ ] **`Alert style`: `loud` (default) / `quiet`.** `quiet` demotes the event
         banner to a one-line strip and the milestone takeover to a banner. The
         loud design ships as the default because it was asked for; the quiet
         path exists because a device in a living room may be watched by someone
@@ -1729,21 +1729,21 @@ and `on_long_press` opens the debug page. Ported from `sky-tracker` exactly.
 | Force page | dropdown | Auto / Race Day / Carousel (**not persisted**, §1.1) |
 | About | button | lower right of the settings page; opens the About page (UI-67, decision 181) |
 
-UI-166  All settings persist across reboot — ESPHome `globals` with
+UI-166  [ ] All settings persist across reboot — ESPHome `globals` with
         `restore_value`, or the entity's own `restore_value`.
-UI-167  **Adopt the staged Save/Cancel model.** On-screen edits are staged in
+UI-167  [ ] **Adopt the staged Save/Cancel model.** On-screen edits are staged in
         LVGL widgets and only written to entities when **Save** is pressed;
         **Cancel** restores the values captured in `on_load`.
-UI-168  **Brightness is the deliberate exception** — the slider drives the
+UI-168  [ ] **Brightness is the deliberate exception** — the slider drives the
         backlight live so the change is visible, and Cancel restores the opening
         value. Keep the guard: the `on_value` handler compares against the
         current value and returns early to ignore its own echo from the light's
         `on_state`.
-UI-169  Reuse the `textarea` conventions: `one_line: true`, `max_length` per
+UI-169  [ ] Reuse the `textarea` conventions: `one_line: true`, `max_length` per
         field, `accepted_chars` restricted so bad input cannot be typed.
-UI-170  Reuse the LVGL `keyboard` in `mode: NUMBER`, hidden until a field is
+UI-170  [ ] Reuse the LVGL `keyboard` in `mode: NUMBER`, hidden until a field is
         tapped.
-UI-171  Group the page into **tabs** as `sky-tracker` does (its UI-16a) — three
+UI-171  [x] Group the page into **tabs** as `sky-tracker` does (its UI-16a) — three
         panels, one shown at a time: **Display**, **Race**, **Location**.
         Built (decision 170). Only the settings that were already on the panel
         plus latitude, longitude and the Auto Off hours are there; the dropdown
@@ -1755,19 +1755,19 @@ UI-171  Group the page into **tabs** as `sky-tracker` does (its UI-16a) — thre
 All settings must be controllable from **three** places, kept in sync: the
 touchscreen, the device's own **web UI**, and **Home Assistant**.
 
-UI-172  `web_server: version: 3, local: true` so assets are served from flash and
+UI-172  [ ] `web_server: version: 3, local: true` so assets are served from flash and
         the page works on the fallback AP with no internet. Firmware upload from
         the page stays on.
-UI-173  `web_server: sorting_groups:` with `sorting_weight` to section the page
+UI-173  [ ] `web_server: sorting_groups:` with `sorting_weight` to section the page
         (HA is unaffected). Groups: **Race**, **Display**, **Location**,
         **System**.
-UI-174  Mark diagnostics `entity_category: diagnostic` so they land on HA's
+UI-174  [ ] Mark diagnostics `entity_category: diagnostic` so they land on HA's
         device page rather than cluttering the controls.
-UI-175  Give every entity an `icon:` — the five diagnostics that lacked one (IP
+UI-175  [x] Give every entity an `icon:` — the five diagnostics that lacked one (IP
         Address, Connected SSID, ESPHome Version, WiFi Signal, Uptime) now have it
         (decision 182).
-UI-176  **Set web UI authentication.** The page exposes control of every setting.
-UI-177  Prefer the HA **native API** over MQTT.
+UI-176  [ ] **Set web UI authentication.** The page exposes control of every setting.
+UI-177  [ ] Prefer the HA **native API** over MQTT.
 
 ##### 4.15.1.1 Entity mapping
 | Setting | ESPHome entity |
@@ -1790,41 +1790,41 @@ UI-177  Prefer the HA **native API** over MQTT.
 | Force page | `select` (not restored) |
 
 ##### 4.15.1.2 This is architectural, not a bolt-on
-UI-178  **Settings live in ESPHome entities, not in LVGL widget state.** The
+UI-178  [ ] **Settings live in ESPHome entities, not in LVGL widget state.** The
         entity (backed by a global with `restore_value`) is the single source of
         truth; the touchscreen widget is one *view* of it. A design where the
         widget owns the value cannot be driven from HA.
-UI-179  **Bidirectional sync:** a touchscreen change publishes the entity state;
+UI-179  [ ] **Bidirectional sync:** a touchscreen change publishes the entity state;
         an HA or web change updates the widget.
-UI-180  **Guard against feedback loops.** Entity-set → widget-update →
+UI-180  [ ] **Guard against feedback loops.** Entity-set → widget-update →
         widget-callback → entity-set is an infinite loop. Suppress the callback
         while applying an external update, or make the setter idempotent and bail
         when the value is unchanged. This is the most likely bug in this area.
-UI-181  Route every change through **one apply-settings handler**, so "carousel
+UI-181  [ ] Route every change through **one apply-settings handler**, so "carousel
         interval changed" retimes the timer and "auto-dim toggled" re-evaluates
         the backlight, regardless of which surface changed it.
-UI-182  **Validation lives in the handler, not the widget** — HA and the web UI
+UI-182  [ ] **Validation lives in the handler, not the widget** — HA and the web UI
         can submit out-of-range values the keypad would have prevented.
 
 ##### 4.15.1.3 Read-only diagnostics to expose
 Cheap, and they make the device debuggable without a serial cable.
 
-UI-183  **Weekend state** (§1.1) — the single most explanatory value.
-UI-184  **Order mode** — `ENTRY LIST` / `GRID (PROVISIONAL)` / `GRID` / `FINAL`
+UI-183  [ ] **Weekend state** (§1.1) — the single most explanatory value.
+UI-184  [ ] **Order mode** — `ENTRY LIST` / `GRID (PROVISIONAL)` / `GRID` / `FINAL`
         (§4.3), and **when the next OpenF1 window closes**, which is the next
         moment anything will change.
-UI-185  **Watched driver** — resolved `driverId`, whether he is in the current
+UI-185  [ ] **Watched driver** — resolved `driverId`, whether he is in the current
         entry list, and which alerts have latched this weekend (§4.14.3). The
         latch set is the first thing to look at when an alert does or does not
         fire.
-UI-186  **Carousel** — current card type and index, and the counts of each type.
-UI-187  Next round, next session, and the countdown to it.
-UI-188  Calendar source and age (`compiled` / `fetched, 3 h`).
-UI-189  Last successful Jolpica poll, last successful OpenF1 poll — separately.
-UI-190  Current circuit on the carousel.
-UI-191  Driver count and order mode.
-UI-192  Wi-Fi RSSI, free internal RAM, free PSRAM, uptime, firmware version.
-UI-193  **Crash record** (reset reason + last crash) — port `sky_diag.h`,
+UI-186  [ ] **Carousel** — current card type and index, and the counts of each type.
+UI-187  [ ] Next round, next session, and the countdown to it.
+UI-188  [ ] Calendar source and age (`compiled` / `fetched, 3 h`).
+UI-189  [ ] Last successful Jolpica poll, last successful OpenF1 poll — separately.
+UI-190  [ ] Current circuit on the carousel.
+UI-191  [ ] Driver count and order mode.
+UI-192  [ ] Wi-Fi RSSI, free internal RAM, free PSRAM, uptime, firmware version.
+UI-193  [ ] **Crash record** (reset reason + last crash) — port `sky_diag.h`,
         installed early in `on_boot` (600) so the API can read it before ESPHome
         clears it. Note that `sky_diag.h` writes to a sector of the `skydata`
         partition, which we do not have (§2.3): **re-target it to NVS or drop
@@ -1857,16 +1857,16 @@ MOTION-4a  A headshot fetched at run time appears the same way, row by row as it
            from the network task's own buffer (decision 193, 198).
 
 ## 6. Performance and stability (PERF)
-PERF-10  480×480 RGB565 framebuffer = **460 KB** → PSRAM framebuffer is
+PERF-10  [ ] 480×480 RGB565 framebuffer = **460 KB** → PSRAM framebuffer is
          mandatory. Expect PSRAM bandwidth, not CPU, to be the limit.
-PERF-11  **Our frame-rate problem is small and our boot-time problem is not.**
+PERF-11  [ ] **Our frame-rate problem is small and our boot-time problem is not.**
          Nothing moves per-frame (§6.1), so the siblings' render budget does not
          bind here. Instead: 22 order rows × 4 children, plus 40 generated traces,
          plus ~82 flag bitmaps, plus the facts table. **Measure boot time** and, if
          it is long, follow `plane-tracker` decision 64 — move pure pixel work to a
          **one-shot task on core 1**, refuse to draw until a `g_ready` flag, and
          set image sources on first use rather than at creation.
-PERF-12  **Flash budget — now measured, not estimated.** M0 compiled on
+PERF-12  [x] **Flash budget — now measured, not estimated.** M0 compiled on
          2026-10-01 (ESPHome 2026.9.1), which settles the numbers this section
          previously guessed at:
 
@@ -1897,32 +1897,32 @@ PERF-12  **Flash budget — now measured, not estimated.** M0 compiled on
 | **Portraits, 54 at 240×320** | **1.4–2.2 MB** (§3.10.3) |
 | **Projected total** | **~3.2 MB — 41 % of one 7.75 MB slot** |
 
-PERF-13  **The portraits remain the dominant *variable* asset** at 21.8 % of a
+PERF-13  [ ] **The portraits remain the dominant *variable* asset** at 21.8 % of a
          slot. 41 % projected leaves comfortable headroom, so decision 74's 3 MB
          generator cap stands with room to spare.
-PERF-14  **RAM at M0: 119,475 of 341,760 B — 35.0 %**, with no data layer, no
+PERF-14  [x] **RAM at M0: 119,475 of 341,760 B — 35.0 %**, with no data layer, no
          track store and no TLS sessions yet. That is the figure to watch as M3
          and M4 land; §6.3's note about logging where the LVGL buffer landed
          matters more now that a third of the budget is already spoken for.
-PERF-15  A portrait decode is one JPEG per card, once per 15–120 s. Free in time.
+PERF-15  [ ] A portrait decode is one JPEG per card, once per 15–120 s. Free in time.
          But **decode into a single reused PSRAM buffer** (240×320 RGB565 =
          150 KB), never a fresh allocation per card — 54 cards cycling for weeks
          is exactly where a slow leak shows up, and this device is expected to run
          for a season.
-PERF-16  **RAM is the real budget**, as in both siblings: 460 KB framebuffer +
+PERF-16  [ ] **RAM is the real budget**, as in both siblings: 460 KB framebuffer +
          57.6 KB LVGL buffer + TLS buffers for **two** hosts + `web_server`.
          Measure free internal RAM and PSRAM with everything enabled, and log it
          at boot.
-PERF-17  **JSON parsing is the main unknown** — a 48 KB response with ~20 fields
+PERF-17  [ ] **JSON parsing is the main unknown** — a 48 KB response with ~20 fields
          per row. Measure early, prefer selective parsing, and size the buffer for
          48 KB rather than the common case.
-PERF-18  **Network receive buffers are PSRAM, not internal RAM** (§6a.3): a
+PERF-18  [ ] **Network receive buffers are PSRAM, not internal RAM** (§6a.3): a
          64 KB window per socket, so budget **128 KB** across the two hosts. The
          capacity is nothing against 8 MB; the **bandwidth** shares a bus with the
          panel, which is the thing to watch.
-PERF-19  Wi-Fi reconnect and API-unavailable states **must not block rendering**.
+PERF-19  [ ] Wi-Fi reconnect and API-unavailable states **must not block rendering**.
          The carousel in particular must keep turning with no network (§4.4).
-PERF-20  **Free-only removes this project's one timing pressure.** With no 5 s
+PERF-20  [ ] **Free-only removes this project's one timing pressure.** With no 5 s
          `RACE_LIVE` poll, there is no state in which a fetch, a TLS handshake and
          a redraw contend. The TLS-session reuse of NET-12 is still worth having —
          ~1.2 s of crypto on the panel's bus is worth avoiding at any cadence —
@@ -1937,13 +1937,13 @@ LVGL tracks **32 dirty areas** by default and redraws the **whole screen** when
 they overflow. On `sky-tracker`, ~16 moving markers dirtied two areas each,
 overflowed the budget every tick, and the panel visibly jumped.
 
-PERF-21  **Our invalidation profile is different from both siblings' and should be
+PERF-21  [ ] **Our invalidation profile is different from both siblings' and should be
          stated, not assumed.** Nothing here moves per-frame: the circuit trace is
          static for 15–120 s at a time, and the driver list changes only when
          positions change. Our risk is the opposite one — **a single large dirty
          area**, because an `lv_line` spanning the map box invalidates that whole
          box on every change (§4.5).
-PERF-22  Set the flag anyway. It costs ~1.5 KB of RAM, and a 22-row live order
+PERF-22  [ ] Set the flag anyway. It costs ~1.5 KB of RAM, and a 22-row live order
          page plus a lap counter plus a clock plus flags is well past 32 areas
          during a race.
 
@@ -1958,9 +1958,9 @@ PERF-22  Set the flag anyway. It costs ~1.5 KB of RAM, and a 22-row live order
 | `CONFIG_LWIP_TCP_SACK_OUT: y` | Selective ACK — recovers from a single lost segment without re-sending the window behind it (§6a.3) |
 | `CONFIG_SPIRAM_TRY_ALLOCATE_WIFI_LWIP: y` | Keeps lwIP/Wi-Fi buffers out of the ~70 KB of free internal RAM |
 
-PERF-23  **Do NOT add `CONFIG_LCD_RGB_ISR_IRAM_SAFE`.** `sky-tracker` explicitly
+PERF-23  [ ] **Do NOT add `CONFIG_LCD_RGB_ISR_IRAM_SAFE`.** `sky-tracker` explicitly
          forbids it (its PERF-3); `SPIRAM_XIP_FROM_PSRAM` replaces the need for it.
-PERF-24  The TCP window fix matters **more** here than in either sibling: our
+PERF-24  [ ] The TCP window fix matters **more** here than in either sibling: our
          largest useful response is 48 KB (§3.1) against `plane-tracker`'s 8.5 KB.
 
 ### 6.3 LVGL buffer strategy
@@ -1972,7 +1972,7 @@ LVGL blends in fast internal SRAM and only finished pixels cross to the PSRAM
 framebuffer, leaving PSRAM bandwidth for the panel's bounce-buffer refills.
 **Starving those refills is what produces the vsync shift and garbage lines.**
 
-PERF-25  Keep `12.5%` unless measurement says otherwise, and log at boot whether
+PERF-25  [ ] Keep `12.5%` unless measurement says otherwise, and log at boot whether
          the buffer actually landed in internal RAM or fell back to PSRAM.
 
 ## 6a. Network (NET)
@@ -1997,21 +1997,21 @@ is the direct analogue of `plane-tracker`'s radius→interval table (its decisio
 subscription is taken (decision 58). The consequence is a requirement, not a
 degradation to be detected at runtime:
 
-NET-16  **Compute OpenF1's live window from the calendar and do not request
+NET-16  [ ] **Compute OpenF1's live window from the calendar and do not request
         inside it.** The window is *session start − 30 min* to *session end +
         30 min* (§3.7.2), and the device already knows every session time to the
         second (§3.3). Skipping the request is strictly better than making one
         that will not answer: it cannot be rate-limited, cannot be mistaken for a
         fault, and cannot return a stale snapshot that looks like success.
-NET-17  This **retires most of open question 8.** The gated response shape still
+NET-17  [ ] This **retires most of open question 8.** The gated response shape still
         matters as a defensive check — if a request ever lands inside a window
         because a session time moved, anything unexpected is treated as "no
         data", never as data — but it is no longer on the critical path.
-NET-18  `POST_SESSION` replaces `POST_RACE` and is entered when the **window
+NET-18  [ ] `POST_SESSION` replaces `POST_RACE` and is entered when the **window
         closes**, not when the session ends: *end + 30 min*. This is the moment
         the device can finally read the session, and it is the one transition
         worth getting exactly right.
-NET-19  **Everything the brief asks for is on the free tier.** The circuit map is
+NET-19  [ ] **Everything the brief asks for is on the free tier.** The circuit map is
         compiled in (§3.9), and the starting order comes from Jolpica qualifying,
         which has no live window at all. What the free tier costs us is the live
         running order — a feature this document proposed, not one that was asked
@@ -2031,25 +2031,25 @@ NET-19  **Everything the brief asks for is on the free tier.** The circuit map i
 | **Live running order during a session** | **no** |
 | **Live track status, tyres, weather** | **no** |
 
-NET-20  The honest summary: **the device is a season tracker and a race-weekend
+NET-20  [ ] The honest summary: **the device is a season tracker and a race-weekend
         companion, not a live timing screen.** Design the race page to be
         excellent at what it is rather than apologetic about what it is not
         (§4.2, §4.3).
 
-NET-21  **Peak request rate is now trivial.** The old `RACE_LIVE` 5 s poll is
+NET-21  [ ] **Peak request rate is now trivial.** The old `RACE_LIVE` 5 s poll is
         gone, so the busiest state is `POST_SESSION` at 5 min OpenF1 + 10 min
         Jolpica = **18 requests/hour** combined, against Jolpica's 500/hour and
         OpenF1's 30/min. There is no demanding case left in this design.
-NET-22  `position` is event-driven and 36 KB for a whole session. In
+NET-22  [ ] `position` is event-driven and 36 KB for a whole session. In
         `POST_SESSION` fetch it **once**, not every 5 minutes — the 5 min
         interval is for *retrying until it appears*, and the poll must stop once
         a complete session has been read. A repeated full-session fetch is the
         easiest way to waste the budget this design otherwise has in abundance.
-NET-23  **Re-check this table whenever either service's limits change** —
+NET-23  [ ] **Re-check this table whenever either service's limits change** —
         Jolpica has said theirs will decrease (DATA-4).
-NET-24  Changing state must **retime the timers immediately**, not wait out the
+NET-24  [ ] Changing state must **retime the timers immediately**, not wait out the
         old interval.
-NET-25  `plane-tracker` decision 60: a restored `number` is **range-checked at
+NET-25  [ ] `plane-tracker` decision 60: a restored `number` is **range-checked at
         boot**, not trusted. ESPHome restores stored bytes without clamping to
         `min_value`/`max_value`. The carousel interval and any poll-affecting
         setting must be clamped both at boot and at the point of use.
@@ -2061,16 +2061,16 @@ NET-25  `plane-tracker` decision 60: a restored `number` is **range-checked at
 | `api: max_connections: 8` | At the default 5, an extra log viewer was dropped ("dropped immediately after encrypted hello") |
 | `ota: encryption:` (no key) | Reuses the API encryption key |
 
-FAIL-12  Show OTA progress on the display. Port `sky-tracker`'s
+FAIL-12  [ ] Show OTA progress on the display. Port `sky-tracker`'s
          `ota_panel` on the LVGL **top layer** so it covers whichever page is
          showing without disturbing it, wired to `on_begin`/`on_progress`/
          `on_end`/`on_error` on **both** OTA platforms (ESPHome and `web_server`),
          redrawing every 5 % and calling `lv_refr_now()` each step. The OTA write
          blocks the loop; without the explicit refresh the screen freezes on
          whatever was last drawn and the upgrade reads as a crash.
-NET-26  The data task must be **paused for the duration** and resumed on error,
+NET-26  [ ] The data task must be **paused for the duration** and resumed on error,
         as `plane-tracker` does.
-UI-68  Internet updates, modelled on `sky-tracker` 4.6.27. (decision 183).
+UI-68  [x] Internet updates, modelled on `sky-tracker` 4.6.27. (decision 183).
        `tracker_updlogic.h` (pure, host-tested) and `tracker_update.h` (the card), now in the shared
        `tracker-common` repo (decision 194):
        - the manifest is the GitHub release's `manifest.json`; ESPHome's
@@ -2109,7 +2109,7 @@ UI-68  Internet updates, modelled on `sky-tracker` 4.6.27. (decision 183).
          internal RAM it ran out of memory on `sky-tracker` (`-0x7F00`).
          **Unmeasured here** (§D.1): it moves buffers to PSRAM, which is also what
          the panel refills from.
-NET-27  Wi-Fi uses **ESPHome defaults** — `plane-tracker` decision 42 reversed
+NET-27  [ ] Wi-Fi uses **ESPHome defaults** — `plane-tracker` decision 42 reversed
         `sky-tracker`'s `reboot_timeout: 0s` / `ap_timeout: 30s` overrides.
         Follow the newer decision.
 
@@ -2145,55 +2145,55 @@ runtime responses, largest 47.0 KB (§3.1):
 | Jolpica `races` | 14.0 KB | one window |
 | …and every other, down to 0.8 KB | | one window |
 
-NET-28  **65,535 is the largest unscaled window** (the TCP header field is 16
+NET-28  [ ] **65,535 is the largest unscaled window** (the TCP header field is 16
         bits). Staying at or below it means **window scaling is not required**,
         which is one less option to get wrong. Going further needs
         `CONFIG_LWIP_WND_SCALE` and buys 37 ms on a response we fetch rarely —
         **not worth it**, and recorded so it is not re-proposed.
-NET-29  **`CONFIG_LWIP_TCP_RECVMBOX_SIZE` must scale with the window** — at least
+NET-29  [ ] **`CONFIG_LWIP_TCP_RECVMBOX_SIZE` must scale with the window** — at least
         window/MSS = 65535/1440 ≈ 46, so **64**. Leaving it at 32 would throttle
         the larger window back to roughly what it replaced, which is the quiet
         way this change fails to do anything.
-NET-30  **Raise the `esp_http_client` receive buffer to 4096.** Its default is
+NET-30  [ ] **Raise the `esp_http_client` receive buffer to 4096.** Its default is
         **512 bytes**, so a 47 KB response is ~94 read calls, each resuming the
         selective parser (§1.2). This is cheaper than the window change and
         easier to overlook. We construct `esp_http_client_config_t` ourselves in
         the C++ data task (ARCH-3), so it is one field: `.buffer_size = 4096`.
-NET-31  **`CONFIG_LWIP_TCP_SACK_OUT: y`** so a single lost segment does not force
+NET-31  [ ] **`CONFIG_LWIP_TCP_SACK_OUT: y`** so a single lost segment does not force
         a retransmit of everything behind it. On a 64 KB window over WiFi that is
         a much bigger penalty than it was at 32 KB.
 
 **Cost, stated honestly:**
-NET-32  **+32 KB per socket** over the previous setting. With
+NET-32  [ ] **+32 KB per socket** over the previous setting. With
         `CONFIG_SPIRAM_TRY_ALLOCATE_WIFI_LWIP: y` (§6.2) these buffers come
         from **PSRAM**, so the ~70 KB of free internal RAM is unaffected — which
         is the budget that actually binds (§6).
-NET-33  **PSRAM bandwidth is the caveat, not PSRAM capacity.** 64 KB against
+NET-33  [ ] **PSRAM bandwidth is the caveat, not PSRAM capacity.** 64 KB against
         8 MB is nothing, but `plane-tracker` decision 65 measured that network
         and crypto work on the PSRAM bus is what produced `lvgl took a long time
         (1231 ms)` warnings, because the RGB panel refills from the same bus. A
         larger window moves **more** bytes through it per fetch — in a shorter
         burst. **Watch for the warning after this change**, and if it appears,
         the window is the first thing to walk back.
-NET-34  Two hosts means potentially **two sockets**, so budget **128 KB** of
+NET-34  [ ] Two hosts means potentially **two sockets**, so budget **128 KB** of
         PSRAM for receive windows, not 64.
 
 **What this does not fix, so the expectation is right:**
-NET-35  **The TLS handshake dominates everything here.** `plane-tracker` measured
+NET-35  [ ] **The TLS handshake dominates everything here.** `plane-tracker` measured
         ~**1.2 s** of crypto for a fresh handshake — an order of magnitude more
         than the 175 ms this change saves on our largest response. **NET-12
         (persistent TLS sessions, decision 65) is by far the larger lever**, and
         this change is a refinement on top of it, not a substitute.
-NET-36  **Measured latency is mostly not transfer.** Jolpica responded in
+NET-36  [ ] **Measured latency is mostly not transfer.** Jolpica responded in
         0.33–0.85 s (§3.1) for payloads of 0.8–14 KB, which at any of these
         window sizes transfer in tens of milliseconds. Most of that time is
         server processing and round-trips. **Do not expect this change to make
         the device feel faster** — it removes a stall on the few large fetches
         and makes the worst case predictable.
-NET-37  **Our poll rate is 18 requests/hour** (§6a.1.2). This is a tail-latency
+NET-37  [ ] **Our poll rate is 18 requests/hour** (§6a.1.2). This is a tail-latency
         improvement on a rare event, which is a fine reason to make a one-line
         change and a poor reason to expect much from it.
-NET-38  **Re-measure after the first flash** and record real figures here,
+NET-38  [ ] **Re-measure after the first flash** and record real figures here,
         replacing this arithmetic. The model is corroborated by `sky-tracker`'s
         two data points but it is still a model.
 
@@ -2229,36 +2229,36 @@ BUILD-12  Binaries are never committed.
 | 600 | Install web/diagnostic hooks — before `web_server` setup (249) |
 | −100 | Main application setup (widgets, config, bindings) |
 
-BUILD-13  The fallback-AP SSID must be set **before** Wi-Fi starts (setup priority
+BUILD-13  [ ] The fallback-AP SSID must be set **before** Wi-Fi starts (setup priority
           250), because ESPHome's `ssid:` must be a literal. Name it
           `"F1 Tracker - XXXX"` with the last MAC bytes, as both siblings do.
 
 ## 8. Known failure modes (FAIL)
-FAIL-13  OTA updates enabled, with the progress panel of §6a.2.
-FAIL-14  Graceful degradation: clear, **mutually distinguishable** "no Wi-Fi",
+FAIL-13  [ ] OTA updates enabled, with the progress panel of §6a.2.
+FAIL-14  [ ] Graceful degradation: clear, **mutually distinguishable** "no Wi-Fi",
          "no data", "rate limited", "clock unsynced" and "stale calendar" states
          (§4.12).
-FAIL-15  Recover from an outage without reboot; back off on repeated failures
+FAIL-15  [ ] Recover from an outage without reboot; back off on repeated failures
          rather than hammering an endpoint (§3.7).
-NET-10  The web page's tab icon and header badge are the project mark
+NET-10  [x] The web page's tab icon and header badge are the project mark
         (decision 149), ported from `sky-tracker`'s `sky_web.h`.
-FAIL-16  **Port the Wi-Fi resilience** (`sky-tracker` NET-2/NET-2b): an open
+FAIL-16  [ ] **Port the Wi-Fi resilience** (`sky-tracker` NET-2/NET-2b): an open
          fallback AP named with the MAC suffix, `captive_portal` for setup, and a
          boot/status page shown until Wi-Fi connects that returns after 10 s
          offline — **but never over the settings page**. This is the difference
          between a recoverable device and a cable trip.
-FAIL-17  Surface a **crash record** as a diagnostic entity (§4.15.1.3), with the
+FAIL-17  [ ] Surface a **crash record** as a diagnostic entity (§4.15.1.3), with the
          partition caveat noted there.
-FAIL-18  Bump `fw_version` on every install and show it in HA, on the settings
+FAIL-18  [ ] Bump `fw_version` on every install and show it in HA, on the settings
          page and on the status page.
-FAIL-19  No secrets in the repo — Wi-Fi credentials and the API key in
+FAIL-19  [ ] No secrets in the repo — Wi-Fi credentials and the API key in
          `secrets.yaml` (git-ignored). Commit `secrets.yaml.example`.
-FAIL-20  Config reproducible from a clean checkout, including the generators.
-FAIL-21  **`deploy.sh` fails on any compiler warning in our own code.**
+FAIL-20  [ ] Config reproducible from a clean checkout, including the generators.
+FAIL-21  [ ] **`deploy.sh` fails on any compiler warning in our own code.**
          `plane-tracker` decision 63: grepping only for `error:` hid a
          `-Wformat-truncation` on a string buffer. Copy the script and the
          discipline.
-FAIL-22  **Host tests, run with `make -C tests`**, as `plane-tracker` does (129
+FAIL-22  [ ] **Host tests, run with `make -C tests`**, as `plane-tracker` does (129
          checks, 0 failures). Keep the testable logic free of LVGL so it builds on
          the host. The high-value targets:
          - the **state machine** (§1.1) against a table of synthetic clocks,
