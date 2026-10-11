@@ -1,4 +1,4 @@
-// Driver birthdays (section 5.6) and the rotation bias they create.
+// Driver birthdays (section 3.10) and the rotation bias they create.
 // A feature that fires once a year is one you cannot debug by waiting for it.
 #include <cstdarg>
 #include <cstdio>

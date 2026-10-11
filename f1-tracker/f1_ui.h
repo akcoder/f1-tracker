@@ -2,7 +2,7 @@
 // LVGL drawing for the circuit card and the carousel (MAP-5, UI-20).
 //
 // This is the only M1 file that touches LVGL; the geometry and the rotation
-// live in f1_map.h and f1_carousel.h so they stay host-testable (section 10).
+// live in f1_map.h and f1_carousel.h so they stay host-testable (section 8).
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -141,7 +141,7 @@ inline void draw_circuit(const circuits::Circuit &c) {
     lv_obj_add_flag(g.w.north, LV_OBJ_FLAG_HIDDEN);
   }
 
-  // ---- card text (section 6.4). Facts come straight from the GeoJSON
+  // ---- card text (section 4.4). Facts come straight from the GeoJSON
   // properties; the curated ones (turns, DRS, laps) land at M2.
   if (g.w.badge) lv_label_set_text(g.w.badge, "CIRCUIT");
   if (g.w.title) lv_label_set_text(g.w.title, c.name);

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Generate f1-tracker/f1_calendar.h - the compiled-in season floor.
 
-REQUIREMENTS.md section 4.3 (DATA-3) and 4.2.1 (RACE-13).
+REQUIREMENTS.md section 1.4 (DATA-3) and 1.3 (RACE-13).
 
 The device resolves the season at RUNTIME from /current/ and a fetched calendar
 always supersedes this one (decision 94). This header exists so a cold boot with
@@ -23,7 +23,7 @@ BASE = "https://api.jolpi.ca/ergast/f1"
 UA = {"User-Agent": "f1-tracker-build/1.0 (personal project)"}
 
 # Jolpica's Location.country strings -> ISO 3166-1 alpha-3, for the circuit flag
-# (section 6.6). This keys on the CIRCUIT's country, never the race name -
+# (section 4.6). This keys on the CIRCUIT's country, never the race name -
 # decision 18: 2026 round 16 is served as "Bahrain Grand Prix in Malaysia".
 COUNTRY_ISO3 = {
     "Australia": "AUS", "Austria": "AUT", "Azerbaijan": "AZE", "Bahrain": "BHR",
@@ -53,7 +53,7 @@ def epoch(date, tm):
         return 0
     if not tm:
         return 0            # a round with a date but no time: start is UNKNOWN,
-                            # not midnight (section 3.4)
+                            # not midnight (section 3.5)
     t = f"{date}T{tm.replace('Z','')}+0000"
     return int(datetime.datetime.strptime(t, "%Y-%m-%dT%H:%M:%S%z").timestamp())
 
@@ -115,7 +115,7 @@ def main():
     w(f"inline constexpr uint32_t BUILT_AT = {int(time.time())};  // unix, for the debug page")
     w("")
     w("// Session start times are UTC unix epochs. 0 = this round does not have")
-    w("// that session, or Jolpica gave a date with no time (section 3.4).")
+    w("// that session, or Jolpica gave a date with no time (section 3.5).")
     w("enum SessionIdx : uint8_t { FP1, FP2, FP3, SQ, SPRINT, QUALI, RACE, N_SESSIONS };")
     w("")
     w("struct Round {")

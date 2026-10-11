@@ -1,5 +1,5 @@
 #pragma once
-// Driver birthdays (section 5.6). On a driver's birthday their card is marked
+// Driver birthdays (section 3.10). On a driver's birthday their card is marked
 // and shown more often.
 //
 // Free of LVGL so the date arithmetic and the rotation bias can be tested on

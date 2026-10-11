@@ -20,7 +20,7 @@ struct Profile {
   const char *iso3;        // "" when the demonym is absent or unmapped: draw
                            // NO flag rather than a wrong one (decision 20)
   const char *dob;         // ISO date, for the age line
-  const char *line;        // legends only: one curated sentence (5.6.2)
+  const char *line;        // legends only: one curated sentence (3.10.2)
   uint16_t number;         // 0 when absent (DATA-7). NEVER an identity key
   uint16_t wins, starts, podiums;
   int16_t poles;           // -1 = unknown, OMIT the line (DATA-8)

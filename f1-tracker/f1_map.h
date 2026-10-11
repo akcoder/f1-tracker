@@ -2,7 +2,7 @@
 // Circuit map geometry (MAP-3 / MAP-5) and circuitId lookup (decision 23).
 //
 // Deliberately free of LVGL and of ESPHome so tests/ can build it on the host
-// (section 10). Everything expensive - projection, the fill rotation, the
+// (section 8). Everything expensive - projection, the fill rotation, the
 // int16 normalisation - already happened in tools/gen_circuits.py; what is left
 // is a scale and a translate.
 #include <cstdint>

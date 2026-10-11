@@ -1,6 +1,6 @@
 // The selective JSON scanner, run against the REAL captured responses in
-// reference/samples/ - the same bytes the device will parse (section 4.2).
-// Every data-quality case in section 3.4 is asserted here, because each one was
+// reference/samples/ - the same bytes the device will parse (section 1.2).
+// Every data-quality case in section 3.5 is asserted here, because each one was
 // observed in these exact files.
 #include <cstdarg>
 #include <cstdio>
@@ -206,7 +206,7 @@ static void test_openf1() {
 #include <algorithm>
 
 static void test_store() {
-  std::printf("store parsers (section 3.4 rules, real fixtures)\n");
+  std::printf("store parsers (section 3.5 rules, real fixtures)\n");
   using namespace f1::store;
 
   // civil-from-days against known UTC instants

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Generate f1-tracker/f1_facts.h - per-circuit facts beyond the GeoJSON.
 
-REQUIREMENTS.md 5.5 (MAP-4), decision 27. Computed offline from Jolpica and
+REQUIREMENTS.md 3.9.5 (MAP-4), decision 27. Computed offline from Jolpica and
 baked in, so the device never fetches them.
 
   * fastest race lap ever recorded at the circuit, with holder and year

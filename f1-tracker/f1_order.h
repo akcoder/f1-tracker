@@ -1,5 +1,5 @@
 #pragma once
-// The order page (section 6.3): 22 rows, mono12, 18 px each, TEAM column kept.
+// The order page (section 4.3): 22 rows, mono12, 18 px each, TEAM column kept.
 //
 // UI-10a: rows are built here in C++ rather than as an LVGL table, because each
 // one needs a flag IMAGE and a team-colour BAR and a table cell holds neither.
@@ -25,7 +25,7 @@ inline constexpr int MAX_ROWS = 24;      // 22 in 2026, with headroom
 inline constexpr int ROW_H = 18;         // decision 88, measured
 inline constexpr int BAR_W = 4;
 
-// Column x positions, from the measured render (6.3.1). Roboto Mono at 12 px
+// Column x positions, from the measured render (4.3.1). Roboto Mono at 12 px
 // advances exactly 7.0 px, so these are character-aligned.
 inline constexpr int X_BAR = 2, X_POS = 12, X_NUM = 44, X_FLAG = 72;
 inline constexpr int X_NAME = 96, X_TEAM = 178, X_GAP = 400;

@@ -1,5 +1,5 @@
 // Host tests for M1: circuit geometry, the circuitId map, and the carousel
-// rotation. REQUIREMENTS.md section 10.
+// rotation. REQUIREMENTS.md section 8.
 //
 // These build on the host because f1_map.h and f1_carousel.h are free of LVGL
 // and ESPHome - which is the whole reason they are separate from the drawing

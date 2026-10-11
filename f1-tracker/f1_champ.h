@@ -1,5 +1,5 @@
 #pragma once
-// Championship permutations (section 8.1).
+// Championship permutations (section B.1).
 //
 // "Max clinches if he finishes ahead of Norris" is the most interesting
 // sentence this device can print, and it is pure arithmetic over the standings

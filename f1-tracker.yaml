@@ -14,7 +14,7 @@ substitutions:
   backlight_min: "0.10"       # HW-6: lowest duty still visible; raise if the panel
                               # goes dark at the bottom of the brightness slider
   tracker_common_url: https://github.com/akcoder/tracker-common
-  tracker_common_ref: v0.2.1     # a tag, so a change in tracker-common cannot break this build
+  tracker_common_ref: v0.3.1     # a tag, so a change in tracker-common cannot break this build
   tracker_common_refresh: 1d
   manifest_url: https://akcoder.github.io/f1-tracker/manifest.json   # UI-68: built and published by the Firmware workflow
   carousel_default: "45"      # UI-20: seconds per card (brief asked 30 s - 1 min)
@@ -1357,7 +1357,7 @@ lvgl:
             text_font: mono12
             text_color: 0x5A6687
 
-    - id: settings_page         # UI-16 (section 7)
+    - id: settings_page         # UI-16 (section 4.15)
       skip: true
       bg_color: 0x000000
       bg_opa: COVER
@@ -1435,7 +1435,7 @@ lvgl:
             on_click:
               # 7.1.2: every change routes through the ENTITIES, which are the
               # single source of truth. The widgets are one view of them.
-              # Validation lives HERE, not in the widget (7.1.2, 6.8): the
+              # Validation lives HERE, not in the widget (4.15.1.2, 4.8): the
               # keypad cannot stop "-" or "95". Nothing is written until every
               # field is valid, and a clamped value is shown back to the user
               # and the page stays open - clamping with visible feedback.
@@ -1790,19 +1790,7 @@ lvgl:
             bg_color: 0x1A2547
             shadow_width: 0
             widgets:
-              - obj:
-                  align: CENTER
-                  width: SIZE_CONTENT
-                  height: SIZE_CONTENT
-                  bg_opa: TRANSP
-                  border_width: 0
-                  pad_all: 0
-                  clickable: false
-                  scrollable: false
-                  layout: {type: FLEX, flex_flow: ROW, flex_align_cross: CENTER, pad_column: 6}
-                  widgets:
-                    - label: {text: "\U000F0156", text_font: mdi18, text_color: 0xC9D3F2}
-                    - label: {text: "Close", text_font: mono16, text_color: 0xC9D3F2}
+              - label: {align: CENTER, text: "Close", text_font: mono16, text_color: 0xC9D3F2}
             on_click:
               - lambda: id(from_about) = true;      # return to Settings as it was left
               - lvgl.page.show: settings_page

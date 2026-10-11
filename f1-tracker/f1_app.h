@@ -2,7 +2,7 @@
 // The application tick: one place where the state machine, the race page, the
 // carousel and the watched driver meet.
 //
-// Everything on screen is a function of ONE state (section 4.1), so this is
+// Everything on screen is a function of ONE state (section 1.1), so this is
 // deliberately the only file that reads that state and writes widgets. Keeping
 // it in one place is what stops the header, the top-5 strip and the order page
 // disagreeing - plane-tracker decisions 47 and 57 are both that bug.
@@ -257,7 +257,7 @@ inline void update_header() {
   }
 }
 
-// ---- the watched-driver banner (6.14.3) ---------------------------------
+// ---- the watched-driver banner (4.14.3) ---------------------------------
 inline void update_banner(uint32_t now_ms) {
   if (g.w.banner == nullptr) return;
   if (g.alert.active) {
@@ -474,7 +474,7 @@ inline void refresh_data() {
     g.cal.fetched = true;
   }
 
-  // The watched driver's row highlight and the ambient marker (6.14.3).
+  // The watched driver's row highlight and the ambient marker (4.14.3).
   if (g.data.n_entries > 0) {
     for (int i = 0; i < g.data.n_entries; i++) {
       auto &e = g.data.entries[i];

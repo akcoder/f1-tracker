@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Generate f1-tracker/f1_portraits.h - driver and legend photographs.
 
-REQUIREMENTS.md 5.6.3, decisions 72-74, 91.
+REQUIREMENTS.md 3.10.3, decisions 72-74, 91.
 
 Portraits come from Wikimedia Commons and are baked into the firmware, which is
 exactly what sky_photos.h does for the planet images. OpenF1's headshot_url is

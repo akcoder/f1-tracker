@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Render the order page (REQUIREMENTS.md section 6.3) at 480x480 and measure the fit.
+"""Render the order page (REQUIREMENTS.md section 4.3) at 480x480 and measure the fit.
 
 Answers open question 3: do 22 rows fit at mono12? Uses the real Roboto Mono
 metrics, the real 2026 entry list and the real OpenF1 team colours, so the
@@ -77,7 +77,7 @@ def render(rows, font_path, with_team=True, row_h=18, label="a", watched="VER",
     img = Image.new("RGB", (W, H), BG)
     d = ImageDraw.Draw(img)
 
-    # ---- header (section 6.2 UI-3: clock-driven, never lap-driven)
+    # ---- header (section 4.2 UI-3: clock-driven, never lap-driven)
     d.text((10, 4), "R14 SPANISH GRAND PRIX", font=f16, fill=ORANGE)
     if big_state:
         # UI-3 is the page's most important line: spend the slack on it
@@ -118,7 +118,7 @@ def render(rows, font_path, with_team=True, row_h=18, label="a", watched="VER",
         ty = y + (row_h - 14) // 2
         d.text((X_POS, ty), str(r["pos"]), font=f12, fill=TEXT)
         d.text((X_NUM, ty), str(r["num"]), font=f12, fill=MUTED)
-        # flag placeholder, real size 16x12 (section 6.6)
+        # flag placeholder, real size 16x12 (section 4.6)
         if r["iso"]:
             d.rectangle([X_FLAG, ty + 2, X_FLAG + 15, ty + 13], fill=(0x33, 0x44, 0x66))
             d.text((X_FLAG + 1, ty + 1), r["iso"][:3], font=ImageFont.truetype(font_path, 9),

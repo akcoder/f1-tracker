@@ -1,9 +1,9 @@
 #pragma once
 // The data task: HTTPS to Jolpica and OpenF1, selective parse, and the poll
-// scheduling the state machine drives (sections 3.6, 4.2).
+// scheduling the state machine drives (sections 6a.1, 1.2).
 //
 // Runs on its own FreeRTOS task so a fetch, a TLS handshake or a parse can
-// never block rendering (section 9). The UI thread only ever reads the result
+// never block rendering (section 6). The UI thread only ever reads the result
 // under a short critical section.
 #include <cstdint>
 #include <cstdio>
@@ -91,7 +91,7 @@ inline Session g_jolpica, g_openf1, g_media;      // g_media: media.formula1.com
 inline char *g_body = nullptr;
 inline size_t g_body_len = 0;
 inline SemaphoreHandle_t g_lock = nullptr;
-inline volatile bool g_paused = false;   // held across an OTA (2.4.6)
+inline volatile bool g_paused = false;   // held across an OTA (6a.2)
 
 inline bool ensure_body() {
   if (g_body != nullptr) return true;
@@ -303,7 +303,7 @@ struct Plan {
 };
 
 // `extras_pending`: the caller knows whether the store still lacks a piece of
-// the post-session extras (store::extras_pending). Fetched ONCE per race (3.6.2).
+// the post-session extras (store::extras_pending). Fetched ONCE per race (6a.1.2).
 inline Plan plan_for(const state::Calendar &cal, const state::Status &st,
                      uint32_t now_utc, const Clock &clk, uint32_t now_ms,
                      bool extras_pending, bool headshots_wanted = false) {
@@ -383,7 +383,7 @@ inline Res pick(const Plan &p) {
 #if defined(USE_ESP32) && !defined(F1_HOST_TEST)
 
 // Double-buffered: the task parses into `back` and swaps under the lock, so the
-// UI thread never reads a half-written store (section 9 - a fetch must never
+// UI thread never reads a half-written store (section 6 - a fetch must never
 // block rendering, and a render must never see a torn parse).
 inline store::Store g_front, g_back;
 inline volatile bool g_wifi_up = false;

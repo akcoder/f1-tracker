@@ -1,5 +1,5 @@
 #pragma once
-// The detail card (section 6.11). Composition is kept free of LVGL so the text
+// The detail card (section 4.11). Composition is kept free of LVGL so the text
 // can be tested on the host; only open/close touches widgets.
 //
 // 6.1: with a card open, a tap ANYWHERE - including the gear - closes it rather

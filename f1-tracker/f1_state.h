@@ -1,11 +1,11 @@
 #pragma once
-// The weekend state machine (RACE-1, section 4.1) and the OpenF1 live-window
+// The weekend state machine (RACE-1, section 1.1) and the OpenF1 live-window
 // arithmetic (NET-14, 3.6.1).
 //
 // Everything the device shows is a function of ONE state derived from the
 // calendar and the clock. Free of LVGL and ESPHome so tests/ can drive it with
 // synthetic clocks - which matters more here than anywhere else in the project,
-// because the bug section 4.1 warns about is invisible until you are in the
+// because the bug section 1.1 warns about is invisible until you are in the
 // wrong time zone at the wrong hour.
 #include <cstdint>
 #include <cstring>
@@ -128,7 +128,7 @@ struct Status {
 };
 
 // The session that most recently started at or before `now`, and the next one
-// after it. Sessions with start == 0 are UNKNOWN, not midnight (section 3.4),
+// after it. Sessions with start == 0 are UNKNOWN, not midnight (section 3.5),
 // and are skipped entirely.
 inline void scan(const Calendar &cal, uint32_t now, Session &cur, Session &nxt) {
   cur = Session();

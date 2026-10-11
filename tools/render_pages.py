@@ -8,7 +8,7 @@ and the same Roboto Mono metrics the device uses.
 
 That makes these a check on the design rather than a drawing of it: a line that
 overflows, a column that collides or a card that is too dense shows up here,
-without a board (section 14.1).
+without a board (section D.1).
 
   python3 tools/render_pages.py --font /path/to/RobotoMono.ttf
 """
@@ -722,7 +722,7 @@ def page_about(ctx):
     cx, cy, cw, ch = box(G, "about_close")
     cx = W + cx - cw
     d.rounded_rectangle([cx, cy, cx + cw, cy + ch], 8, fill=(0x1A, 0x25, 0x47))
-    _pair(d, cx, cy, cw, ch, "Close", 0xF0156, 16)
+    d.text((cx + cw // 2, cy + ch // 2), "Close", font=FONT[16], fill=TEXT, anchor="mm")
     def centred(wid, text, size, fill):
         x, y, w, h = box(G, wid)
         d.text((x + w // 2, y), text, font=FONT[size], fill=fill, anchor="ma")

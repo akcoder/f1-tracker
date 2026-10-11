@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Generate f1-tracker/f1_circuits.h from the vendored f1-circuits GeoJSON.
 
-REQUIREMENTS.md section 5 (MAP-1..MAP-4), decisions 21-26.
+REQUIREMENTS.md section 3.9 (MAP-1..MAP-4), decisions 21-26.
 
 Everything expensive happens here so the device only scales and translates:
   * project lon/lat to metres about each circuit's own centroid, WITH the
