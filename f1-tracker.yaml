@@ -50,7 +50,6 @@ esphome:
     # built dynamically, enable the type here.
     - "-DLV_USE_IMAGE=1"
   includes:
-    - f1-tracker/f1_panel.h
     - f1-tracker/f1_logo.h         # generated: tools/gen_logo.py
     - f1-tracker/f1_circuits.h     # generated: tools/gen_circuits.py
     - f1-tracker/f1_calendar.h     # generated: tools/gen_calendar.py
@@ -86,7 +85,7 @@ esphome:
     - priority: 1100           # HW-7: before the SPI bus (1000) and the panel init
       then:
         - lambda: |-
-            f1::panel_soft_reset(39, 48, 47);   // CS, SCK, MOSI of GUITION-4848S040
+            tracker::panel_soft_reset(39, 48, 47);   // CS, SCK, MOSI of GUITION-4848S040
             // NET-2: fallback AP named "F1 Tracker - XXXX" (last MAC bytes).
             // Must be set before WiFi starts (250); ESPHome's ssid: is a literal.
             uint8_t mac[6];
