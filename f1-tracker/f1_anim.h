@@ -90,7 +90,16 @@ inline void step(Scene &s) {
     return;
   }
   if (!s.active) begin(s);
-  const int32_t t = (int32_t) (lv_tick_get() - s.t0);
+  int32_t t = (int32_t) (lv_tick_get() - s.t0);
+  // A page left open for days: `t` would overflow at 24.8 days, and long before that the float
+  // lap count loses the sub-millisecond steps and the cars judder. Each car's position is
+  // periodic in whole laps (f1_animlogic.h), so once the lights are done the origin is moved
+  // forward by whole laps and nothing on screen changes.
+  if (t > animlogic::GANTRY_END_MS + 60 * 1000) {
+    const int32_t fold = (t - animlogic::GANTRY_END_MS) / animlogic::LAP_MS * animlogic::LAP_MS;
+    s.t0 += (uint32_t) fold;
+    t -= fold;
+  }
 
   // the start lights: once, as the boot page opens
   if (s.lights) {

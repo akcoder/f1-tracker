@@ -422,7 +422,7 @@ DATA-19  [ ] Handle them failing **independently** — the circuit carousel must
 DATA-20  [ ] `http_request:` is included **even though the C++ task issues the
          requests** (ARCH-3), purely to pull in `esp_http_client`, `esp-tls`, the
          certificate bundle and ArduinoJson. Both siblings do this.
-NET-12  [ ] Keep the TLS session open between fetches. `plane-tracker`
+NET-12  [x] Keep the TLS session open between fetches. `plane-tracker`
         decision 65 measured a fresh handshake at ~1.2 s of crypto, and with
         `CONFIG_SPIRAM_XIP_FROM_PSRAM` that crypto runs on the same bus the RGB
         panel needs — the measured cause of `lvgl took a long time (1231 ms)`
@@ -548,7 +548,7 @@ DATA-12  [ ] OpenF1's track temperature drops to exactly `0.0`. Measured:
 DATA-34  [ ] **OpenF1 returns HTTP 404 for a filter with no matches** — `flag=RED` on
          a race with no red flag gave `{"detail":"No results found."}`. That is an
          empty result, not an error (decision 176).
-DATA-35  [ ] Treat an empty or unparseable body as a **failed poll**: keep the
+DATA-35  [x] Treat an empty or unparseable body as a **failed poll**: keep the
          existing state, do not clear it, retry on the next cycle.
 
 ### 3.6 Starting order — where it actually comes from
@@ -1809,7 +1809,7 @@ UI-180  [ ] **Guard against feedback loops.** Entity-set → widget-update →
         widget-callback → entity-set is an infinite loop. Suppress the callback
         while applying an external update, or make the setter idempotent and bail
         when the value is unchanged. This is the most likely bug in this area.
-UI-181  [ ] Route every change through **one apply-settings handler**, so "carousel
+UI-181  [x] Route every change through **one apply-settings handler**, so "carousel
         interval changed" retimes the timer and "auto-dim toggled" re-evaluates
         the backlight, regardless of which surface changed it.
 UI-182  [ ] **Validation lives in the handler, not the widget** — HA and the web UI
@@ -2061,7 +2061,7 @@ NET-23  [ ] **Re-check this table whenever either service's limits change** —
         Jolpica has said theirs will decrease (DATA-4).
 NET-24  [ ] Changing state must **retime the timers immediately**, not wait out the
         old interval.
-NET-25  [ ] `plane-tracker` decision 60: a restored `number` is **range-checked at
+NET-25  [x] `plane-tracker` decision 60: a restored `number` is **range-checked at
         boot**, not trusted. ESPHome restores stored bytes without clamping to
         `min_value`/`max_value`. The carousel interval and any poll-affecting
         setting must be clamped both at boot and at the point of use.
@@ -2565,6 +2565,7 @@ exists.
 | 197 | **Font roles, one set across the trackers** (audit against `sky-tracker` and `plane-tracker`): page names (`About`, `Display`, `Debug`) mono16 orange; settings rows, labels and text fields **mono16** (were mono14), hints mono12; About: `Version` mono16, `This device` and `Data from` mono12 orange headings over mono14 bodies, `About` header top left; debug page body **mono16** (was mono12); card titles mono18, card bodies mono14, order rows mono12 (22 rows need it); boot/About title Roboto 50 for f1 only (sized to the F1 logo, sky/plane use Roboto 34). Not shared: sky's mono15 alerts and mono72 countdown | 2026-10-10 | **asked for by owner**, implements 194 |
 | 198 | **The detail card shows a headshot for a driver with no compiled portrait** (a tap in the order list or the championship table): the same F1 media-server picture as the carousel (decision 193), wanted when the card opens, shown as its rows arrive and scaled from 206 to 120 px beside the text, credited `photo: formula1.com` (decision 72). Closing the card cancels nothing the network task is doing; the picture stays cached for the next card | 2026-10-10 | **asked for by owner**, closes the gap left by 188 |
 | 199 | **Titles are sentence case** (`About`, `Display`, `Race`, `Location`, `This device`, `Data from`), not capitals, on every page and in `tracker-common`'s shared text; abbreviations and acronyms keep theirs. The owner's convention for the three trackers, passed on by the `sky-tracker` session (its commit 2bba6b3). Supersedes the capitals in decisions 187, 196 and 197 | 2026-10-11 | **asked for by owner**, implements UI-194 |
+| 201 | **The code review's findings, fixed in one pass.** (1) A body cut short - reset or timeout mid-download, or larger than the buffer - is a failed poll, never parsed (DATA-35; half a calendar used to publish as a whole one). (2) A failed parse or a half-done two-request resource puts the back store back to what is published, so a later success cannot carry an older race's figures. (3) The order list records the season and round it is for; the watched driver's result alert fires only for a race or sprint, only from THIS round's list, and nothing is latched until a result is readable (6.14.2). (4) NET-12 is now in effect: the two API sessions stay open, a kept connection the server closed gets one fresh retry; the headshot session is not kept (6a.2). (5) UI-181: one `apply_settings` script, called by every entity's trigger and at boot; the watched driver, favourite team, alert switches, carousel interval and content now take effect without a reboot. (6) NET-25: restored numbers are clamped at boot and the hours at the point of use. (7) The circuit page flips on a short click only, so a hold no longer also turns the page. (8) The hourly update check starts an hour after boot. (9) `session_live` and `race_day` publish their first value. (10) Calendar strings are double-banked under the UI's snapshot; a shown headshot is pinned against recycling; the logo animation folds its clock by whole laps; a dinosaur without a timer is torn down; the data task has 12 KB of stack; the unused `mdi_setup` font is gone | 2026-10-13 | active |
 | 200 | **More is shared through `tracker-common` v0.4.0**: the board (`boards/guition-4848s040.yaml`, including Improv, the 30 kHz backlight - sky-tracker adopts it - and its tunables as substitutions), the diagnostic entities, the auto-dim curve, Auto Off and the 30 s backlight pass (`tracker_display.h`, with its tests; `f1_display.h` is gone), the install page template (`site/index.template.html`, `tools/make_site.py`, `docs/site.json`; `docs/index.html` is gone) and **one install card for every firmware install**: the old Uploading/Upgrading panel (`ota_panel`) is gone, the ESPHome and web-upload OTA drive the same card as the internet update, and this project's data task pauses and resumes through `tracker::upd::ota_hook_begin` and `ota_hook_error`. Supersedes the OTA panel of FAIL-12 | 2026-10-11 | **asked for by owner**, implements BUILD-14, BUILD-15 |
 
 ## Appendix B. Feature ideas

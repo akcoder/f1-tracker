@@ -253,10 +253,10 @@ static void test_watched() {
   const state::Status live = state::evaluate(cal_of(cs), race + 600, true);
   watch::Latch latch;
   int ev = -1;
-  const watch::Event on = watch::due(cfg, live, latch, 0, ev);
+  const watch::Event on = watch::due(cfg, live, latch, 0, "", ev);
   okf(on != watch::EV_NONE, "entered: an alert is due during the race");
   cfg.entered = roster::watched_entered(v27, id, cfg.entered);
-  okf(watch::due(cfg, live, latch, 0, ev) == watch::EV_NONE,
+  okf(watch::due(cfg, live, latch, 0, "", ev) == watch::EV_NONE,
       "after the rollover he is not entered: the same moment raises nothing");
 }
 

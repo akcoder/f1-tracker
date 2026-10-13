@@ -53,6 +53,7 @@ struct App {
   watch::Latch latch;
   watch::Alert alert;
   uint32_t last_eval_ms = 0;
+  bool ready = false;           // setup() has run: apply_settings may touch the UI
   bool clock_valid = false;
   uint32_t now_utc = 0;
   store::Store data;            // the last published snapshot
@@ -246,7 +247,7 @@ inline void update_header() {
   if (g.w.race_facts && ridx2 >= 0 && ridx2 < g.cal.n) {
     const auto *c = map::by_circuit_id(g.cal.rounds[ridx2].circuit_id);
     const facts::Fact *f = facts::find(g.cal.rounds[ridx2].circuit_id);
-    char b[160];
+    char b[160] = "";      // empty when a venue is in neither table: never an uninitialised label
     int k = 0;
     if (c) k += std::snprintf(b + k, sizeof(b) - k, "%.3f km\n", c->length_m / 1000.0f);
     if (f && f->fl_time[0])
@@ -599,7 +600,11 @@ inline void tick(uint32_t now_ms) {
   // confirm it (a driver found on the grid is entered whatever the roster says).
   g.watch_cfg.entered = roster::watched_entered(ui::g.roster, g.watch_cfg.driver_id,
                                                 g.watch_cfg.entered);
-  for (int i = 0; i < g.data.n_entries; i++)
+  // 6.14.2: only an order list for THIS round says anything about this round. Until the new
+  // results land, the store still holds the previous race's, and those must not become a
+  // "finishes P3" the moment the window closes.
+  const bool this_round = g.data.entries_season == g.cal.season && g.data.entries_round == round;
+  for (int i = 0; this_round && i < g.data.n_entries; i++)
     if (g.data.entries[i].watched) {
       if (g.data.entries_mode == state::FINAL) finish_pos = g.data.entries[i].pos;
       else grid_pos = g.data.entries[i].pos;
@@ -660,6 +665,37 @@ inline void setup(const Widgets &w) {
   std::snprintf(g.watch_cfg.given, sizeof(g.watch_cfg.given), "Max");
   std::snprintf(g.watch_cfg.iso3, sizeof(g.watch_cfg.iso3), "NLD");
   g.watch_cfg.entered = true;
+  g.ready = true;
+}
+
+// UI-181: every setting lands here, whichever surface changed it - the panel's Save, the
+// web UI or Home Assistant (each entity's own trigger calls it) - and once at boot. It is
+// idempotent, so calling it for an unchanged value costs nothing visible. `team` and
+// `driver` are the select options as written ("(none)" for neither).
+inline void apply_settings(float carousel_s, int content_idx, const char *team, const char *driver,
+                           bool alerts, bool milestones_only, bool loud) {
+  if (!g.ready) return;              // an entity restored before setup: boot applies them after
+  ui::set_interval(carousel_s);
+  if (content_idx != ui::g.content_idx) ui::set_content(content_idx);   // restages the carousel
+  const bool have_team = team && *team && std::strcmp(team, "(none)") != 0;
+  std::snprintf(g.favourite.name, sizeof(g.favourite.name), "%s", have_team ? team : "");
+  // 6.14.1: the option is "Given Family"; what is kept is the driverId, resolved from the
+  // compiled table. No match (or "(none)") watches nobody.
+  g.watch_cfg.driver_id[0] = g.watch_cfg.code[0] = g.watch_cfg.given[0] = g.watch_cfg.iso3[0] = '\0';
+  for (int k = 0; driver && *driver && k < drivers::N; k++) {
+    char full[48];
+    std::snprintf(full, sizeof(full), "%s %s", drivers::P[k].given, drivers::P[k].family);
+    if (std::strcmp(full, driver) != 0) continue;
+    std::snprintf(g.watch_cfg.driver_id, sizeof(g.watch_cfg.driver_id), "%s", drivers::P[k].driver_id);
+    std::snprintf(g.watch_cfg.code, sizeof(g.watch_cfg.code), "%s", drivers::P[k].code);
+    std::snprintf(g.watch_cfg.given, sizeof(g.watch_cfg.given), "%s", drivers::P[k].given);
+    std::snprintf(g.watch_cfg.iso3, sizeof(g.watch_cfg.iso3), "%s", drivers::P[k].iso3);
+    break;
+  }
+  g.watch_cfg.enabled = alerts && g.watch_cfg.driver_id[0] != '\0';
+  g.watch_cfg.milestones_only = milestones_only;
+  g.watch_cfg.loud = loud;
+  g.data_gen = 0;                    // the row marks (watched, favourite) are re-derived next tick
 }
 
 }  // namespace app

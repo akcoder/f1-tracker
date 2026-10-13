@@ -130,6 +130,36 @@ int main() {
     okf(n == 0, "milestones_only must suppress the per-session tier, got %d", n);
   }
 
+  std::printf("a result alert waits for the result (6.14.2)\n");
+  {
+    Config c = cfg_default();
+    Latch latch; Alert a;
+    // Find the race's POST_SESSION: the window has closed, the results may not be in yet.
+    state::Status st;
+    uint32_t t = race;
+    for (; t < race + 6 * 3600; t += 60) {
+      st = state::evaluate(cal, t, true);
+      if (st.weekend == state::POST_SESSION) break;
+    }
+    okf(st.weekend == state::POST_SESSION, "fixture: the race reaches POST_SESSION");
+    okf(!step(c, st, latch, a, t * 1000u, 2026, 1, 0, 0, ""), "no result yet: nothing raised");
+    okf(!latch.already((int) calendar::RACE, EV_RESULT), "...and nothing latched, so it can still fire");
+    okf(step(c, st, latch, a, t * 1000u + 1000, 2026, 1, 0, 3, ""), "the result lands: raised");
+    okf(a.event == EV_RESULT && std::strstr(a.line, "P3") != nullptr, "says P3, got '%s'", a.line);
+    okf(!step(c, st, latch, a, t * 1000u + 2000, 2026, 1, 0, 3, ""), "once only");
+
+    // Qualifying has a grid, not a result: an order list at its POST_SESSION raises no result.
+    Latch l2; Alert a2;
+    state::Status q;
+    for (t = quali; t < quali + 6 * 3600; t += 60) {
+      q = state::evaluate(cal, t, true);
+      if (q.weekend == state::POST_SESSION) break;
+    }
+    okf(q.weekend == state::POST_SESSION, "fixture: qualifying reaches POST_SESSION");
+    step(c, q, l2, a2, t * 1000u, 2026, 1, 3, 1, "");
+    okf(a2.event != EV_RESULT, "qualifying must not raise a result alert");
+  }
+
   std::printf("wording (4.14.2)\n");
   {
     Config c = cfg_default();

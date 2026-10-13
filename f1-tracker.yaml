@@ -172,17 +172,6 @@ esphome:
             aw.banner_text = id(watch_text);
             aw.banner_flag = id(watch_flag);
             f1::app::setup(aw);
-            {  // 8.2: the favourite team. This TemplateSelect exposes an index
-               // rather than a string, so the names live beside the options.
-              static const char *const TEAMS[] = {
-                  "", "Red Bull Racing", "McLaren", "Ferrari", "Mercedes",
-                  "Aston Martin", "Alpine", "Williams", "Racing Bulls", "Audi",
-                  "Haas F1 Team", "Cadillac"};
-              const int i = (int) id(favourite_team).active_index().value_or(0);
-              if (i > 0 && i < (int) (sizeof(TEAMS) / sizeof(TEAMS[0])))
-                snprintf(f1::app::g.favourite.name, sizeof(f1::app::g.favourite.name),
-                         "%s", TEAMS[i]);
-            }
             f1::detail::setup(id(detail_panel), id(detail_title), id(detail_body),
                               id(detail_flag), id(detail_photo), id(detail_credit));
             tracker::upd::set_source("${manifest_url}");
@@ -200,6 +189,35 @@ esphome:
             f1::anim::init(id(wifi_page)->obj, id(boot_mark), id(about_page)->obj, id(about_mark));
             f1::net::start();                 // the data task, pinned to core 1
             lv_label_set_text(id(wifi_title), "Connecting to Wi-Fi");   // BOOT-2: start-up done
+        - lambda: |-
+            // NET-25: a restored number is range-checked at boot, not trusted - ESPHome
+            // restores the stored bytes without clamping to min/max, and a NaN or a
+            // "95" from an older build would otherwise be read as it is.
+            auto clamp = [](number::Number *n, float lo, float hi, float dflt) {
+              const float v = n->state;
+              const float c = std::isnan(v) ? dflt : (v < lo ? lo : (v > hi ? hi : v));
+              if (std::isnan(v) || c != v) n->make_call().set_value(c).perform();
+            };
+            clamp(id(obs_lat), -90, 90, ${obs_lat});
+            clamp(id(obs_lon), -180, 180, ${obs_lon});
+            clamp(id(off_from), 0, 23, 23);
+            clamp(id(off_to), 0, 23, 7);
+            clamp(id(carousel_secs), 15, 120, ${carousel_default});
+        - script.execute: apply_settings   # UI-181: the restored settings, once, now that the UI exists
+
+# UI-181 / 7.1.2: ONE apply-settings handler. The panel's Save, the web UI and Home
+# Assistant all change the ENTITIES; each entity's trigger below lands here, and so
+# does boot. Validation stays at Save and at boot (UI-182, NET-25).
+script:
+  - id: apply_settings
+    then:
+      - lambda: |-
+          f1::app::apply_settings(id(carousel_secs).state,
+                                  (int) id(carousel_content).active_index().value_or(0),
+                                  id(favourite_team).current_option().c_str(),
+                                  id(watched_driver).current_option().c_str(),
+                                  id(watched_alerts).state, id(milestone_only).state,
+                                  id(alert_style).active_index().value_or(0) == 0);
 
 wifi:
   id: wifi_comp
@@ -279,14 +297,6 @@ font:
     bpp: 4                    # tools/gen_icons.py - guessing one gives a blank
                               # glyph that compiles and only shows on a screen.
     glyphs: ["\U000F0017", "\U000F009E", "\U000F00DF", "\U000F00E1", "\U000F0150", "\U000F0156", "\U000F0162", "\U000F0193", "\U000F023C", "\U000F0241", "\U000F02FD", "\U000F034E", "\U000F0379", "\U000F03E9", "\U000F04BA", "\U000F051B", "\U000F051F", "\U000F053A", "\U000F056C", "\U000F0594", "\U000F05A8", "\U000F05A9", "\U000F061A", "\U000F0835", "\U000F0904", "\U000F0925", "\U000F0A60", "\U000F0BB1", "\U000F0F57", "\U000F0F5A", "\U000F113B"]
-  - file:
-      type: web
-      url: https://cdn.jsdelivr.net/npm/@mdi/font@7.4.47/fonts/materialdesignicons-webfont.ttf
-    id: mdi_setup
-    size: 44
-    bpp: 4
-    glyphs: ["\U000F05A9", "\U000F16BE"]        # wifi, wifi-cog
-
 globals:
   - id: from_about            # set by About's Close so the settings page does NOT
     type: bool                # re-stage on return - that would discard unsaved edits and
@@ -375,6 +385,7 @@ number:
     restore_value: true
     initial_value: ${carousel_default}
     web_server: {sorting_group_id: grp_display, sorting_weight: 3}
+    on_value: [script.execute: apply_settings]
 
 switch:
   - platform: template        # UI-44c: blank the panel overnight. Separate from
@@ -398,6 +409,8 @@ switch:
     optimistic: true
     restore_mode: RESTORE_DEFAULT_ON
     web_server: {sorting_group_id: grp_race, sorting_weight: 3}
+    on_turn_on: [script.execute: apply_settings]
+    on_turn_off: [script.execute: apply_settings]
   - platform: template        # 6.14.3: the rare tier without the per-session one
     id: milestone_only
     name: Milestone Alerts Only
@@ -405,6 +418,8 @@ switch:
     optimistic: true
     restore_mode: RESTORE_DEFAULT_OFF
     web_server: {sorting_group_id: grp_race, sorting_weight: 4}
+    on_turn_on: [script.execute: apply_settings]
+    on_turn_off: [script.execute: apply_settings]
   - platform: template
     id: show_practice
     name: Show Practice Sessions
@@ -439,6 +454,7 @@ select:
     optimistic: true
     restore_value: true
     web_server: {sorting_group_id: grp_display, sorting_weight: 5}
+    on_value: [script.execute: apply_settings]
   - platform: template
     id: carousel_order
     name: Carousel Order
@@ -458,6 +474,7 @@ select:
     optimistic: true
     restore_value: true
     web_server: {sorting_group_id: grp_race, sorting_weight: 1}
+    on_value: [script.execute: apply_settings]
   - platform: template        # 8.2: tint both rows and show the constructors'
     id: favourite_team        # position. ESPHome select options are compile-time
     name: Favourite Team      # (decision 109), so this list is the current grid.
@@ -469,6 +486,7 @@ select:
     optimistic: true
     restore_value: true
     web_server: {sorting_group_id: grp_race, sorting_weight: 9}
+    on_value: [script.execute: apply_settings]
   - platform: template        # decision 92: loud ships as the default
     id: alert_style
     name: Alert Style
@@ -478,6 +496,7 @@ select:
     optimistic: true
     restore_value: true
     web_server: {sorting_group_id: grp_race, sorting_weight: 2}
+    on_value: [script.execute: apply_settings]
   - platform: template
     id: order_columns
     name: Order Columns
@@ -879,9 +898,9 @@ lvgl:
       bg_color: 0x000000
       bg_opa: COVER
       scrollable: false
-      on_click:
-        - if:                   # 6.1: a card open means a tap only closes it
-            condition: {lambda: 'return f1::app::tap_consumed();'}
+      on_short_click:           # short: LVGL sends CLICKED after a long press too, which
+        - if:                   # would turn "hold to pause" into a page flip
+            condition: {lambda: 'return f1::app::tap_consumed();'}   # 6.1: a card open means a tap only closes it
             then: []
             else:
               - lvgl.page.next: {animation: FADE_IN, time: 200ms}
@@ -1658,11 +1677,14 @@ interval:
             const auto &st = f1::app::g.st;
             const bool live = st.weekend == f1::state::SESSION_LIVE ||
                               st.weekend == f1::state::RACE_LIVE;
-            if (id(session_live).state != live) id(session_live).publish_state(live);
+            // The first value is published too, else HA shows "unknown" until a session
+            if (!id(session_live).has_state() || id(session_live).state != live)
+              id(session_live).publish_state(live);
             const bool rday = st.weekend == f1::state::RACE_LIVE ||
                               (st.weekend == f1::state::SESSION_SOON && st.next.valid() &&
                                f1::state::is_race(st.next.session));
-            if (id(race_day).state != rday) id(race_day).publish_state(rday);
+            if (!id(race_day).has_state() || id(race_day).state != rday)
+              id(race_day).publish_state(rday);
             if (st.to_next > 0) id(next_session_in).publish_state(st.to_next / 60.0f);
           }
           if (t.is_valid()) f1::ui::update_birthday(t.year, t.month, t.day_of_month);
@@ -1727,8 +1749,9 @@ interval:
             id(lvgl_comp)->show_page(id(race_page)->index, LV_SCREEN_LOAD_ANIM_NONE, 0);
           }
   - interval: 1h                # "Made for ESPHome": check for a published
-    then:                       # firmware update once an hour.
-      - lambda: |-
+    startup_delay: 1h           # firmware update once an hour. Without the delay the
+    then:                       # first run lands 0-5 s after boot, a third TLS session
+      - lambda: |-              # beside the boot fetches (6a.2); on_boot does the first
           if (id(wifi_comp).is_connected()) tracker::upd::check_quiet("hourly");
   - interval: 30s               # UI-44 / UI-44c: auto-dim follows the Sun, and
     then:                       # Auto Off blanks the panel overnight.
@@ -1740,8 +1763,10 @@ interval:
           id(sun_elevation).publish_state(tracker::sun::elevation(
               (double) t.timestamp, (double) id(obs_lat).state, (double) id(obs_lon).state));
           tracker::display::g_state.window.enabled = id(auto_off).state;
-          tracker::display::g_state.window.from_hour = (uint8_t) id(off_from).state;
-          tracker::display::g_state.window.to_hour = (uint8_t) id(off_to).state;
+          // NET-25: clamped at the point of use as well as at boot
+          auto hour = [](float v) { return (uint8_t) (v >= 0 && v <= 23 ? v : 0); };
+          tracker::display::g_state.window.from_hour = hour(id(off_from).state);
+          tracker::display::g_state.window.to_hour = hour(id(off_to).state);
           tracker::display::Pass p;
           p.unix_s = t.timestamp;
           p.hour = t.hour;
