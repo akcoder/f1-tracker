@@ -149,6 +149,8 @@ struct Store {
   Entry entries[MAX_ENTRIES];
   int n_entries = 0;
   state::OrderMode entries_mode = state::ENTRY_LIST;
+  uint16_t entries_season = 0;    // the race the entries describe: /current/last/ is the
+  uint8_t entries_round = 0;      // PREVIOUS round until the new results are published
 
   Standing standings[MAX_STANDINGS];
   int n_standings = 0;
@@ -215,13 +217,22 @@ inline bool parse_calendar(const char *s, size_t n, Store &out) {
 
   static const char *KEYS[] = {"FirstPractice", "SecondPractice", "ThirdPractice",
                                "SprintQualifying", "Sprint", "Qualifying"};
+  // The Round structs point at these. Two banks, used in turn: the UI thread's snapshot
+  // still points at the previous parse's strings while this one is written, and a parse
+  // comes once a day, long after every reader has moved on to the new snapshot.
+  struct Bank { char names[MAX_ROUNDS][48], cids[MAX_ROUNDS][28], countries[MAX_ROUNDS][28], locals[MAX_ROUNDS][28]; };
+  static Bank banks[2];
+  static int bank_i = 0;
+  Bank &b = banks[bank_i ^= 1];
+  char (&names)[MAX_ROUNDS][48] = b.names;
+  char (&cids)[MAX_ROUNDS][28] = b.cids;
+  char (&countries)[MAX_ROUNDS][28] = b.countries;
+  char (&locals)[MAX_ROUNDS][28] = b.locals;
   int kept = 0;
   for (int i = 0; i < nr && kept < MAX_ROUNDS; i++) {
     const size_t r = json::array_at(s, races, n, i);
     if (r == json::NPOS) continue;
     calendar::Round &R = out.rounds[kept];
-    static char names[MAX_ROUNDS][48], cids[MAX_ROUNDS][28],
-                countries[MAX_ROUNDS][28], locals[MAX_ROUNDS][28];
     long round = 0;
     json::get_int(s, r, n, "round", round);
     R.round = (uint8_t) round;
@@ -261,6 +272,13 @@ inline bool parse_calendar(const char *s, size_t n, Store &out) {
   return true;
 }
 
+// Which race an order list belongs to (3.3: season + round are the identity).
+inline void entries_identity(const char *s, size_t race, size_t n, Store &out) {
+  char v[8];
+  out.entries_season = json::get_str(s, race, n, "season", v, sizeof(v)) ? (uint16_t) atoi(v) : 0;
+  out.entries_round = json::get_str(s, race, n, "round", v, sizeof(v)) ? (uint8_t) atoi(v) : 0;
+}
+
 // Qualifying classification -> GRID (PROVISIONAL). Penalties are not applied to
 // it, which is why the mode says so (3.5).
 inline bool parse_qualifying(const char *s, size_t n, Store &out) {
@@ -292,6 +310,7 @@ inline bool parse_qualifying(const char *s, size_t n, Store &out) {
   if (kept == 0) return false;
   out.n_entries = kept;
   out.entries_mode = state::GRID_PROVISIONAL;
+  entries_identity(s, r0, n, out);
   out.generation++;
   return true;
 }
@@ -342,6 +361,7 @@ inline bool parse_results(const char *s, size_t n, Store &out) {
   if (kept == 0) return false;
   out.n_entries = kept;
   out.entries_mode = state::FINAL;
+  entries_identity(s, r0, n, out);
   out.generation++;
   return true;
 }

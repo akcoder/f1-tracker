@@ -268,6 +268,9 @@ static void test_store() {
     okf(parse_results(j.c_str(), j.size(), st), "results parsed");
     okf(st.entries_mode == f1::state::FINAL, "results land as FINAL");
     okf(st.n_entries > 0, "result rows");
+    // 6.14.2: the list says which race it is for, so an older one is never read as this round's
+    okf(st.entries_season >= 2024 && st.entries_round > 0, "results carry season %u round %u",
+        (unsigned) st.entries_season, (unsigned) st.entries_round);
     okf(st.entries[0].pos == 1, "winner is P1");
     // 6.3: a retirement keeps its row, greyed, rather than vanishing.
     int retired = 0;
