@@ -144,6 +144,18 @@ attribution is required by both licences and the device shows it.
 > so it's a season tracker and a race-weekend companion rather than a live
 > timing screen. The race page counts down to lights out, then to the result.
 
+## Is this vibe-coded AI slop?
+
+Every line of this project was written by Claude, and it was not left to
+guess. I bring almost 30 years of professional software engineering and
+architecture experience, and I steered the work: small memory use, low CPU
+use, and a fast, responsive touch interface on a chip whose 480×480 panel is
+refreshed from the same PSRAM bus that every TLS handshake and picture decode
+has to share. The design decisions and the spec are written down in
+[REQUIREMENTS.md](REQUIREMENTS.md), and the host tests and the warning-free
+build gate have to pass before anything ships. This project would not exist
+without Claude.
+
 ## Licence
 
 [MIT](LICENSE) for this project's code and configuration. The files generated
