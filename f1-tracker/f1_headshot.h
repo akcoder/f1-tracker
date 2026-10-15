@@ -42,6 +42,7 @@ struct Slot {
   uint16_t *buf = nullptr;                         // W x H RGB565
   uint32_t used_ms = 0;                            // last asked for
   uint32_t failed_ms = 0;
+  int pins = 0;                                    // pictures on screen reading buf (UI thread only)
 };
 
 inline Slot g_slots[SLOTS];
@@ -67,14 +68,14 @@ inline Slot *want(const char *code, uint32_t now_ms) {
     }
     return s;
   }
-  // a free slot, else the least recently used one that is not being fetched
+  // a free slot, else the least recently used one that is neither being fetched nor on screen
   Slot *pick = nullptr;
   for (auto &c : g_slots) {
     if (c.state.load() == EMPTY) { pick = &c; break; }
-    if (c.state.load() == LOADING) continue;
+    if (c.state.load() == LOADING || c.pins > 0) continue;
     if (pick == nullptr || (int32_t) (c.used_ms - pick->used_ms) < 0) pick = &c;
   }
-  if (pick == nullptr) return nullptr;             // all four are mid-fetch
+  if (pick == nullptr) return nullptr;             // all four are mid-fetch or showing
   if (pick->buf == nullptr) {
 #ifdef F1_HOST_TEST
     pick->buf = (uint16_t *) std::malloc((size_t) W * H * 2);
@@ -91,6 +92,11 @@ inline Slot *want(const char *code, uint32_t now_ms) {
   pick->queued.store(true);
   return pick;
 }
+
+// UI thread: a picture being shown from `s.buf` must not be recycled under it (f1_photo.h
+// pins while it shows, unpins when it stops).
+inline void pin(Slot &s) { s.pins++; }
+inline void unpin(Slot &s) { if (s.pins > 0) s.pins--; }
 
 // Network task: the next picture waiting to be fetched, or nullptr.
 inline Slot *next_job() {

@@ -41,6 +41,7 @@ struct Photo {
   // A picture the network task is decoding into its own buffer (f1_headshot.h): shown from
   // that buffer as its rows arrive. Then there is no decode task of ours.
   const std::atomic<int> *rows_src = nullptr, *state_src = nullptr;
+  headshot::Slot *slot = nullptr;      // the slot shown, pinned so its buffer is not recycled
 };
 
 inline void on_rows(int done, void *ctx) {
@@ -80,6 +81,7 @@ inline void stop(Photo &ph) {
   if (ph.timer) { lv_timer_delete(ph.timer); ph.timer = nullptr; }
   if (ph.img) lv_obj_add_flag(ph.img, LV_OBJ_FLAG_HIDDEN);
   ph.rows_src = ph.state_src = nullptr;
+  if (ph.slot) { headshot::unpin(*ph.slot); ph.slot = nullptr; }
 }
 
 // Show `p` in ph.img, top-down. False = no picture (none, no memory, no task): the
@@ -132,6 +134,8 @@ inline bool show_external(Photo &ph, headshot::Slot *slot) {
   lv_image_set_scale(ph.img, (uint32_t) ph.ext_scale);
   ph.rows_src = &slot->rows;
   ph.state_src = &slot->state;
+  ph.slot = slot;
+  headshot::pin(*slot);
   ph.shown = -1;
   lv_obj_remove_flag(ph.img, LV_OBJ_FLAG_HIDDEN);
   if (slot->state.load() != headshot::READY) ph.timer = lv_timer_create(tick, 40, &ph);

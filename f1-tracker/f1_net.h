@@ -103,33 +103,51 @@ inline bool ensure_body() {
   return true;
 }
 
+// Opens `url` on the session, sending the request and reading the headers. NET-12: a
+// kept connection the server has since closed (idle timeouts are seconds to a minute)
+// fails exactly here, so a reused handle gets ONE fresh handle and a second try before
+// the fetch counts as failed. Returns the HTTP status, 0 on failure (the handle dropped).
+inline int open_request(Session &s, const char *url, bool keep) {
+  for (int attempt = 0;; attempt++) {
+    const bool reused = s.h != nullptr;
+    if (!reused) {
+      esp_http_client_config_t cfg = {};
+      cfg.url = url;
+      cfg.crt_bundle_attach = esp_crt_bundle_attach;
+      cfg.timeout_ms = 15000;
+      cfg.buffer_size = HTTP_RX_BUFFER;       // NET-15
+      cfg.keep_alive_enable = keep;           // NET-12
+      s.h = esp_http_client_init(&cfg);
+      if (s.h == nullptr) return 0;
+    } else {
+      esp_http_client_set_url(s.h, url);
+    }
+    const bool sent = esp_http_client_open(s.h, 0) == ESP_OK &&
+                      esp_http_client_fetch_headers(s.h) >= 0;
+    const int status = sent ? esp_http_client_get_status_code(s.h) : 0;
+    if (status > 0) return status;
+    // Drop the handle: a half-open connection would desynchronise the next request
+    // (decision 65). A reused one most likely went stale; try once more, fresh.
+    esp_http_client_cleanup(s.h); s.h = nullptr;
+    if (!reused || attempt > 0) return 0;
+  }
+}
+
+// The response has been read. `clean`: the stream is in step and the connection stays
+// open for the next request (NET-12). Otherwise the handle goes: a body not read to
+// completion leaves the stream out of step (decision 65), and nothing can be reused.
+inline void end_request(Session &s, bool clean, bool keep) {
+  if (clean && keep) return;
+  esp_http_client_close(s.h);
+  esp_http_client_cleanup(s.h); s.h = nullptr;
+}
+
 // One GET. Returns the body length, or 0 on failure with g_stats.last_fault set.
 inline size_t fetch(Session &s, const char *url, uint32_t now_ms) {
   if (!ensure_body()) return 0;
 
-  if (s.h == nullptr) {
-    esp_http_client_config_t cfg = {};
-    cfg.url = url;
-    cfg.crt_bundle_attach = esp_crt_bundle_attach;
-    cfg.timeout_ms = 15000;
-    cfg.buffer_size = HTTP_RX_BUFFER;       // NET-15
-    cfg.keep_alive_enable = true;           // NET-12
-    s.h = esp_http_client_init(&cfg);
-    if (s.h == nullptr) { g_stats.last_fault = HTTP_ERROR; return 0; }
-  } else {
-    esp_http_client_set_url(s.h, url);
-  }
-
-  esp_err_t err = esp_http_client_open(s.h, 0);
-  if (err != ESP_OK) {
-    // Drop the handle: a half-open connection would desynchronise the next
-    // request (decision 65).
-    esp_http_client_cleanup(s.h); s.h = nullptr;
-    g_stats.last_fault = TIMEOUT;
-    return 0;
-  }
-  esp_http_client_fetch_headers(s.h);
-  const int status = esp_http_client_get_status_code(s.h);
+  const int status = open_request(s, url, true);
+  if (status == 0) { g_stats.last_fault = TIMEOUT; return 0; }
   g_stats.last_status = (uint16_t) status;
 
   size_t total = 0;
@@ -140,13 +158,20 @@ inline size_t fetch(Session &s, const char *url, uint32_t now_ms) {
     if (total >= BODY_MAX - 1) break;
   }
   g_body[total] = '\0';
+  // DATA-35: a body cut short - a reset or the 15 s timeout mid-download, or one
+  // larger than the buffer - is a FAILED poll, never parsed. Half a calendar would
+  // otherwise publish as a whole one. The length is known from the header or from
+  // the chunking; a response with neither cannot be checked and is taken as read.
+  const int64_t declared = esp_http_client_get_content_length(s.h);
+  const bool chunked = esp_http_client_is_chunked_response(s.h);
   const bool complete = esp_http_client_is_complete_data_received(s.h);
-  esp_http_client_close(s.h);
-
-  if (!complete) {
-    // decision 65: a body not read to completion leaves the stream out of step,
-    // so the handle cannot be reused.
-    esp_http_client_cleanup(s.h); s.h = nullptr;
+  const bool truncated = total >= BODY_MAX - 1 ||
+                         (chunked ? !complete : (declared > 0 && (int64_t) total < declared));
+  end_request(s, complete && !truncated, true);
+  if (truncated) {
+    ESP_LOGW(TAG, "body cut short at %u bytes (%lld declared)", (unsigned) total, (long long) declared);
+    g_stats.last_fault = TIMEOUT;
+    return 0;
   }
 
   if (&s == &g_openf1 && store::openf1_no_results(status, g_body, total)) {
@@ -186,25 +211,10 @@ inline void headshot_row(uint16_t *, int y, void *ctx) {
 
 inline bool fetch_headshot(const char *url, headshot::Slot &sl) {
   Session &s = g_media;
-  if (s.h == nullptr) {
-    esp_http_client_config_t cfg = {};
-    cfg.url = url;
-    cfg.crt_bundle_attach = esp_crt_bundle_attach;
-    cfg.timeout_ms = 15000;
-    cfg.buffer_size = HTTP_RX_BUFFER;
-    cfg.keep_alive_enable = true;
-    s.h = esp_http_client_init(&cfg);
-    if (s.h == nullptr) { g_stats.last_fault = HTTP_ERROR; return false; }
-  } else {
-    esp_http_client_set_url(s.h, url);
-  }
-  if (esp_http_client_open(s.h, 0) != ESP_OK) {
-    esp_http_client_cleanup(s.h); s.h = nullptr;
-    g_stats.last_fault = TIMEOUT;
-    return false;
-  }
-  esp_http_client_fetch_headers(s.h);
-  const int status = esp_http_client_get_status_code(s.h);
+  // Not kept open: a third TLS session beside the two of NET-12 is what ran sky-tracker
+  // out of memory (6a.2), and a picture is wanted now and then, not every few minutes.
+  const int status = open_request(s, url, false);
+  if (status == 0) { g_stats.last_fault = TIMEOUT; return false; }
   g_stats.last_status = (uint16_t) status;
   bool ok = status == 200;
   tracker::png::Decoder dec;
@@ -219,11 +229,7 @@ inline bool fetch_headshot(const char *url, headshot::Slot &sl) {
     ok = dec.feed(chunk, (size_t) r);
     if (g_paused) { ok = false; break; }            // an OTA started: let go
   }
-  const bool complete = esp_http_client_is_complete_data_received(s.h);
-  esp_http_client_close(s.h);
-  if (!complete || !ok) {                           // out of step: the handle cannot be reused
-    esp_http_client_cleanup(s.h); s.h = nullptr;
-  }
+  end_request(s, ok && esp_http_client_is_complete_data_received(s.h), false);
   if (!ok || !dec.done) {
     ESP_LOGW(TAG, "headshot %s: %s", sl.code, dec.error ? dec.error : "incomplete");
     if (g_stats.last_fault == OK) g_stats.last_fault = HTTP_ERROR;
@@ -558,6 +564,13 @@ inline void task_body(void *) {
         // every loop; every other extras step makes progress and may go straight on.
         if (recheck) clk.defer(r, now_ms, (uint32_t) state::intervals_for(st.weekend).openf1_s);
       } else {
+        // 3.4: nothing of a failed poll is kept. A parser that bailed part way, or the
+        // first half of a two-request resource whose second half failed, has already
+        // written into the back store; put it back to what is published, so the next
+        // success cannot carry an older race's figures beside a newer one.
+        lock();
+        std::memcpy(&g_back, &g_front, sizeof(store::Store));
+        unlock();
         // 3.7.4: a failed resource is retried, but never tightly. OpenF1 steps
         // wait out the state's own interval (5 min in POST_SESSION).
         const uint32_t wait = (r == RES_EXTRAS)
@@ -588,7 +601,9 @@ inline void task_body(void *) {
 inline void start() {
   if (g_lock == nullptr) g_lock = xSemaphoreCreateMutex();
   // Pinned to core 1 so it cannot contend with the LVGL/display work on core 0.
-  xTaskCreatePinnedToCore(task_body, "f1_net", 8192, nullptr, 3, nullptr, 1);
+  // 12 KB: a TLS handshake, the PNG decoder and the roster parse's temporaries all
+  // live on this stack; 8 KB left no margin.
+  xTaskCreatePinnedToCore(task_body, "f1_net", 12288, nullptr, 3, nullptr, 1);
 }
 
 inline void wifi_up(bool up) { g_wifi_up = up; }

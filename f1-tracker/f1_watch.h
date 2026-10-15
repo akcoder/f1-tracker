@@ -136,19 +136,23 @@ inline bool is_milestone(int finish_pos, uint16_t wins_after, uint16_t starts_af
 }
 
 // Decide what, if anything, to raise. Returns EV_NONE when nothing is due.
-// `finish_pos` is 0 when no result is known yet.
+// `finish_pos` is 0 when no result is known yet; `status` is his retirement
+// reason, "" when none - both from THIS round's results, never an older list.
 // Returns the event AND the session it is latched against, so step() can mark
 // exactly what due() tested. Computing the session twice, slightly differently,
 // is how the latch leaked in the first place.
 inline Event due(const Config &cfg, const state::Status &st, const Latch &latch,
-                 int finish_pos, int &session_out) {
+                 int finish_pos, const char *status, int &session_out) {
   session_out = -1;
   if (!cfg.enabled || !cfg.entered || !st.clock_valid) return EV_NONE;
 
   const int cur = st.current.valid() ? st.current.session : -1;
 
-  // Result first: it is the most informative thing we can say.
-  if (st.weekend == state::POST_SESSION && cur >= 0 &&
+  // Result first: it is the most informative thing we can say. 6.14.2: only a race
+  // (or sprint) has a result, and only once it is actually readable - until then
+  // nothing is latched, so the alert still fires when the results land.
+  const bool have_result = finish_pos > 0 || (status && *status);
+  if (st.weekend == state::POST_SESSION && cur >= 0 && state::is_race(cur) && have_result &&
       !latch.already(cur, EV_RESULT)) {
     session_out = cur;
     return EV_RESULT;
@@ -227,7 +231,7 @@ inline bool step(const Config &cfg, const state::Status &st, Latch &latch,
   }
 
   int session = -1;
-  const Event e = due(cfg, st, latch, finish_pos, session);
+  const Event e = due(cfg, st, latch, finish_pos, status, session);
   if (e == EV_NONE) return false;
 
   char line[64];

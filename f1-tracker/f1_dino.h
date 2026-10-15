@@ -228,6 +228,11 @@ inline bool begin_walk(uint32_t seed) {
         if (lv_tick_get() - st.last_frame >= 150) frame();     // no refresh came: cover the gap
       },
       40, nullptr);
+  if (st.timer == nullptr) {                                   // no timer, no way to end the walk
+    ESP_LOGW("dino", "no memory for the timer: no walk");
+    end_walk();                                                // running is set, so this tears it down
+    return false;
+  }
   frame();
   return true;
 }
