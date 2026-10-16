@@ -21,7 +21,8 @@ URL = "https://cdn.jsdelivr.net/npm/@mdi/svg@7.4.47/meta.json"
 ICONS = {
     "auto_dim":      ("brightness-auto",   "Auto-dim display"),
     "auto_off":      ("power-sleep",       "Auto off"),
-    "dinosaur":      ("paw",               "Dinosaur (a footprint)"),
+    "dinosaur":      ("google-downasaur",  "Dinosaur (MDI's offline T-rex; a paw was a stand-in)"),
+    "time_zone":     ("earth",             "Time zone"),
     "brightness":    ("brightness-6",      "Brightness"),
     "carousel_secs": ("timer-outline",     "Carousel interval"),
     "carousel_what": ("view-carousel",     "Carousel content"),

@@ -154,7 +154,27 @@ int main() {
     CHECK(bad_loop == 0, "after a lap each car is exactly one lap on, so a loop repeats cleanly");
     CHECK(slow == 0 && fast == 0, "speeds stay between 0.05 and 2 laps per lap (%d slow, %d fast)", slow, fast);
     CHECK(bad_side == 0, "the pull-out is 0..1");
-    CHECK(no_pass <= 30, "most seeds have an overtake within a lap (%d of 300 have none)", no_pass);
+    // MOTION-3a: with the gentler swing the opening lap alone is not always eventful; over the
+    // first three laps the re-dealt order makes an overtake all but certain
+    int no_pass3 = 0;
+    for (uint32_t seed = 1; seed <= 300; seed++) {
+      int swaps = 0;
+      for (int lap = 0; lap < 3 && swaps == 0; lap++) {
+        const Pack pk = lap_pack(seed, lap);
+        for (int j = 0; j < N_CARS; j++)
+          for (int k = j + 1; k < N_CARS; k++) {
+            float prev = car_pos(pk, j, (float) lap) - car_pos(pk, k, (float) lap);
+            for (int i = 1; i <= 400; i++) {
+              const float d = car_pos(pk, j, lap + i / 400.0f) - car_pos(pk, k, lap + i / 400.0f);
+              if ((prev < 0) != (d < 0) && std::fabs(d) < 0.3f && std::fabs(prev) < 0.3f) swaps++;
+              prev = d;
+            }
+          }
+      }
+      if (swaps == 0) no_pass3++;
+    }
+    CHECK(no_pass <= 150, "many openings have an overtake in their first lap (%d of 300 have none)", no_pass);
+    CHECK(no_pass3 <= 15, "nearly every opening has one within three laps (%d of 300 have none)", no_pass3);
     // the demo seed must show at least one, so the renders do
     const Pack d = make_pack(DEMO_SEED);
     int swaps = 0;
@@ -175,6 +195,54 @@ int main() {
     CHECK(most > 0.5f, "a car pulls out to pass in the demo (%.2f)", most);
     // the passer is the faster one at the moment of passing
     CHECK(pulling_out(make_pack(DEMO_SEED), 0, 0.0f) >= 0.0f, "pull-out defined at the start");
+  }
+
+  std::printf("every lap a new set, handed over seamlessly, the order re-dealt (MOTION-3a)\n");
+  {
+    int changed = 0, carlaps = 0, reorders = 0, laps = 0, jumps = 0;
+    float slowest = 9;
+    for (uint32_t seed = 1; seed <= 40; seed++) {
+      Pack prev = make_pack(seed);
+      uint32_t x = seed;
+      for (int lap = 1; lap <= 5; lap++) {
+        const Pack next = next_pack(prev, xorshift(x));
+        const float at = (float) lap;
+        CHECK(next.lap == lap, "the set knows its lap");
+        for (int k = 0; k < N_CARS; k++) {
+          CHECK(std::fabs(car_pos(prev, k, at) - car_pos(next, k, at)) < 1e-4f,
+                "seed %u lap %d car %d: the position must not jump at the line", seed, lap, k);
+          // the pace is matched unless that would need a swing past SWING_CAP (then a small step)
+          const float dv = std::fabs(car_speed(prev, k, at) - car_speed(next, k, at));
+          if (dv > 2e-3f) jumps++;
+          CHECK(dv < 0.25f, "seed %u lap %d car %d: a pace step at the line of %.3f", seed, lap, k, dv);
+          CHECK(next.a[k] >= SWING_MIN - 1e-6f && next.a[k] <= SWING_CAP + 1e-6f, "the swing stays in range");
+          for (int i = 0; i <= 100; i++) slowest = std::fmin(slowest, car_speed(next, k, at + i / 100.0f));
+          carlaps++;
+          if (next.n[k] != prev.n[k] || std::fabs(next.a[k] - prev.a[k]) > 0.02f) changed++;
+        }
+        // at the next line the pack is nose to tail again, in some order
+        float at_line[N_CARS];
+        for (int k = 0; k < N_CARS; k++) at_line[k] = car_pos(next, k, at + 1.0f) - (at + 1.0f);
+        bool same_order = true;
+        for (int k = 0; k < N_CARS; k++) {
+          bool slot_ok = false;
+          for (int s2 = 0; s2 < N_CARS; s2++) if (std::fabs(at_line[k] + s2 * CAR_GAP) < 1e-4f) slot_ok = true;
+          CHECK(slot_ok, "seed %u lap %d car %d ends the lap off the grid (%.4f)", seed, lap, k, at_line[k]);
+          if (std::fabs(at_line[k] - (car_pos(next, k, at) - at)) > 1e-4f) same_order = false;
+        }
+        laps++;
+        if (!same_order) reorders++;
+        prev = next;
+      }
+      const Pack walked = lap_pack(seed, 5);
+      CHECK(std::fabs(walked.a[0] - prev.a[0]) < 1e-6f && walked.n[2] == prev.n[2],
+            "lap_pack walks the same chain the device does");
+      CHECK(lap_pack(seed, 0).a[1] == make_pack(seed).a[1], "lap 0 is the opening pack");
+    }
+    CHECK(changed * 2 > carlaps, "laps really differ: %d of %d car-laps changed their swing", changed, carlaps);
+    CHECK(reorders * 2 > laps, "the order at the line really changes: %d of %d laps", reorders, laps);
+    CHECK(slowest > 0.25f, "no car ever near-stalls, slowest pace %.2f of the mean", slowest);
+    CHECK(jumps * 10 < carlaps, "pace steps at the line are the exception: %d of %d", jumps, carlaps);
   }
 
   std::printf("%d checks, %d failures\n", checks, fails);

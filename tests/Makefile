@@ -7,7 +7,7 @@ $(error tracker-common not found at $(TC): git clone https://github.com/akcoder/
 endif
 CXXFLAGS ?= -std=c++17 -O1 -g -Wall -Wextra -Werror -Wno-unused-parameter -I$(TC)
 HDRS     := $(wildcard ../f1-tracker/*.h)
-BINS     := test_m1 test_state test_json test_watch test_birthday test_champ test_team test_extras test_rollover test_net test_boot test_anim test_headshot test_dino
+BINS     := test_m1 test_state test_json test_watch test_birthday test_champ test_team test_extras test_rollover test_net test_boot test_anim test_headshot test_dino test_toucan test_tz
 
 # test_jpg needs LVGL's TJpgDec from an ESPHome build (see the end of this file)
 TJPG_SRC := $(firstword $(wildcard ../.esphome/build/f1-tracker/managed_components/lvgl__lvgl/src/libs/tjpgd))

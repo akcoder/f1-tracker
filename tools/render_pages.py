@@ -15,6 +15,7 @@ without a board (section D.1).
 import argparse, glob, io, json, math, os, re, sys, textwrap
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import tracker_common
+import critter_common as cc
 from PIL import Image, ImageDraw, ImageFont
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -230,11 +231,16 @@ def draw_map(d, c, pts, ox, oy, w, h, lw=3):
     px, py = -dy / m, dx / m
     d.line([(ax - px * 8, ay - py * 8), (ax + px * 8, ay + py * 8)], fill=ORANGE, width=lw)
     if c["rot"]:
+        # decision 202: an arrow with barbs and an "N", as draw_trace draws it
         th = math.radians((-c["rot"] / 100.0) % 360.0)
-        nx, ny = ox + w - 18, oy + 18
-        d.line([(nx + math.sin(th) * 7, ny + math.cos(th) * 7),
-                (nx - math.sin(th) * 7, ny - math.cos(th) * 7)], fill=MUTED, width=2)
-        d.text((nx - 3, ny + 9), "N", font=FONT[10], fill=MUTED)
+        nx, ny = ox + w - 22, oy + 20
+        dx, dy = -math.sin(th), -math.cos(th)
+        px, py = -dy, dx
+        hx, hy = nx + dx * 8, ny + dy * 8
+        d.line([(nx - dx * 8, ny - dy * 8), (hx, hy)], fill=MUTED, width=2)
+        d.line([(hx - dx * 5 + px * 4, hy - dy * 5 + py * 4), (hx, hy),
+                (hx - dx * 5 - px * 4, hy - dy * 5 - py * 4)], fill=MUTED, width=2)
+        d.text((nx - 4, ny + 10), "N", font=FONT[12], fill=MUTED)
 
 
 def footer(d, credit=None):
@@ -328,21 +334,25 @@ def page_race(ctx, hide_strip=False):
     f = ctx["facts"].get(rnd["cid"])
     rx, ry, _, _ = box(G, "race_facts")
     if not hide_strip:
-        d.text((rx, ry), f"{c['length']/1000:.3f} km", font=FONT[12], fill=MUTED)
+        d.text((rx, ry), f"{c['length']/1000:.3f} km", font=FONT[13], fill=MUTED)       # mono13 (decision 202)
         if f and f[2]:
-            d.text((rx, ry + 18), f"FL {f[2]}", font=FONT[12], fill=MUTED)
+            d.text((rx, ry + 19), f"FL {f[2]}", font=FONT[13], fill=MUTED)
         if f and f[8] != "0":
-            d.text((rx, ry + 36), f"last {f[6]}", font=FONT[12], fill=MUTED)
+            d.text((rx, ry + 38), f"last {f[6]}", font=FONT[13], fill=MUTED)
+        # 8.2 / decision 202: the season progress lives here now
+        done = sum(1 for r in cal if r["round"] < rnd["round"])
+        d.text((rx, ry + 57), f"{len(cal) - done} of {len(cal)} to go", font=FONT[13], fill=MUTED)
     footer(d); gear(d)
     return img, "page-2-race"
 
 
 def page_order(ctx):
-    require(ctx["geo"], "page-3-order", "order_title", "order_hdr", "order_rows")
+    require(ctx["geo"], "page-3-order", "order_title", "order_clock", "order_hdr", "order_rows")
     img = Image.new("RGB", (W, H), BG); d = ImageDraw.Draw(img)
     d.text((10, 4), "R14 \u00b7 Spanish Grand Prix", font=FONT[16], fill=ORANGE)
     d.text((10, 23), "Grid (provisional)", font=FONT[15], fill=TEXT)
     d.text((10, 41), "Lights out in 2:14:30", font=FONT[12], fill=MUTED)
+    clock(d)
     d.text((12, 58), "Pos  #   Nat Driver     Team               To pole", font=FONT[12], fill=MUTED)
     d.line([(8, 74), (W - 8, 74)], fill=ROW_BRD)
     y = 78
@@ -365,36 +375,50 @@ def page_order(ctx):
     return img, "page-3-order"
 
 
+def clock(d):
+    """The clock, upper right of every content page (owner): mono24, 10 px in."""
+    d.text((W - 12, 2), "14:35", font=FONT[24], fill=TEXT, anchor="ra")
+
+
 def _card_head(img, d, ctx, badge, title, iso3):
-    d.text((10, 6), badge, font=FONT[12], fill=ORANGE)
-    d.text((10, 24), title[:38], font=FONT[18], fill=TEXT)
+    d.text((10, 4), badge, font=FONT[16], fill=ORANGE)      # the same two lines as the race page's header
+    d.text((10, 24), title[:38], font=FONT[16], fill=TEXT)
+    clock(d)
     if iso3 and iso3 in ctx["flags"]:
-        img.paste(ctx["flags"][iso3].resize((32, 24), Image.NEAREST), (420, 26))
+        # decision 202: just past the end of the title, never a fixed x
+        x = min(10 + int(d.textlength(title[:38], font=FONT[16])) + 12, 480 - 12 - 32)
+        img.paste(ctx["flags"][iso3].resize((32, 24), Image.NEAREST), (x, 24))
 
 
 def page_circuit(ctx):
-    require(ctx["geo"], "page-4-circuit", "card_badge", "card_title", "card_map",
+    require(ctx["geo"], "page-4-circuit", "card_badge", "card_title", "card_map", "circuit_clock",
             "card_body", "card_flag", "card_credit")
     pts, cs, idmap = ctx["circ"]
     season, cal = ctx["cal"]
     rnd = next(r for r in cal if r["cid"] == "monaco")
     c = cs[idmap["monaco"]]
     img = Image.new("RGB", (W, H), BG); d = ImageDraw.Draw(img)
-    _card_head(img, d, ctx, "Circuit", c["name"], rnd["iso3"])
+    _card_head(img, d, ctx, "Circuit", c["name"], None)      # the flag sits by the place name instead
     cx, cy, cw, ch = box(ctx["geo"], "card_map")
     draw_map(d, c, pts, cx, cy, cw, ch)
     f = ctx["facts"].get("monaco")
-    body = f"{c['loc']}   {c['length']/1000:.3f} km   first GP {c['firstgp']}   Round {rnd['round']}, {season}"
+    # decision 202: four lines under a full-width trace, in mono14, no blank line, a
+    # 13-character label column - as f1_ui.h composes it; the first line indented for the flag
+    body = f"{c['loc']}    · {c['length']/1000:.3f} km · first GP {c['firstgp']} · Round {rnd['round']}, {season}"
+    if rnd["iso3"] in ctx["flags"]:
+        fx, fy, _, _ = box(ctx["geo"], "card_body")
+        cell = d.textlength("0", font=FONT[14])      # the flag AFTER the place name, as f1_ui.h places it
+        img.paste(ctx["flags"][rnd["iso3"]], (int(fx + (len(c["loc"]) + 1) * cell), fy + 3))
     if f:
         _, races, flt, flw, fly, ev, drv, team, ly, top, topn = f
         if flt:
-            body += f"\n\nFastest lap  {flt}   {flw} {fly}  (since 2004)"
+            body += f"\n{'Fastest lap':<13}{flt}  {flw} {fly} (since 2004)"
         if ly != "0":
-            body += f"\nLast winner  {drv}, {team}\n             {ly} {ev}"
+            body += f"\n{'Last winner':<13}{drv}, {team} {ly}"
         if int(topn) > 1:
-            body += f"\nMost wins    {top} ({topn})   {races} races held"
+            body += f"\n{'Most wins':<13}{top} ({topn}) · {races} races held"
     bx, by, _, _ = box(ctx["geo"], "card_body")
-    d.multiline_text((bx, by), body, font=FONT[12], fill=MUTED, spacing=4)
+    d.multiline_text((bx, by), body, font=FONT[14], fill=MUTED, spacing=3)
     footer(d); gear(d)
     return img, "page-4-circuit"
 
@@ -497,15 +521,18 @@ def page_legend(ctx):
 
 
 def page_standings(ctx):
-    require(ctx["geo"], "page-7-standings", "standings_hdr", "standings_body",
+    require(ctx["geo"], "page-7-standings", "standings_clock", "standings_hdr", "standings_body",
             "constructors_hdr", "constructors_body", "champ_line")
     img = Image.new("RGB", (W, H), BG); d = ImageDraw.Draw(img)
     d.text((10, 4), "Championship", font=FONT[16], fill=ORANGE)
+    clock(d)
     d.text((12, 32), "Pos     Driver      Pts", font=FONT[12], fill=MUTED)
-    LH = 16          # mono12's line height; the firmware places the flags on the label's own pitch
+    LH = 22          # mono12's line height 16 + 6 px of line space (decision 202); the firmware places the flags on the label's own pitch
+    BOTTOM = 428     # the scroll area ends here: rows past it are reached by scrolling
     cw = d.textlength("0", font=FONT[12])
     y = 52
     for s in ctx["standings"][:22]:
+        if y + LH > BOTTOM: break          # the rest scrolls
         d.text((12, y), f"{s['pos']:>2}      {s['name'][:10]:<10} {s['points']:>4}"
                + (" W" if s["wins"] else ""), font=FONT[12], fill=TEXT)
         if s.get("iso3") in ctx["flags"]:    # between the position and the name, by driverId
@@ -527,9 +554,10 @@ def page_standings(ctx):
 
 
 def page_summary(ctx):
-    require(ctx["geo"], "page-8-summary", "summary_body")
+    require(ctx["geo"], "page-8-summary", "summary_clock", "summary_body")
     img = Image.new("RGB", (W, H), BG); d = ImageDraw.Draw(img)
     d.text((10, 4), "Race summary", font=FONT[16], fill=ORANGE)
+    clock(d)
     s = ctx["summary"]
     body = (f"{s['season']} {s['event']}\n\n"
             f"{'Fastest lap':<16} {s['fl_time']}\n{'':<16} {s['fl_driver']}, lap {s['fl_lap']}\n\n"
@@ -761,7 +789,7 @@ def _row_icon(d, px, py, y, cp):
 def page_settings(ctx):
     G = ctx["geo"]
     img, d, px, py = _settings_frame(ctx, "page-9-settings", 0,
-        ("sw_autodim", "sw_autooff", "sw_dino", "sl_bright", "ta_off_from", "ta_off_to"))
+        ("sw_autodim", "sw_autooff", "sw_24h", "sl_bright", "ta_off_from", "ta_off_to"))
     _row_icon(d, px, py, 6, 0xF00E1); d.text((px + 44, py + 6), "Auto bright", font=FONT[16], fill=TEXT); d.text((px + 44, py + 28), "dims after sunset", font=FONT[12], fill=MUTED)
     _sw(d, px, py, "sw_autodim", G, True)
     _row_icon(d, px, py, 56, 0xF0904); d.text((px + 44, py + 56), "Auto off overnight", font=FONT[16], fill=TEXT)
@@ -773,9 +801,9 @@ def page_settings(ctx):
     d.text((px + 364, py + 106), "local h", font=FONT[12], fill=MUTED)
     _row_icon(d, px, py, 162, 0xF00DF); d.text((px + 44, py + 162), "Brightness", font=FONT[16], fill=TEXT)
     _slider(d, px, py, "sl_bright", G, 0.8)
-    _row_icon(d, px, py, 206, 0xF03E9); d.text((px + 44, py + 206), "Dinosaur", font=FONT[16], fill=TEXT)
-    d.text((px + 44, py + 228), "walks by now and then", font=FONT[12], fill=MUTED)
-    _sw(d, px, py, "sw_dino", G, True)
+    _row_icon(d, px, py, 206, 0xF0150); d.text((px + 44, py + 206), "Time format", font=FONT[16], fill=TEXT)   # clock-outline
+    d.text((px + 250, py + 206), "12h", font=FONT[16], fill=TEXT); d.text((px + 378, py + 206), "24h", font=FONT[16], fill=TEXT)
+    _sw(d, px, py, "sw_24h", G, True)
     return img, "page-9-settings"
 
 
@@ -796,16 +824,20 @@ def page_settings_race(ctx):
 def page_settings_location(ctx):
     G = ctx["geo"]
     img, d, px, py = _settings_frame(ctx, "page-9c-settings-location", 2,
-        ("ta_lat", "ta_lon", "settings_kb"))
+        ("ta_lat", "ta_lon", "dd_tz", "settings_kb"))
     _row_icon(d, px, py, 10, 0xF0F57); d.text((px + 44, py + 10), "Latitude", font=FONT[16], fill=TEXT)
     _field(d, px, py, "ta_lat", G, "61.580")
     d.text((px + 320, py + 12), "N+  S-", font=FONT[12], fill=MUTED)
     _row_icon(d, px, py, 60, 0xF0F5A); d.text((px + 44, py + 60), "Longitude", font=FONT[16], fill=TEXT)
     _field(d, px, py, "ta_lon", G, "-149.440")
     d.text((px + 320, py + 62), "E+  W-", font=FONT[12], fill=MUTED)
-    d.multiline_text((px + 16, py + 104),
+    _row_icon(d, px, py, 110, 0xF01E7); d.text((px + 44, py + 110), "Time zone", font=FONT[16], fill=TEXT)   # earth
+    _field(d, px, py, "dd_tz", G, "Alaska")
+    bx, by, bw, bh = box(G, "dd_tz", px, py)
+    d.polygon([(bx + bw - 26, by + bh // 2 - 3), (bx + bw - 14, by + bh // 2 - 3), (bx + bw - 20, by + bh // 2 + 4)], fill=MUTED)
+    d.multiline_text((px + 16, py + 156),
         "Latitude and longitude set sunrise/sunset for auto-dim only.\n"
-        "The time zone is fixed in firmware and does not follow them.",
+        "The time zone is its own setting above and does not follow them.",
         font=FONT[12], fill=MUTED, spacing=3)
     # The keyboard covers the lower third while a field is being edited; draw it
     # so a panel row that slides under it shows up here rather than on a device.
@@ -912,19 +944,50 @@ class Pack:
             return x
         for _ in range(4): nxt()
         self.n, self.a, self.phase = [], [], []
-        for _ in range(int(c["N_CARS"])):
+        n_cars = int(c["N_CARS"])
+        for _ in range(n_cars):
             self.n.append(1 + nxt() % 2)
             self.a.append(c["SWING_MIN"] + (c["SWING_MAX"] - c["SWING_MIN"]) * (nxt() % 1000) / 999.0)
             self.phase.append((nxt() % 1000) / 1000.0)
+        # MOTION-3a: lap 0 is the grid with no gain
+        self.lap = 0
+        self.off = [-k * c["CAR_GAP"] for k in range(n_cars)]
+        self.gain = [0.0] * n_cars
+
+    def next(self, seed):
+        """animlogic::next_pack - the next lap's set: the order at the line re-dealt, each car's
+        net pace carrying it to its new slot, position and speed continuous at the line."""
+        c = self.c
+        p = Pack(c, seed)
+        p.lap = self.lap + 1
+        x = (seed * 2246822519 + 0x3C6EF372) & 0xFFFFFFFF or 1
+        for _ in range(4): x = _xorshift(x)
+        slot = list(range(len(self.a)))
+        for i in range(len(slot) - 1, 0, -1):
+            x = _xorshift(x)
+            j = x % (i + 1)
+            slot[i], slot[j] = slot[j], slot[i]
+        for k in range(len(self.a)):
+            p.off[k] = self.off[k] + self.gain[k]
+            p.gain[k] = -slot[k] * c["CAR_GAP"] - p.off[k]
+            v = self.gain[k] + self.a[k] * math.cos(2 * math.pi * self.phase[k])
+            need = v - p.gain[k]
+            if p.a[k] < abs(need): p.a[k] = min(abs(need), c["SWING_CAP"])
+            ph = math.acos(max(-1.0, min(1.0, need / p.a[k]))) / (2 * math.pi)
+            p.phase[k] = ph if p.phase[k] < 0.5 else 1.0 - ph
+        return p
 
     def swing(self, k, u):
         return self.a[k] * math.sin(2 * math.pi * (self.n[k] * u + self.phase[k])) / (2 * math.pi * self.n[k])
 
     def pos(self, k, u):
-        return u - k * self.c["CAR_GAP"] + self.swing(k, u) - self.swing(k, 0.0)
+        f = u - self.lap
+        return u + self.off[k] + self.gain[k] * f + self.swing(k, f) - self.swing(k, 0.0)
+
 
     def speed(self, k, u):
-        return 1.0 + self.a[k] * math.cos(2 * math.pi * (self.n[k] * u + self.phase[k]))
+        f = u - self.lap
+        return 1.0 + self.gain[k] + self.a[k] * math.cos(2 * math.pi * (self.n[k] * f + self.phase[k]))
 
     def pulling_out(self, k, u):
         w = 0.0
@@ -935,6 +998,22 @@ class Pack:
             if abs(d) < self.c["PASS_ZONE"] and self.speed(k, u) > self.speed(j, u):
                 w = max(w, 1.0 - abs(d) / self.c["PASS_ZONE"])
         return w
+
+
+def _xorshift(x):
+    x ^= (x << 13) & 0xFFFFFFFF; x ^= x >> 17; x ^= (x << 5) & 0xFFFFFFFF
+    return x
+
+
+def lap_pack(c, seed, lap):
+    """animlogic::lap_pack - the pack for lap `lap` of an opening: lap 0 is Pack(seed), each later
+    lap follows from the one before through the same xorshift chain the device walks."""
+    p = Pack(c, seed)
+    x = seed or 1
+    for _ in range(lap):
+        x = _xorshift(x)
+        p = p.next(x)
+    return p
 
 
 def _hex(v): return ((v >> 16) & 255, (v >> 8) & 255, v & 255)
@@ -957,8 +1036,8 @@ def _anim(img, c, logo_xy, size, t_ms, lights=False):
     track = _lap(size)
     f = (t_ms % c["LAP_MS"]) / c["LAP_MS"]
     sprites = _car_sprites()["LARGE" if size >= 150 else "SMALL"]
-    pack = Pack(c, int(c["DEMO_SEED"]))
     u = t_ms / c["LAP_MS"] if t_ms > 0 else 0.0
+    pack = lap_pack(c, int(c["DEMO_SEED"]), int(u))              # MOTION-3a: this lap's swings
     side = c["SIDE_PX_PER_100"] * size / 100.0
     order = []
     for k in range(int(c["N_CARS"])):
@@ -1002,8 +1081,8 @@ def page_boot_strip(ctx):
     """Four moments of the boot sequence side by side: 1 light, 3, 5, then lights out."""
     c = anim_consts()
     ts = [c["STEP_MS"] * 1 + 100, c["STEP_MS"] * 3 + 100, c["STEP_MS"] * 5 + 400, c["OUT_MS"] + 250]
-    frames = [_anim_boot(ctx, t).crop((60, 20, 420, 440)) for t in ts]
-    out = Image.new("RGB", (360 * 4 + 12, 420), (0x20, 0x20, 0x20))
+    frames = [_anim_boot(ctx, t).crop((60, 20, 420, 460)) for t in ts]   # to y 460: the lamps sit at 442
+    out = Image.new("RGB", (360 * 4 + 12, 440), (0x20, 0x20, 0x20))
     for i, f in enumerate(frames):
         out.paste(f, (i * 364, 0))
     return out, "boot-cars-strip"
@@ -1082,8 +1161,8 @@ def _detail_card(ctx, name, photo_rows):
     img, _ = page_order(ctx)
     d = ImageDraw.Draw(img, "RGBA")
     d.rectangle([0, 0, W, H], fill=(0, 0, 0, 150))
-    d.rounded_rectangle([20, 40, 460, 440], 12, fill=PANEL, outline=BORDER, width=2)
-    px0, py0 = 20, 40                       # the panel's origin: every child is relative to it
+    d.rounded_rectangle([20, 20, 460, 460], 12, fill=PANEL, outline=BORDER, width=2)
+    px0, py0 = 20, 20                       # the panel's origin: every child is relative to it
     p = next(x for x in ctx["drivers"] if x["id"] == "max_verstappen")
     d.text((px0 + 16, py0 + 12), f"{p['given']} {p['family']}", font=FONT[18], fill=ORANGE)
     if p["iso3"] in ctx["flags"]:
@@ -1098,7 +1177,7 @@ def _detail_card(ctx, name, photo_rows):
             f"{'Poles':<20} {p['poles']}\n"
             f"{'World titles':<20} {p['titles']}\n\n" + "\n".join(textwrap.wrap(p["line"], cols)))
     bx, by, _, _ = box(G, "detail_body", px0, py0)
-    d.multiline_text((bx, by), body, font=FONT[14], fill=TEXT, spacing=5)
+    d.multiline_text((bx, by), body, font=FONT[16], fill=TEXT, spacing=4)
     # the portrait: half size, a 2x2 box average of the 240x320 JPEG (f1_jpg.h)
     jpg = ctx["por"][0].get(p["id"])
     fx, fy, _, _ = box(G, "detail_photo", px0, py0)
@@ -1109,7 +1188,7 @@ def _detail_card(ctx, name, photo_rows):
         cx, cy, cw, _ = box(G, "detail_credit", px0, py0)
         credit = textwrap.wrap("photo: " + ctx["por"][1][p["id"]], int(cw // 7.2))
         d.multiline_text((cx, cy), "\n".join(credit), font=FONT[12], fill=MUTED, spacing=2)
-    d.text((240, 420), "tap anywhere to close", font=FONT[12], fill=DIM, anchor="mm")
+    d.text((240, 440), "tap anywhere to close", font=FONT[12], fill=DIM, anchor="mm")
     return img, name
 
 
@@ -1122,20 +1201,20 @@ def overlay_detail_rookie(ctx):
     img, _ = page_order(ctx)
     d = ImageDraw.Draw(img, "RGBA")
     d.rectangle([0, 0, W, H], fill=(0, 0, 0, 150))
-    d.rounded_rectangle([20, 40, 460, 440], 12, fill=PANEL, outline=BORDER, width=2)
-    px0, py0 = 20, 40
+    d.rounded_rectangle([20, 20, 460, 460], 12, fill=PANEL, outline=BORDER, width=2)
+    px0, py0 = 20, 20
     d.text((px0 + 16, py0 + 12), "Arvid Lindblad", font=FONT[18], fill=ORANGE)
     if "GBR" in ctx["flags"]:
         img.paste(ctx["flags"]["GBR"].resize((32, 24), Image.NEAREST), (412, 56))
     body = "#41  LIN   Racing Bulls\n\n" + f"{'Starts (provisional)':<20} P12\n" + f"{'Gap':<20} +3.204"
     bx, by, _, _ = box(G, "detail_body", px0, py0)
-    d.multiline_text((bx, by), body, font=FONT[14], fill=TEXT, spacing=5)
+    d.multiline_text((bx, by), body, font=FONT[16], fill=TEXT, spacing=4)
     fx, fy, _, _ = box(G, "detail_photo", px0, py0)
     sz = 256 * 120 // 206 * 206 // 256          # the scaled size LVGL gives it: ~120 px
     img.paste(_silhouette().resize((sz, sz), Image.BILINEAR), (fx, fy))
     cx, cy, cw, _ = box(G, "detail_credit", px0, py0)
     d.multiline_text((cx, cy), "\n".join(textwrap.wrap("photo: formula1.com", int(cw // 7.2))), font=FONT[12], fill=MUTED, spacing=2)
-    d.text((240, 420), "tap anywhere to close", font=FONT[12], fill=DIM, anchor="mm")
+    d.text((240, 440), "tap anywhere to close", font=FONT[12], fill=DIM, anchor="mm")
     return img, "overlay-detail-rookie"
 
 
@@ -1259,35 +1338,10 @@ def _dino():
     return _DINO
 
 
-def _dino_bubble(text):
-    """The speech bubble as tracker_dino.h builds it: a 10 px rounded rectangle, 2 px orange border, mono16."""
-    tw = int(FONT[16].getlength(text))
-    w, h = tw + 24, 16 + 10 + 4          # 10 px side padding + 2 px border; the font's line + 5 px padding
-    im = Image.new("RGBA", (w, h), (0, 0, 0, 0)); d = ImageDraw.Draw(im)
-    d.rounded_rectangle([0, 0, w - 1, h - 1], radius=10, fill=(0xF2, 0xF5, 0xFC), outline=(0xFF, 0x8A, 0x1F), width=2)
-    d.text((w // 2, h // 2), text, font=FONT[16], fill=(0x10, 0x14, 0x20), anchor="mm")
-    return im
-
-
 def _dino_frame(ctx, bg, walk, t_ms):
-    """One frame of a walk over `bg`, as tracker_dino.h draws it."""
-    D = _dino(); art = D["art"]
-    x, y, pose, bubble = walk.at(t_ms)
-    img = bg.copy()
-    sp = D["poses"][pose]
-    if walk.flip:
-        sp = sp.transpose(Image.FLIP_LEFT_RIGHT)
-    img.paste(sp, (x, y), sp)
-    if bubble:
-        b = _dino_bubble(art.WORDS[walk.word])
-        bx = x - 6 if walk.flip else x + art.SW + 6 - b.width
-        bx = max(4, min(W - 4 - b.width, bx))
-        by = y - b.height - 12 + 4
-        img.paste(b, (bx, by), b)
-        tail = D["tails"][1 if walk.flip else 0]
-        tx = bx + 14 if walk.flip else bx + b.width - 22 - 14
-        img.paste(tail, (tx, by + b.height - 2), tail)
-    return img
+    """One frame of a walk over `bg`, as f1_critter.h draws it."""
+    D = _dino()
+    return cc.frame(bg, D["art"], D["poses"], D["tails"], walk, t_ms, FONT[16], W)
 
 
 def page_dino_walks(ctx):
@@ -1314,23 +1368,79 @@ def page_dino_poses(ctx):
     return sheet, "dino-poses"
 
 
-def dino_gif(ctx, fps=12):
-    """dino-walk.gif: one walk across the order page, with the stop and the bubble."""
-    D = _dino(); art = D["art"]
+# ---------------------------------------------------------------- the toucan (MOTION-6)
+_TOUCAN = {}
+
+
+def _toucan():
+    """tools/toucan_art.py: the toucan's vector art, and the Python twin of the flight's timing."""
+    if not _TOUCAN:
+        import toucan_art as mod
+        _TOUCAN["art"] = mod
+        _TOUCAN["poses"] = [mod.sprite(k) for k in range(mod.N_POSES)]
+        _TOUCAN["tails"] = _dino()["tails"]          # the speech bubble's pointers are the dinosaur's
+    return _TOUCAN
+
+
+def _toucan_frame(ctx, bg, flight, t_ms):
+    """One frame of a visit over `bg`, as f1_critter.h draws it."""
+    D = _toucan()
+    return cc.frame(bg, D["art"], D["poses"], D["tails"], flight, t_ms, FONT[16], W)
+
+
+def page_toucan_flights(ctx):
+    """Three visits on three lanes: in flight, perched and speaking, and flying left."""
+    D = _toucan(); art = D["art"]
     bg, _ = page_order(ctx)
-    w = art.Walk(7); w.flip = False; w.lane = 312; w.stop_x = 170
-    w.t_stop = int((w.stop_x + art.SW) / w.speed * 1000)
-    w.t_end = w.t_stop + w.pause_ms + int((art.SCREEN_W - w.stop_x) / w.speed * 1000)
-    frames = [_dino_frame(ctx, bg, w, int(i * 1000 / fps)) for i in range(int(w.t_end * fps / 1000) + 1)]
-    pal = frames[0].quantize(colors=96, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.NONE)
+    out = bg.copy()
+    for seed, lane_pick in ((11, 0), (23, 1), (41, 2)):
+        w = art.Flight(seed)
+        w.lane = (80, 190, 330)[lane_pick]
+        w._finish()
+        t = (w.t_stop * 0.6, w.t_stop + 1000, w.t_stop * 0.45)[lane_pick]
+        if lane_pick == 2: w.flip = True
+        fr = _toucan_frame(ctx, bg, w, int(t))
+        top = w.lane - 60
+        out.paste(fr.crop((0, top, W, w.lane + art.SH + 16)), (0, top))
+    return out, "toucan-flights"
+
+
+def page_toucan_poses(ctx):
+    D = _toucan(); art = D["art"]
+    sheet = Image.new("RGB", (art.N_POSES * 120 + 10, 100), BG)
+    for i, f in enumerate(D["poses"]):
+        sheet.paste(f, (10 + i * 120, 8), f)
+    return sheet, "toucan-poses"
+
+
+def _critter_gif(ctx, name, frame_fn, visit, fps=12):
+    """<name>.gif: one visit across the order page, with the stop and the bubble."""
+    bg, _ = page_order(ctx)
+    frames = [frame_fn(ctx, bg, visit, int(i * 1000 / fps)) for i in range(int(visit.t_end * fps / 1000) + 1)]
     sheet = Image.new("RGB", (W, H * 3), (0, 0, 0))
     for i, k in enumerate((0, len(frames) // 2, len(frames) * 2 // 3)):
         sheet.paste(frames[k], (0, i * H))
     pal = sheet.quantize(colors=128, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.NONE)
     q = [f.quantize(palette=pal, dither=Image.Dither.NONE) for f in frames]
-    path = os.path.join(OUT, "dino-walk.gif")
+    path = os.path.join(OUT, name + ".gif")
     q[0].save(path, save_all=True, append_images=q[1:], duration=int(1000 / fps), loop=0, optimize=False, disposal=1)
-    print(f"  dino-walk.gif  {len(q)} frames, {os.path.getsize(path) // 1024} KB")
+    print(f"  {name}.gif  {len(q)} frames, {os.path.getsize(path) // 1024} KB")
+
+
+def dino_gif(ctx, fps=12):
+    art = _dino()["art"]
+    w = art.Walk(7); w.flip = False; w.lane = 312; w.stop_x = 170
+    w.t_stop = int((w.stop_x + art.SW) / w.speed * 1000)
+    w.t_end = w.t_stop + w.pause_ms + int((art.SCREEN_W - w.stop_x) / w.speed * 1000)
+    _critter_gif(ctx, "dino-walk", _dino_frame, w, fps)
+
+
+def toucan_gif(ctx, fps=15):
+    """toucan-flight.gif: a visit left to right with its swoops, the perch, the beak clacking and the bubble."""
+    art = _toucan()["art"]
+    w = art.Flight(5); w.flip = False; w.lane = 300; w.stop_x = 200
+    w._finish()
+    _critter_gif(ctx, "toucan-flight", _toucan_frame, w, fps)
 
 
 def main():
@@ -1340,7 +1450,7 @@ def main():
     ap.add_argument("--out", default=None, help="output directory (default docs/renders)")
     ap.add_argument("--gif", action="store_true", help="also write the boot and About animations as GIFs (slow)")
     a = ap.parse_args()
-    for sz in (10, 12, 14, 15, 16, 18, 22, 24, 34):
+    for sz in (10, 12, 13, 14, 15, 16, 18, 22, 24, 34):
         FONT[sz] = ImageFont.truetype(a.font, sz)
     FONT["s34"] = ImageFont.truetype(a.sans or a.font, 34)   # setup_title: the update card's title
     FONT[50] = ImageFont.truetype(a.sans or a.font, 50)   # title_big: cap height = the F1 logo's 36 px
@@ -1434,10 +1544,11 @@ def main():
              page_settings_location, page_about, page_about_cars, page_boot_cars, page_boot_strip, page_overtake, page_debug, page_offseason,
              overlay_detail, overlay_detail_loading, overlay_detail_rookie, overlay_alert, overlay_milestone,
              page_race_with_icon, overlay_update_checking, overlay_update_available,
-             overlay_update_installing, overlay_update_failed, page_dino_walks, page_dino_poses]
+             overlay_update_installing, overlay_update_failed, page_dino_walks, page_dino_poses, page_toucan_flights, page_toucan_poses]
     if a.gif:
         animation_gifs(ctx)
         dino_gif(ctx)
+        toucan_gif(ctx)
     made = []
     for fn in pages:
         try:

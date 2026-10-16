@@ -4,7 +4,7 @@
 # M0 scope: hardware, platform tuning, entities, page shells. No data layer yet.
 
 substitutions:
-  fw_version: "0.1.0"         # bump on every install; shown in HA, settings and the status page
+  fw_version: "1.0.0"         # bump on every install; shown in HA, settings and the status page
   name: f1-tracker
   friendly_name: F1 Tracker
   # UI-44: the ONLY use of a position is computing sunrise/sunset for auto-dim
@@ -12,7 +12,7 @@ substitutions:
   obs_lat: "61.581"
   obs_lon: "-149.439"
   tracker_common_url: https://github.com/akcoder/tracker-common
-  tracker_common_ref: v0.4.5     # a tag, so a change in tracker-common cannot break this build
+  tracker_common_ref: v0.4.6     # a tag, so a change in tracker-common cannot break this build
   tracker_common_refresh: 1d
   manifest_url: https://akcoder.github.io/f1-tracker/manifest.json   # UI-68: built and published by the Firmware workflow
   # The board package's tunables (tracker-common/boards/guition-4848s040.yaml):
@@ -35,6 +35,17 @@ external_components:
     components: [tracker_common]
     refresh: ${tracker_common_refresh}
 tracker_common:
+
+esp32:                        # merged into the board package's block
+  framework:
+    sdkconfig_options:
+      # Decision 203: internal RAM. This project's big tables go to PSRAM (f1_mem.h), and so
+      # does the Bluetooth host's working memory. On the first board the controller could not
+      # allocate its advertisement ("BLE_INIT: Malloc failed"), and neither the fallback AP
+      # nor a station join would complete, with ~57 kB of our own tables in internal RAM.
+      CONFIG_SPIRAM_ALLOW_BSS_SEG_EXTERNAL_MEMORY: y
+      CONFIG_BT_ALLOCATION_FROM_SPIRAM_FIRST: y
+      CONFIG_BT_BLE_DYNAMIC_ENV_MEMORY: y
 
 packages:
   tracker_common_pkg:         # the fonts, the board and the diagnostics every tracker shares (decision 194)
@@ -82,12 +93,19 @@ esphome:
     - f1-tracker/f1_cars.h         # generated: tools/gen_cars.py
     - f1-tracker/f1_logomark.h     # generated: tools/gen_logo.py, the logo outline the cars follow
     - f1-tracker/f1_animlogic.h
+    - f1-tracker/f1_tz.h          # the time zone picker (decision 205)
+    - f1-tracker/f1_critterlogic.h
     - f1-tracker/f1_dinologic.h
     - f1-tracker/f1_dino_data.h
+    - f1-tracker/f1_critter.h     # the shared engine of the two below
     - f1-tracker/f1_dino.h        # the walking dinosaur (decision 203)
+    - f1-tracker/f1_toucanlogic.h
+    - f1-tracker/f1_toucan_data.h
+    - f1-tracker/f1_toucan.h      # the toucan's visit (decision 204)
     - f1-tracker/f1_anim.h         # animated logos: start lights and a car lapping the circuit
     - f1-tracker/f1_map.h
     - f1-tracker/f1_state.h
+    - f1-tracker/f1_mem.h          # PSRAM_BSS: the big tables live in PSRAM (decision 203)
     - f1-tracker/f1_watch.h
     - f1-tracker/f1_json.h
     - f1-tracker/f1_store.h
@@ -144,6 +162,12 @@ esphome:
             w.line    = id(trace_line)->obj;
             w.tick    = id(trace_tick)->obj;
             w.north   = id(trace_north)->obj;
+            w.race_box   = id(map_box);               // the race page's map (decision 202)
+            w.race_line  = id(race_line)->obj;
+            w.race_tick  = id(race_tick)->obj;
+            w.race_north = id(race_north)->obj;
+            w.north_n      = id(trace_north_n);
+            w.race_north_n = id(race_north_n);
             w.badge   = id(card_badge);
             w.photo   = id(card_photo);
             w.flag    = id(card_flag);
@@ -162,6 +186,8 @@ esphome:
             aw.order_title = id(order_title);
             aw.standings   = id(standings_body);
             aw.summary      = id(summary_body);
+            aw.summary_skip = &id(summary_page)->skip;   // decision 202: hidden from the page order until it has something
+            aw.order_skip   = &id(order_page)->skip;     // likewise while the entry list is empty
             aw.constructors = id(constructors_body);
             aw.champ_line   = id(champ_line);
             aw.progress     = id(progress);
@@ -172,6 +198,7 @@ esphome:
             aw.banner_text = id(watch_text);
             aw.banner_flag = id(watch_flag);
             f1::app::setup(aw);
+            f1::ui::enable_swipe(id(circuit_page)->obj, id(card_map));   // UI-20c: swipe left = next card, right = back
             f1::detail::setup(id(detail_panel), id(detail_title), id(detail_body),
                               id(detail_flag), id(detail_photo), id(detail_credit));
             tracker::upd::set_source("${manifest_url}");
@@ -182,13 +209,20 @@ esphome:
               return t.is_valid() ? tracker::display::auto_factor((double) t.timestamp, (double) id(obs_lat).state,
                                                                   (double) id(obs_lon).state, true) : 1.0f;
             };
-            f1::dino::bubble_font = id(mono16)->get_lv_font();         // MOTION-5
-            f1::dino::enabled = [] { return id(dino_on).state; };
+            f1::dino::C::bubble_font = id(mono16)->get_lv_font();         // MOTION-5
+            f1::dino::C::enabled = [] { return id(dino_on).state; };
+            f1::tz::init();                                             // UI-70: the zone picker
+            f1::toucan::C::bubble_font = id(mono16)->get_lv_font();        // MOTION-6
+            f1::toucan::C::enabled = [] { return id(toucan_on).state; };
             tracker::upd::ota_hook_begin = [] { f1::net::ota_begin(); };   // 2.4.6: pause the data task
             tracker::upd::ota_hook_error = [] { f1::net::ota_error(); };   // resume it if the install failed
             f1::anim::init(id(wifi_page)->obj, id(boot_mark), id(about_page)->obj, id(about_mark));
             f1::net::start();                 // the data task, pinned to core 1
             lv_label_set_text(id(wifi_title), "Connecting to Wi-Fi");   // BOOT-2: start-up done
+            ESP_LOGI("mem", "internal %u kB free (largest block %u kB), PSRAM %u kB free",   // decision 203
+                     (unsigned) heap_caps_get_free_size(MALLOC_CAP_INTERNAL) / 1024,
+                     (unsigned) heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL) / 1024,
+                     (unsigned) heap_caps_get_free_size(MALLOC_CAP_SPIRAM) / 1024);
         - lambda: |-
             // NET-25: a restored number is range-checked at boot, not trusted - ESPHome
             // restores the stored bytes without clamping to min/max, and a NaN or a
@@ -209,6 +243,17 @@ esphome:
 # Assistant all change the ENTITIES; each entity's trigger below lands here, and so
 # does boot. Validation stays at Save and at boot (UI-182, NET-25).
 script:
+  - id: autooff_dim             # UI-44c: with Auto off overnight off, its hours are dimmed and
+    then:                       # not editable (decision 202) - the switch is what to touch
+      - lambda: |-
+          const bool on = lv_obj_has_state(id(sw_autooff), LV_STATE_CHECKED);
+          lv_obj_t *group[] = {id(lbl_off_icon), id(lbl_off_from), id(lbl_off_until), id(ta_off_from), id(ta_off_to)};
+          for (lv_obj_t *o : group) lv_obj_set_style_opa(o, on ? LV_OPA_COVER : LV_OPA_40, LV_PART_MAIN);
+          lv_obj_t *fields[] = {id(ta_off_from), id(ta_off_to)};
+          for (lv_obj_t *o : fields) {
+            if (on) lv_obj_add_flag(o, LV_OBJ_FLAG_CLICKABLE);
+            else lv_obj_remove_flag(o, LV_OBJ_FLAG_CLICKABLE);
+          }
   - id: apply_settings
     then:
       - lambda: |-
@@ -237,6 +282,9 @@ web_server:                   # the base (port, version 3, local) is in the boar
     - id: grp_location
       name: Location
       sorting_weight: 30
+    - id: grp_anim              # decision 202: every animation on demand, for looking at them
+      name: Animations
+      sorting_weight: 35
     - id: grp_system
       name: System
       sorting_weight: 40
@@ -284,6 +332,11 @@ image:
 # mono12/14/16/18/24, setup_title and setup_body are the shared set: tracker-common/fonts.yaml (the
 # packages entry at the top). What follows is this project's own.
 font:
+  - file: "gfonts://Roboto Mono"
+    id: mono13                # the race page's facts: a point up from mono12 (owner, on the board)
+    size: 13
+    bpp: 4
+    glyphsets: [GF_Latin_Core]
   - file: "gfonts://Roboto@300"
     id: title_big             # boot/About "Tracker": cap height matches the F1 logo (36 px)
     size: 50
@@ -296,7 +349,7 @@ font:
     size: 18                  # GENERATED from MDI's own metadata by
     bpp: 4                    # tools/gen_icons.py - guessing one gives a blank
                               # glyph that compiles and only shows on a screen.
-    glyphs: ["\U000F0017", "\U000F009E", "\U000F00DF", "\U000F00E1", "\U000F0150", "\U000F0156", "\U000F0162", "\U000F0193", "\U000F023C", "\U000F0241", "\U000F02FD", "\U000F034E", "\U000F0379", "\U000F03E9", "\U000F04BA", "\U000F051B", "\U000F051F", "\U000F053A", "\U000F056C", "\U000F0594", "\U000F05A8", "\U000F05A9", "\U000F061A", "\U000F0835", "\U000F0904", "\U000F0925", "\U000F0A60", "\U000F0BB1", "\U000F0F57", "\U000F0F5A", "\U000F113B"]
+    glyphs: ["\U000F0017", "\U000F009E", "\U000F00DF", "\U000F00E1", "\U000F0150", "\U000F0156", "\U000F0162", "\U000F0193", "\U000F01E7", "\U000F023C", "\U000F0241", "\U000F02FD", "\U000F034E", "\U000F0379", "\U000F04BA", "\U000F051B", "\U000F051F", "\U000F053A", "\U000F056C", "\U000F0594", "\U000F05A8", "\U000F05A9", "\U000F061A", "\U000F0835", "\U000F0904", "\U000F0925", "\U000F0A60", "\U000F0BB1", "\U000F0F57", "\U000F0F5A", "\U000F113B", "\U000F1362"]
 globals:
   - id: from_about            # set by About's Close so the settings page does NOT
     type: bool                # re-stage on return - that would discard unsaved edits and
@@ -314,6 +367,40 @@ button:
     on_press:                 # quiet: no card on the panel - the Firmware row and the
       - lambda: |-            # icon beside the gear show the result
           tracker::upd::check_quiet("button");
+  # Decision 202: the animations, each on demand from the web UI (group Animations), so they
+  # can be looked at without waiting for a boot, a race or the dinosaur's own timer.
+  - platform: template
+    name: Dinosaur walk
+    icon: mdi:google-downasaur
+    entity_category: diagnostic
+    web_server: {sorting_group_id: grp_anim, sorting_weight: 4}
+    on_press:
+      - lvgl.page.show: circuit_page
+      - lambda: f1::dino::walk_now();
+  - platform: template
+    name: Toucan visit
+    icon: mdi:bird
+    entity_category: diagnostic
+    web_server: {sorting_group_id: grp_anim, sorting_weight: 7}
+    on_press:
+      - lvgl.page.show: circuit_page
+      - lambda: f1::toucan::visit_now();
+  - platform: template
+    name: Alert banner
+    icon: mdi:bell-ring
+    entity_category: diagnostic
+    web_server: {sorting_group_id: grp_anim, sorting_weight: 5}
+    on_press:
+      - lvgl.page.show: race_page         # the banner lives on the race page
+      - lambda: f1::app::demo_alert(false, esphome::millis());
+  - platform: template
+    name: Alert takeover
+    icon: mdi:trophy
+    entity_category: diagnostic
+    web_server: {sorting_group_id: grp_anim, sorting_weight: 6}
+    on_press:
+      - lvgl.page.show: race_page         # the banner lives on the race page
+      - lambda: f1::app::demo_alert(true, esphome::millis());
 
 number:
   - platform: template        # UI-44 / decision 7: feeds sunrise/sunset ONLY
@@ -398,10 +485,24 @@ switch:
   - platform: template        # MOTION-5: a dinosaur walks across the screen now and then
     id: dino_on
     name: Dinosaur
-    icon: mdi:paw
+    icon: mdi:google-downasaur
     optimistic: true
     restore_mode: RESTORE_DEFAULT_ON
     web_server: {sorting_group_id: grp_display, sorting_weight: 3}
+  - platform: template        # UI-17 (sky-tracker's `24-hour Clock`, owner: not plane-tracker's three-way, no Zulu)
+    id: clock_24h
+    name: 24-hour Clock
+    icon: mdi:clock-digital
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_ON       # this project's default stays 24 h (UI-112)
+    web_server: {sorting_group_id: grp_display, sorting_weight: 2}
+  - platform: template        # MOTION-6: a toucan flies by now and then
+    id: toucan_on
+    name: Toucan
+    icon: mdi:bird
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_ON
+    web_server: {sorting_group_id: grp_display, sorting_weight: 21}
   - platform: template        # 6.14: ships watching Max Verstappen
     id: watched_alerts
     name: Watched Driver Alerts
@@ -436,15 +537,38 @@ switch:
     web_server: {sorting_group_id: grp_race, sorting_weight: 6}
 
 select:
-  - platform: template        # UI-8 / decision 40
-    id: clock_format
-    name: Clock Format
-    icon: mdi:clock-outline
-    options: ["24 h local", "12 h local", "UTC (Zulu)"]
-    initial_option: "24 h local"
+  - platform: template        # UI-70 (sky-tracker's): the clock's time zone; Auto takes Home Assistant's
+    id: time_zone
+    name: Time Zone
+    icon: mdi:earth
     optimistic: true
     restore_value: true
-    web_server: {sorting_group_id: grp_display, sorting_weight: 4}
+    initial_option: "Alaska"      # the build's own zone (America/Anchorage)
+    options:
+      - "Auto (from HA)"
+      - "Hawaii"
+      - "Alaska"
+      - "Pacific"
+      - "Mountain"
+      - "Arizona"
+      - "Central"
+      - "Eastern"
+      - "Atlantic"
+      - "Newfoundland"
+      - "UTC"
+      - "London"
+      - "Central Europe"
+      - "Eastern Europe"
+      - "Moscow"
+      - "India"
+      - "China"
+      - "Japan"
+      - "Sydney"
+      - "Auckland"
+    entity_category: config
+    web_server: {sorting_group_id: grp_location, sorting_weight: 3}
+    on_value:
+      - lambda: f1::tz::set(i);
   - platform: template        # UI-20 / decision 68
     id: carousel_content
     name: Carousel Content
@@ -592,7 +716,7 @@ lvgl:
           id: detail_panel       # whichever page is showing without disturbing it.
           align: CENTER
           width: 440
-          height: 400
+          height: 440     # was 400: the longest circuit card (16 lines, Yas Marina) ran into the hint below it
           hidden: true
           bg_color: 0x101B3D
           bg_opa: COVER
@@ -635,9 +759,9 @@ lvgl:
                 id: detail_body
                 x: 16
                 y: 48
-                width: 408
+                width: 408      # decision 202: mono16, a step up (owner: "increase the circuit detail text size")
                 text: ""
-                text_font: mono14
+                text_font: mono16
                 text_color: 0xC9D3F2
             - label:
                 align: BOTTOM_MID
@@ -687,8 +811,9 @@ lvgl:
       bg_opa: COVER
       scrollable: false
       widgets:
-        - obj:
-            align: CENTER
+        - obj:                      # anchored at the top, not centred: the body grows to two
+            align: TOP_MID          # lines in AP mode, and a centred column would move the
+            y: 40                   # logo and title up when it does (decision 202)
             width: 380
             height: SIZE_CONTENT
             bg_opa: TRANSP
@@ -698,7 +823,7 @@ lvgl:
             layout:
               type: FLEX
               flex_flow: COLUMN
-              flex_align_main: CENTER
+              flex_align_main: START
               flex_align_cross: CENTER
               pad_row: 6
             widgets:
@@ -809,6 +934,32 @@ lvgl:
             pad_all: 0
             scrollable: false
             clickable: false
+            widgets:            # decision 202: the race page's own trace - the box had
+              - line:           # no children, so the firmware never drew one here
+                  id: race_line
+                  clickable: false   # decision 202: a line's hit box is its bounding box - it took every press off the map
+                  points: [{x: 0, y: 0}, {x: 1, y: 0}]
+                  line_width: 3
+                  line_color: 0xE8EDF7
+                  line_rounded: true
+              - line:
+                  id: race_tick
+                  clickable: false   # decision 202: a line's hit box is its bounding box - it took every press off the map
+                  points: [{x: 0, y: 0}, {x: 1, y: 0}]
+                  line_width: 3
+                  line_color: 0xFF8A1F
+              - line:
+                  id: race_north
+                  clickable: false   # decision 202: a line's hit box is its bounding box - it took every press off the map
+                  points: [{x: 0, y: 0}, {x: 1, y: 0}]
+                  line_width: 2
+                  line_color: 0x7E8BB3
+              - label:          # decision 202: the "N" under the arrow; placed by draw_trace
+                  id: race_north_n
+                  text: "N"
+                  text_font: mono12
+                  text_color: 0x7E8BB3
+                  hidden: true
         - obj:                  # decision 49: the top-5 STRIP - a summary, not a
             id: top5            # list. Five rows, nothing scrollable.
             x: 6
@@ -826,7 +977,7 @@ lvgl:
             y: 320
             width: 186
             text: ""
-            text_font: mono12
+            text_font: mono13
             text_color: 0x7E8BB3
         - label:                # 3.7.3 / decision 54: attribution is mandatory
             id: attrib
@@ -858,6 +1009,7 @@ lvgl:
               - lvgl.page.show: debug_page
 
     - id: order_page            # UI-10 (6.3): 22 rows, mono12, 18 px (decision 88)
+      skip: true                # decision 202: out of the page order until there is an entry list
       bg_color: 0x000000
       bg_opa: COVER
       scrollable: false
@@ -875,6 +1027,14 @@ lvgl:
             text: "Grid"
             text_font: mono16
             text_color: 0xFF8A1F
+        - label:                # owner: the clock is in the upper right of every content page
+            id: order_clock
+            align: TOP_RIGHT
+            x: -10
+            y: 1
+            text: "--:--"
+            text_font: mono24
+            text_color: 0xC9D3F2
         - label:
             id: order_hdr
             x: 12
@@ -893,48 +1053,82 @@ lvgl:
             pad_all: 0
             scrollable: false
             clickable: false
+        - button:               # UI-16: gear, lower right (decision 202: on every content page)
+            align: BOTTOM_RIGHT
+            x: -2
+            y: -2
+            width: 46
+            height: 46
+            bg_opa: TRANSP
+            shadow_width: 0
+            border_width: 0
+            widgets:
+              - label:
+                  align: CENTER
+                  text: ""             # LV_SYMBOL_SETTINGS
+                  text_font: montserrat_28
+                  text_color: 0xB8BEC9
+            on_short_click:                  # short, so a long press does not also open it
+              - lvgl.page.show: settings_page
+            on_long_press:                   # UI-27
+              - lvgl.page.show: debug_page
+
 
     - id: circuit_page          # UI-20 (6.4): the default screen most of the year
       bg_color: 0x000000
       bg_opa: COVER
       scrollable: false
+      on_load:                  # decision 202: arriving by a tap starts the three stops
+        - lambda: f1::ui::enter_stops(esphome::millis());
       on_short_click:           # short: LVGL sends CLICKED after a long press too, which
         - if:                   # would turn "hold to pause" into a page flip
             condition: {lambda: 'return f1::app::tap_consumed();'}   # 6.1: a card open means a tap only closes it
             then: []
             else:
-              - lvgl.page.next: {animation: FADE_IN, time: 200ms}
+              - if:             # UI-20f: this page is three stops - a circuit, a driver, a
+                  condition: {lambda: 'return f1::ui::tap_next(esphome::millis());'}   # legend - then the next page
+                  then: []
+                  else:
+                    - lvgl.page.next: {animation: FADE_IN, time: 200ms}
       on_long_press:            # UI-20: hold to pause on the current card
         - lambda: f1::ui::toggle_pause();
       widgets:
-        - label:                # 8.2: how far through the season we are
-            id: progress
+        - label:                # the card's own line (a round, a championship place, seasons), under
+            id: progress        # the clock; it is not the season progress any more (decision 202)
             align: TOP_RIGHT
             x: -10
-            y: 8
+            y: 34
             text: ""
             text_font: mono12
             text_color: 0x5A6687
+        - label:                # owner: the clock is in the upper right of every content page
+            id: circuit_clock
+            align: TOP_RIGHT
+            x: -10
+            y: 1
+            text: "--:--"
+            text_font: mono24
+            text_color: 0xC9D3F2
         - label:
-            id: card_badge      # UI-20b: CIRCUIT / DRIVER / LEGEND
-            x: 10
-            y: 6
+            id: card_badge      # UI-20b: Circuit / Driver / Legend (sentence case, UI-194); the same
+            x: 10               # orange mono16 line as every other page's title (owner: uniform headers)
+            y: 4
             text: "Circuit"
-            text_font: mono12
+            text_font: mono16
             text_color: 0xFF8A1F
         - label:
             id: card_title
             x: 10
             y: 24
             text: ""
-            text_font: mono18
+            text_font: mono16   # was mono18: the race page's second line is mono16
             text_color: 0xC9D3F2
         - obj:                  # MAP-5a: the trace lives in its own container and
             id: card_map        # nothing moving may sit inside its bounds
-            x: 90
-            y: 52
-            width: 300
-            height: 240
+            x: 20               # decision 202: the trace fills the card, the facts sit
+            y: 52               # under it in mono14 (owner, on the board)
+            width: 440
+            height: 292
             bg_opa: TRANSP      # see map_box: no panel behind the trace
             border_width: 0
             radius: 0
@@ -949,20 +1143,29 @@ lvgl:
               # only replaces their point arrays (f1_ui.h).
               - line:
                   id: trace_line
+                  clickable: false   # decision 202: a line's hit box is its bounding box - it took every press off the map
                   points: [{x: 0, y: 0}, {x: 1, y: 0}]
                   line_width: 3
                   line_color: 0xE8EDF7
                   line_rounded: true
               - line:
                   id: trace_tick
+                  clickable: false   # decision 202: a line's hit box is its bounding box - it took every press off the map
                   points: [{x: 0, y: 0}, {x: 1, y: 0}]
                   line_width: 3
                   line_color: 0xFF8A1F
               - line:
                   id: trace_north
+                  clickable: false   # decision 202: a line's hit box is its bounding box - it took every press off the map
                   points: [{x: 0, y: 0}, {x: 1, y: 0}]
                   line_width: 2
                   line_color: 0x7E8BB3
+              - label:          # decision 202: the "N" under the arrow; placed by draw_trace
+                  id: trace_north_n
+                  text: "N"
+                  text_font: mono12
+                  text_color: 0x7E8BB3
+                  hidden: true
         - image:                # 5.6.3: the portrait. Hidden on a circuit card and
             id: card_photo      # on a person with no attributable image (RACE-13e).
             src: pixel_img
@@ -978,10 +1181,10 @@ lvgl:
         - label:
             id: card_body
             x: 12
-            y: 300
+            y: 350
             width: 456
             text: ""
-            text_font: mono12
+            text_font: mono14
             text_color: 0x7E8BB3
         - label:                # decision 72: the photographer's credit is
             id: card_credit     # MANDATORY wherever a photo is shown. It and the
@@ -1000,6 +1203,26 @@ lvgl:
             text: "Data: jolpi.ca \u00b7 openf1.org"
             text_font: mono12
             text_color: 0x5A6687
+        - button:               # UI-16: gear, lower right (decision 202: on every content page)
+            align: BOTTOM_RIGHT
+            x: -2
+            y: -2
+            width: 46
+            height: 46
+            bg_opa: TRANSP
+            shadow_width: 0
+            border_width: 0
+            widgets:
+              - label:
+                  align: CENTER
+                  text: ""             # LV_SYMBOL_SETTINGS
+                  text_font: montserrat_28
+                  text_color: 0xB8BEC9
+            on_short_click:                  # short, so a long press does not also open it
+              - lvgl.page.show: settings_page
+            on_long_press:                   # UI-27
+              - lvgl.page.show: debug_page
+
 
     - id: standings_page        # 8.1: free, no live window
       bg_color: 0x000000
@@ -1018,6 +1241,14 @@ lvgl:
             text: "Championship"
             text_font: mono16
             text_color: 0xFF8A1F
+        - label:                # owner: the clock is in the upper right of every content page
+            id: standings_clock
+            align: TOP_RIGHT
+            x: -10
+            y: 1
+            text: "--:--"
+            text_font: mono24
+            text_color: 0xC9D3F2
         - label:
             id: standings_hdr
             x: 12
@@ -1025,14 +1256,6 @@ lvgl:
             text: "Pos     Driver      Pts"
             text_font: mono12
             text_color: 0x7E8BB3
-        - label:
-            id: standings_body
-            x: 12
-            y: 52
-            width: 250
-            text: "waiting for data"
-            text_font: mono12
-            text_color: 0xC9D3F2
         - label:                # 8.1: the teams, beside the drivers
             id: constructors_hdr
             x: 278
@@ -1040,14 +1263,44 @@ lvgl:
             text: "Constructors"
             text_font: mono12
             text_color: 0x7E8BB3
-        - label:
-            id: constructors_body
-            x: 278
+        - obj:                  # decision 202: both tables scroll together under their headers
+            id: standings_scroll
+            x: 0
             y: 52
-            width: 196
-            text: ""
-            text_font: mono12
-            text_color: 0xC9D3F2
+            width: 480
+            height: 376         # ends at 428, above the gear
+            bg_opa: TRANSP
+            border_width: 0
+            radius: 0
+            pad_all: 0
+            scrollable: true
+            scroll_dir: VER
+            scrollbar_mode: AUTO
+            on_short_click:     # a tap off a row turns the page, as the page itself does
+              - if:
+                  condition: {lambda: 'return f1::app::tap_consumed();'}
+                  then: []
+                  else:
+                    - lvgl.page.next: {animation: FADE_IN, time: 200ms}
+            widgets:
+            - label:
+                id: standings_body
+                x: 12
+                y: 0
+                width: 250
+                text: "waiting for data"
+                text_font: mono12
+                text_color: 0xC9D3F2
+                text_line_space: 6   # decision 202: pitch 22 (was 16); the list scrolls
+            - label:
+                id: constructors_body
+                x: 278
+                y: 0
+                width: 196
+                text: ""
+                text_line_space: 6
+                text_font: mono12
+                text_color: 0xC9D3F2
         - label:                # 8.1: blank for most of a season, on purpose
             id: champ_line
             x: 12
@@ -1056,8 +1309,29 @@ lvgl:
             text: ""
             text_font: mono14
             text_color: 0xFFD54A
+        - button:               # UI-16: gear, lower right (decision 202: on every content page)
+            align: BOTTOM_RIGHT
+            x: -2
+            y: -2
+            width: 46
+            height: 46
+            bg_opa: TRANSP
+            shadow_width: 0
+            border_width: 0
+            widgets:
+              - label:
+                  align: CENTER
+                  text: ""             # LV_SYMBOL_SETTINGS
+                  text_font: montserrat_28
+                  text_color: 0xB8BEC9
+            on_short_click:                  # short, so a long press does not also open it
+              - lvgl.page.show: settings_page
+            on_long_press:                   # UI-27
+              - lvgl.page.show: debug_page
+
 
     - id: summary_page          # 8.1: what HAPPENED. Jolpica carries the fastest
+      skip: true                # decision 202: out of the page order until a session has a summary
       bg_color: 0x000000        # lap and the pit stops, so no OpenF1 window applies.
       bg_opa: COVER
       scrollable: false
@@ -1074,6 +1348,14 @@ lvgl:
             text: "Race summary"
             text_font: mono16
             text_color: 0xFF8A1F
+        - label:                # owner: the clock is in the upper right of every content page
+            id: summary_clock
+            align: TOP_RIGHT
+            x: -10
+            y: 1
+            text: "--:--"
+            text_font: mono24
+            text_color: 0xC9D3F2
         - label:
             id: summary_body
             x: 16
@@ -1089,6 +1371,26 @@ lvgl:
             text: "Data: jolpi.ca \u00b7 openf1.org"
             text_font: mono12
             text_color: 0x5A6687
+        - button:               # UI-16: gear, lower right (decision 202: on every content page)
+            align: BOTTOM_RIGHT
+            x: -2
+            y: -2
+            width: 46
+            height: 46
+            bg_opa: TRANSP
+            shadow_width: 0
+            border_width: 0
+            widgets:
+              - label:
+                  align: CENTER
+                  text: ""             # LV_SYMBOL_SETTINGS
+                  text_font: montserrat_28
+                  text_color: 0xB8BEC9
+            on_short_click:                  # short, so a long press does not also open it
+              - lvgl.page.show: settings_page
+            on_long_press:                   # UI-27
+              - lvgl.page.show: debug_page
+
 
     - id: settings_page         # UI-16 (section 4.15)
       skip: true
@@ -1109,9 +1411,11 @@ lvgl:
             };
             set(id(sw_autodim), id(auto_bright).state);
             set(id(sw_autooff), id(auto_off).state);
-            set(id(sw_dino), id(dino_on).state);
+            id(autooff_dim).execute();                 // UI-44c: the window reads as off with the switch
+            if (auto ix = id(time_zone).active_index()) lv_dropdown_set_selected(id(dd_tz)->obj, *ix);   // UI-70
             set(id(sw_alerts), id(watched_alerts).state);
             set(id(sw_milestone), id(milestone_only).state);
+            set(id(sw_24h), id(clock_24h).state);
             lv_slider_set_value(id(sl_carousel), (int) id(carousel_secs).state, LV_ANIM_OFF);
             lv_slider_set_value(id(sl_bright),
                 (int) roundf((id(auto_bright).state ? id(bright_day)
@@ -1209,11 +1513,12 @@ lvgl:
                       };
                       sw(id(sw_autodim), id(auto_bright));
                       sw(id(sw_autooff), id(auto_off));
-                      sw(id(sw_dino), id(dino_on));
                       sw(id(sw_alerts), id(watched_alerts));
                       sw(id(sw_milestone), id(milestone_only));
                       id(carousel_secs).make_call()
                           .set_value(lv_slider_get_value(id(sl_carousel))).perform();
+                      sw(id(sw_24h), id(clock_24h));
+                      id(time_zone).make_call().set_index(lv_dropdown_get_selected(id(dd_tz)->obj)).perform();   // UI-70
                       id(obs_lat).make_call().set_value(lat).perform();
                       id(obs_lon).make_call().set_value(lon).perform();
                       id(off_from).make_call().set_value(from).perform();
@@ -1292,9 +1597,16 @@ lvgl:
               - switch: {id: sw_autodim, x: 380, y: 0, width: 72, height: 32}
               - label: {x: 16, y: 56, text: "\U000F0904", text_font: mdi18, text_color: 0x7E8BB3}
               - label: {x: 44, y: 56, text: "Auto off overnight", text_font: mono16, text_color: 0xC9D3F2}
-              - switch: {id: sw_autooff, x: 380, y: 50, width: 72, height: 32}
-              - label: {x: 16, y: 106, text: "\U000F0594", text_font: mdi18, text_color: 0x7E8BB3}
-              - label: {x: 44, y: 106, text: "Off from", text_font: mono16, text_color: 0xC9D3F2}
+              - switch:
+                  id: sw_autooff
+                  x: 380
+                  y: 50
+                  width: 72
+                  height: 32
+                  on_value:
+                    - script.execute: autooff_dim     # the window's controls follow the switch
+              - label: {id: lbl_off_icon, x: 16, y: 106, text: "\U000F0594", text_font: mdi18, text_color: 0x7E8BB3}
+              - label: {id: lbl_off_from, x: 44, y: 106, text: "Off from", text_font: mono16, text_color: 0xC9D3F2}
               - textarea:
                   id: ta_off_from
                   x: 150
@@ -1314,7 +1626,7 @@ lvgl:
                   on_click:
                     - lvgl.keyboard.update: { id: settings_kb, textarea: ta_off_from }
                     - lvgl.widget.show: settings_kb
-              - label: {x: 224, y: 106, text: "until", text_font: mono16, text_color: 0x7E8BB3}
+              - label: {id: lbl_off_until, x: 224, y: 106, text: "until", text_font: mono16, text_color: 0x7E8BB3}
               - textarea:
                   id: ta_off_to
                   x: 290
@@ -1356,10 +1668,11 @@ lvgl:
                         auto call = id(backlight).turn_on();
                         call.set_brightness(v);
                         call.perform();
-              - label: {x: 16, y: 206, text: "\U000F03E9", text_font: mdi18, text_color: 0x7E8BB3}
-              - label: {x: 44, y: 206, text: "Dinosaur", text_font: mono16, text_color: 0xC9D3F2}
-              - label: {x: 44, y: 228, text: "walks by now and then", text_font: mono12, text_color: 0x7E8BB3}
-              - switch: {id: sw_dino, x: 380, y: 200, width: 72, height: 32}
+              - label: {x: 16, y: 206, text: "\U000F0150", text_font: mdi18, text_color: 0x7E8BB3}   # clock-outline (as sky-tracker's Time format row)
+              - label: {x: 44, y: 206, text: "Time format", text_font: mono16, text_color: 0xC9D3F2}
+              - label: {x: 250, y: 206, text: "12h", text_font: mono16, text_color: 0xC9D3F2}
+              - switch: {id: sw_24h, x: 296, y: 200, width: 72, height: 32}
+              - label: {x: 378, y: 206, text: "24h", text_font: mono16, text_color: 0xC9D3F2}
 
         - obj:
             id: pnl_race
@@ -1451,11 +1764,57 @@ lvgl:
                     - lvgl.keyboard.update: { id: settings_kb, textarea: ta_lon }
                     - lvgl.widget.show: settings_kb
               - label: {x: 320, y: 62, text: "E+  W-", text_font: mono12, text_color: 0x7E8BB3}
+              - label: {x: 16, y: 110, text: "\U000F01E7", text_font: mdi18, text_color: 0x7E8BB3}   # earth
+              - label: {x: 44, y: 110, text: "Time zone", text_font: mono16, text_color: 0xC9D3F2}
+              - dropdown:             # UI-70 (sky-tracker): staged like the other fields, applied on Save
+                  id: dd_tz
+                  x: 160
+                  y: 102
+                  width: 290
+                  height: 40
+                  options:
+                    - "Auto (from HA)"
+                    - "Hawaii"
+                    - "Alaska"
+                    - "Pacific"
+                    - "Mountain"
+                    - "Arizona"
+                    - "Central"
+                    - "Eastern"
+                    - "Atlantic"
+                    - "Newfoundland"
+                    - "UTC"
+                    - "London"
+                    - "Central Europe"
+                    - "Eastern Europe"
+                    - "Moscow"
+                    - "India"
+                    - "China"
+                    - "Japan"
+                    - "Sydney"
+                    - "Auckland"
+                  text_font: mono16
+                  text_color: 0xEEF2FF
+                  bg_color: 0x0E1836
+                  border_color: 0x3A4E86
+                  border_width: 2
+                  pad_all: 6
+                  dropdown_list:
+                    text_font: mono16
+                    text_color: 0xEEF2FF
+                    bg_color: 0x0E1836
+                    border_color: 0x3A4E86
+                    max_height: 190
+                  indicator:           # the arrow is drawn in this part's font; mono16 has no symbols
+                    text_font: montserrat_14
+                    text_color: 0x7E8BB3
+                  on_click:
+                    - lvgl.widget.hide: settings_kb
               - label:
                   x: 16
-                  y: 104
+                  y: 156
                   width: 448
-                  text: "Latitude and longitude set sunrise/sunset for auto-dim only.\nThe time zone is fixed in firmware and does not follow them."
+                  text: "Latitude and longitude set sunrise/sunset for auto-dim only.\nThe time zone is its own setting above and does not follow them."
                   text_font: mono12
                   text_color: 0x7E8BB3
 
@@ -1690,9 +2049,11 @@ interval:
           if (t.is_valid()) f1::ui::update_birthday(t.year, t.month, t.day_of_month);
           if (t.is_valid()) {
             char b[12];
-            // 6.7: 24 h local by default; the three-state dropdown lands at M5.
-            snprintf(b, sizeof(b), "%02d:%02d", t.hour, t.minute);
-            lv_label_set_text(id(race_clock), b);
+            // UI-17 (sky-tracker's): 24 h "14:05", or 12 h "2:05 PM"
+            if (id(clock_24h).state) snprintf(b, sizeof(b), "%02d:%02d", t.hour, t.minute);
+            else snprintf(b, sizeof(b), "%d:%02d %s", t.hour % 12 == 0 ? 12 : t.hour % 12, t.minute, t.hour < 12 ? "AM" : "PM");
+            for (lv_obj_t *c : {id(race_clock), id(order_clock), id(circuit_clock), id(standings_clock), id(summary_clock)})
+              if (strcmp(lv_label_get_text(c), b) != 0) lv_label_set_text(c, b);
           }
   - interval: 2s                # NET-2b: the boot / Wi-Fi page. Nothing else leaves it,
     then:                       # so this is what takes the device to its real page.
@@ -1709,8 +2070,13 @@ interval:
           if (link != f1::boot::CONNECTED) {
             // NET-2c: the entry ESPHome selected - saved in flash by Improv, or
             // built in. Refreshed while it shows, because it can change under us.
-            const auto sta = id(wifi_comp).get_sta().get_ssid();
-            const auto ap = id(wifi_comp).get_ap().get_ssid();
+            // get_sta()/get_ap() return a COPY of the entry and get_ssid() a StringRef into
+            // it, so the copies must outlive the call - a ref taken off the temporary read
+            // freed memory and the panel showed fragments of this very buffer in the name.
+            const auto sta_entry = id(wifi_comp).get_sta();
+            const auto ap_entry = id(wifi_comp).get_ap();
+            const auto sta = sta_entry.get_ssid();
+            const auto ap = ap_entry.get_ssid();
             char b[96];
             f1::boot::body_for(link, sta.c_str(), ap.c_str(), b, sizeof(b));
             if (strcmp(lv_label_get_text(id(wifi_body)), b) != 0) lv_label_set_text(id(wifi_body), b);
@@ -1720,9 +2086,11 @@ interval:
                                id(circuit_page)->is_showing() || id(standings_page)->is_showing() ||
                                id(summary_page)->is_showing());
           // MOTION-5: a dinosaur walks by now and then, where nothing is over the page and the panel is lit
-          f1::dino::tick(esphome::millis(),
-                              tracker::upd::page_ok && tracker::upd::ui_.root == nullptr &&
-                                  !f1::detail::is_open() && id(backlight).current_values.is_on());
+          const bool critter_ok = tracker::upd::page_ok && tracker::upd::ui_.root == nullptr &&
+                                  !f1::detail::is_open() && id(backlight).current_values.is_on();
+          f1::dino::tick(esphome::millis(), critter_ok && !f1::toucan::flying());
+          // MOTION-6: the toucan, never over the dinosaur (each draws over a snapshot of the screen)
+          f1::toucan::tick(esphome::millis(), critter_ok && !f1::dino::walking());
           switch (st.page) {
             case f1::boot::TO_RACE:
               id(lvgl_comp)->show_page(id(race_page)->index, LV_SCREEN_LOAD_ANIM_FADE_IN, 300); break;
@@ -1748,6 +2116,13 @@ interval:
           } else if (id(about_page)->is_showing() || id(debug_page)->is_showing()) {
             id(lvgl_comp)->show_page(id(race_page)->index, LV_SCREEN_LOAD_ANIM_NONE, 0);
           }
+  - interval: 10min             # decision 203: the memory line again, at DEBUG, for a long log
+    then:
+      - lambda: |-
+          ESP_LOGD("mem", "internal %u kB free (largest block %u kB), PSRAM %u kB free",
+                   (unsigned) heap_caps_get_free_size(MALLOC_CAP_INTERNAL) / 1024,
+                   (unsigned) heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL) / 1024,
+                   (unsigned) heap_caps_get_free_size(MALLOC_CAP_SPIRAM) / 1024);
   - interval: 1h                # "Made for ESPHome": check for a published
     startup_delay: 1h           # firmware update once an hour. Without the delay the
     then:                       # first run lands 0-5 s after boot, a third TLS session
@@ -1792,6 +2167,16 @@ interval:
                                       (int) id(wifi_comp).wifi_rssi(), get_mac_address_pretty().c_str(),
                                       esphome::millis() / 1000.0);
           lv_label_set_text(id(about_device), d);
+  - interval: 2s                # decision 202: the three diagnostic text sensors had no publisher at all -
+    then:                       # the debug page's Data section and their web UI rows were empty
+      - lambda: |-
+          const auto &a = f1::app::g;
+          auto put = [](text_sensor::TextSensor *t, const char *v) {
+            if (!t->has_state() || t->state != v) t->publish_state(v);
+          };
+          put(id(weekend_state), f1::state::weekend_name(a.st.weekend));
+          put(id(order_mode), f1::state::order_name(a.st.order));
+          put(id(calendar_source), a.cal.fetched ? "fetched" : "compiled");
   - interval: 1s                # UI-27: debug page, only while it is showing
     then:
       - lambda: |-

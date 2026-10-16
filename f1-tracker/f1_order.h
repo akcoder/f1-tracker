@@ -15,6 +15,7 @@
 #include <cstring>
 
 #include "f1_flags.h"
+#include "f1_mem.h"
 #include "f1_state.h"
 #include "f1_store.h"
 
@@ -61,7 +62,7 @@ struct View {
   int built = 0;
 };
 
-inline View g;
+inline PSRAM_BSS View g;                            // in PSRAM (decision 203)
 
 // One row's widgets, created once and then only updated.
 inline void build_row(View &v, int i) {

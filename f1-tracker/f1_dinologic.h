@@ -10,6 +10,8 @@
 #include <cmath>
 #include <cstdint>
 
+#include "f1_critterlogic.h"
+
 namespace f1 {
 namespace dino {
 
@@ -19,7 +21,7 @@ inline constexpr int LANE_MIN = 60, LANE_MAX = 340;     // the top edge of the s
 inline constexpr int STOP_MIN = 150, STOP_MAX = 330;    // where it stops (its left edge, walking right)
 inline constexpr double STEP_PX = 9.75;      // one of the four walk poses per this much distance (8 a second at 78 px/s)
 inline constexpr uint32_t ROAR_DELAY_MS = 300, ROAR_STEP_MS = 250;
-inline constexpr uint32_t GAP_MIN_MS = 3u * 60000u, GAP_MAX_MS = 12u * 60000u;   // between walks
+inline constexpr uint32_t GAP_MIN_MS = critter::GAP_MIN_MS, GAP_MAX_MS = critter::GAP_MAX_MS;   // between walks
 
 enum Pose : uint8_t { WALK0 = 0, WALK1, WALK2, WALK3, STAND, ROAR_HALF, ROAR_OPEN, N_POSES };
 
@@ -27,17 +29,7 @@ inline constexpr int N_WORDS = 10;
 inline const char *const WORDS[N_WORDS] = {"Rawr!", "RAWR!", "Grrr!", "Roarrr!", "Raaawr!",
                                            "Rawr rawr!", "Chomp!", "Grrrawr!", "Rrraaah!", "Rarrr!"};
 
-// xorshift32: the same numbers on the device and in the render tool.
-struct Rng {
-  uint32_t s;
-  explicit Rng(uint32_t seed) : s(seed ? seed : 1u) {}
-  double next() {
-    s ^= s << 13;
-    s ^= s >> 17;
-    s ^= s << 5;
-    return (s >> 8) / 16777216.0;
-  }
-};
+using critter::Rng;
 
 struct Walk {
   bool flip = false;          // true: right to left
@@ -111,10 +103,7 @@ inline Frame at(const Walk &w, uint32_t t_ms) {
 
 inline bool finished(const Walk &w, uint32_t t_ms) { return t_ms >= w.t_end; }
 
-inline uint32_t next_gap_ms(uint32_t seed) {
-  Rng r(seed);
-  return GAP_MIN_MS + (uint32_t) (r.next() * (GAP_MAX_MS - GAP_MIN_MS));
-}
+inline uint32_t next_gap_ms(uint32_t seed) { return critter::next_gap_ms(seed); }
 
 }  // namespace dino
 }  // namespace f1

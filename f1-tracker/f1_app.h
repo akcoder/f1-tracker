@@ -11,6 +11,7 @@
 #include <cstring>
 
 #include "f1_calendar.h"
+#include "f1_mem.h"
 #include "f1_champ.h"
 #include "f1_team.h"
 #include "f1_detail.h"
@@ -28,6 +29,8 @@ namespace app {
 struct Widgets {
   lv_obj_t *standings = nullptr;     // label on the championship page
   lv_obj_t *summary = nullptr;       // label on the post-session summary
+  bool *summary_skip = nullptr;      // the summary page's `skip`: out of the page order with nothing to show
+  bool *order_skip = nullptr;        // the order page's, likewise: no entries, no page
   lv_obj_t *constructors = nullptr;  // 8.1: the teams' table
   lv_obj_t *champ_line = nullptr;    // 8.1: "X can clinch it this weekend"
   lv_obj_t *progress = nullptr;      // 8.2: round N of M
@@ -73,7 +76,7 @@ struct App {
   lv_image_dsc_t banner_dsc{};
 };
 
-inline App g;
+inline PSRAM_BSS App g;                             // 13.7 kB, in PSRAM (decision 203)
 
 inline void set_clock(uint32_t utc, bool valid) {
   g.now_utc = utc;
@@ -205,20 +208,39 @@ inline void update_header() {
   }
   if (g.w.order_title) lv_label_set_text(g.w.order_title, state::order_name(g.st.order));
 
-  // 8.2: season progress. One line, and it answers "how far through are we".
-  if (g.w.progress && g.cal.n > 0) {
-    int done = 0;
-    for (int i = 0; i < g.cal.n; i++) {
-      const uint32_t race = g.cal.rounds[i].start[calendar::RACE];
-      if (race && race < g.now_utc) done++;
+  // Decision 202: the carousel's top-right line is about the CARD, not the season. It was
+  // the season progress ("Round 18 of 23 \u00b7 6 to go"), which on a legend or a circuit never
+  // changed and read as stuck; that line now sits with the race page's facts (8.2).
+  // A circuit: its round this season. A driver: their place in the championship. A legend:
+  // the seasons they raced and their titles.
+  if (g.w.progress && ui::g.has_shown) {
+    const carousel::Card c = ui::g.shown;
+    char b[64] = "";
+    if (c.type == carousel::CIRCUIT && c.index >= 0 && c.index < circuits::N) {
+      const circuits::Circuit *ct = &circuits::C[c.index];
+      int round = 0;
+      for (int i = 0; i < g.cal.n && !round; i++)
+        if (map::by_circuit_id(g.cal.rounds[i].circuit_id) == ct) round = g.cal.rounds[i].round;
+      if (round) std::snprintf(b, sizeof(b), "Round %d of %d", round, g.cal.n);
+      else std::snprintf(b, sizeof(b), "Not on the %u calendar", (unsigned) g.cal.season);
+    } else if (c.type == carousel::DRIVER && c.index >= 0 && c.index < drivers::N) {
+      const char *did = drivers::P[c.index].driver_id;
+      for (int i = 0; i < g.data.n_standings && !b[0]; i++)
+        if (std::strcmp(g.data.standings[i].driver_id, did) == 0)
+          std::snprintf(b, sizeof(b), "Championship P%d \u00b7 %d pts", g.data.standings[i].pos,
+                        g.data.standings[i].points);   // owner asked what "P26" meant: say so
+      if (!b[0]) std::snprintf(b, sizeof(b), "%u season", (unsigned) g.cal.season);
+    } else if (c.type == carousel::DRIVER) {
+      std::snprintf(b, sizeof(b), "%u season", (unsigned) g.cal.season);   // a rookie: no record yet
+    } else if (c.type == carousel::LEGEND && c.index >= 0 && c.index < legends::N) {
+      const auto &p = legends::P[c.index];
+      if (p.titles > 0)
+        std::snprintf(b, sizeof(b), "%u-%u \u00b7 %u title%s", (unsigned) p.first_season,
+                      (unsigned) p.last_season, (unsigned) p.titles, p.titles == 1 ? "" : "s");
+      else
+        std::snprintf(b, sizeof(b), "%u-%u", (unsigned) p.first_season, (unsigned) p.last_season);
     }
-    // 64, not 48: the compiler reasons about the widest %d an int can produce,
-    // and it is right to - this is the -Wformat-truncation the build gate
-    // exists for, caught for the fourth time.
-    char b[64];
-    std::snprintf(b, sizeof(b), "Round %d of %d \u00b7 %d to go",
-                  done + (done < g.cal.n ? 1 : 0), g.cal.n, g.cal.n - done);
-    lv_label_set_text(g.w.progress, b);
+    if (std::strcmp(lv_label_get_text(g.w.progress), b) != 0) lv_label_set_text(g.w.progress, b);
   }
 
   // The circuit's country flag (6.6). Keyed on Circuit.Location.country via the
@@ -246,6 +268,7 @@ inline void update_header() {
   // The short facts; the full set lives on the circuit card (6.2).
   if (g.w.race_facts && ridx2 >= 0 && ridx2 < g.cal.n) {
     const auto *c = map::by_circuit_id(g.cal.rounds[ridx2].circuit_id);
+    ui::draw_race_map(c);                    // decision 202: the trace beside the facts; null hides it
     const facts::Fact *f = facts::find(g.cal.rounds[ridx2].circuit_id);
     char b[160] = "";      // empty when a venue is in neither table: never an uninitialised label
     int k = 0;
@@ -253,7 +276,16 @@ inline void update_header() {
     if (f && f->fl_time[0])
       k += std::snprintf(b + k, sizeof(b) - k, "FL %s\n", f->fl_time);
     if (f && f->last_year)
-      std::snprintf(b + k, sizeof(b) - k, "last %s", f->last_driver);
+      k += std::snprintf(b + k, sizeof(b) - k, "last %s\n", f->last_driver);
+    // 8.2: season progress, "how far through are we" - here with the round's facts
+    // (decision 202; it was the carousel's top-right line, where it never changed).
+    int done = 0;
+    for (int i = 0; i < g.cal.n; i++) {
+      const uint32_t race = g.cal.rounds[i].start[calendar::RACE];
+      if (race && race < g.now_utc) done++;
+    }
+    if (g.cal.n > 0 && k < (int) sizeof(b) - 1)
+      std::snprintf(b + k, sizeof(b) - (size_t) k, "%d of %d to go", g.cal.n - done, g.cal.n);
     lv_label_set_text(g.w.race_facts, b);
   }
 }
@@ -267,15 +299,23 @@ inline void update_banner(uint32_t now_ms) {
     if (g.w.banner_flag) {
       const flags::Flag *f = flags::find(g.watch_cfg.iso3);
       if (f) {
+        // Pre-scaled 3x (48x36) into a buffer of our own and drawn 1:1: LVGL's scaled RGB565
+        // draws nothing on this board and logs "lv_draw_sw_transform: Color format 0x12 is not
+        // enabled" (decision 202; the banner flag was the one scaled image left).
+        static PSRAM_BSS uint16_t big[flags::CARD_W * 3 * flags::CARD_H * 3];
+        const uint16_t *src = (const uint16_t *) f->card;
+        for (int y = 0; y < flags::CARD_H * 3; y++)
+          for (int x = 0; x < flags::CARD_W * 3; x++)
+            big[y * flags::CARD_W * 3 + x] = src[(y / 3) * flags::CARD_W + x / 3];
         g.banner_dsc.header.magic = LV_IMAGE_HEADER_MAGIC;
         g.banner_dsc.header.cf = LV_COLOR_FORMAT_RGB565;
-        g.banner_dsc.header.w = flags::CARD_W;
-        g.banner_dsc.header.h = flags::CARD_H;
-        g.banner_dsc.header.stride = flags::CARD_W * 2;
-        g.banner_dsc.data_size = flags::CARD_W * flags::CARD_H * 2;
-        g.banner_dsc.data = (const uint8_t *) f->card;
+        g.banner_dsc.header.w = flags::CARD_W * 3;
+        g.banner_dsc.header.h = flags::CARD_H * 3;
+        g.banner_dsc.header.stride = flags::CARD_W * 3 * 2;
+        g.banner_dsc.data_size = sizeof(big);
+        g.banner_dsc.data = (const uint8_t *) big;
         lv_image_set_src(g.w.banner_flag, &g.banner_dsc);
-        lv_image_set_scale(g.w.banner_flag, 768);   // 3x, so 48x36
+        lv_image_set_scale(g.w.banner_flag, 256);   // 1:1
         lv_obj_remove_flag(g.w.banner_flag, LV_OBJ_FLAG_HIDDEN);
       } else {
         lv_obj_add_flag(g.w.banner_flag, LV_OBJ_FLAG_HIDDEN);   // decision 20
@@ -287,9 +327,10 @@ inline void update_banner(uint32_t now_ms) {
     // live data underneath, not about covering the subject.
     // Both sit below the trace (70-310) with clear black between, and both end
     // above the gear at 432 so settings stay reachable without waiting it out.
-    const bool big = (g.alert.tier == watch::MILESTONE);
-    lv_obj_set_height(g.w.banner, big ? 100 : 92);
-    lv_obj_set_y(g.w.banner, big ? 326 : 330);
+    // One size for both (decision 202; owner: "banner height for alert and takeover are
+    // different"): the milestone's louder look is its timing and text, not a taller strip.
+    lv_obj_set_height(g.w.banner, 92);
+    lv_obj_set_y(g.w.banner, 330);
     // The strip would otherwise sit half-hidden behind it. A banner that
     // REPLACES the summary has nothing to crowd.
     if (g.w.top5) lv_obj_add_flag(g.w.top5, LV_OBJ_FLAG_HIDDEN);
@@ -304,9 +345,22 @@ inline void update_banner(uint32_t now_ms) {
 
 inline void dismiss_banner() { watch::dismiss(g.alert); update_banner(0); }
 
+// Decision 202: the web UI's Animations buttons - the two alert looks on demand, with a
+// made-up line, so they can be seen without waiting for a race.
+inline void demo_alert(bool milestone, uint32_t now_ms) {
+  g.alert.event = milestone ? watch::EV_MILESTONE : watch::EV_RESULT;
+  g.alert.tier = milestone ? watch::MILESTONE : watch::EVENT;
+  std::snprintf(g.alert.line, sizeof(g.alert.line), "%s",
+                milestone ? "Max takes his 80th win" : "Max wins");
+  g.alert.raised_ms = now_ms;
+  g.alert.active = true;
+  update_banner(now_ms);
+}
+
 // 6.1: with a card open, a tap ANYWHERE closes it rather than acting. Returns
 // true when the tap was consumed, so callers do nothing else.
 inline bool tap_consumed() {
+  if (ui::just_swiped()) return true;        // UI-20c: a swipe's release is not a page flip
   if (!detail::is_open()) return false;
   detail::close();
   return true;
@@ -374,16 +428,23 @@ inline void wire_standings_tap() {
 }
 
 // Tapping the map opens the circuit card (6.11).
+// The circuit ON THE CARD (decision 202). It used to open the next round's circuit whatever
+// card was tapped, so every circuit's detail said Circuit of the Americas in the week of
+// the United States GP ("circuit details not accurate, always shows Austin").
 inline void open_circuit() {
-  const int ridx = g.st.current.valid() ? g.st.current.round_idx
-                                        : (g.st.next.valid() ? g.st.next.round_idx : 0);
-  if (ridx < 0 || ridx >= g.cal.n) return;
-  const calendar::Round &r = g.cal.rounds[ridx];
-  const auto *c = map::by_circuit_id(r.circuit_id);
+  if (ui::just_swiped()) return;             // UI-20c: a swipe that began on the map is not a tap
+  const circuits::Circuit *c = nullptr;
+  if (ui::g.has_shown && ui::g.shown.type == carousel::CIRCUIT &&
+      ui::g.shown.index >= 0 && ui::g.shown.index < circuits::N)
+    c = &circuits::C[ui::g.shown.index];
   if (c == nullptr) return;
+  // Its round this season, if it has one: the detail then carries the date and the flag.
+  const calendar::Round *r = nullptr;
+  for (int i = 0; i < g.cal.n && r == nullptr; i++)
+    if (map::by_circuit_id(g.cal.rounds[i].circuit_id) == c) r = &g.cal.rounds[i];
   char title[48], body[480];
-  detail::compose_circuit(*c, &r, title, sizeof(title), body, sizeof(body));
-  detail::show(title, body, r.iso3);
+  detail::compose_circuit(*c, r, title, sizeof(title), body, sizeof(body));
+  detail::show(title, body, r ? r->iso3 : nullptr);
 }
 
 // ---- the tick -----------------------------------------------------------
@@ -399,7 +460,12 @@ inline void place_flags(lv_obj_t *lbl, lv_obj_t **img, lv_image_dsc_t *dsc, cons
   lv_obj_t *page = lv_obj_get_parent(lbl);
   const lv_font_t *font = lv_obj_get_style_text_font(lbl, LV_PART_MAIN);
   const int pitch = lv_font_get_line_height(font) + lv_obj_get_style_text_line_space(lbl, LV_PART_MAIN);
-  const int x = lv_obj_get_x(lbl) + col * lv_font_get_glyph_width(font, '0', '0');
+  // The label's position as the YAML set it (its style x/y), not lv_obj_get_x/y: those read
+  // the laid-out coords, which on the first board were still 0 when the first standings
+  // arrived - the page had never been shown - so every flag sat over the header and the
+  // position column (decision 202).
+  const int lx = lv_obj_get_style_x(lbl, LV_PART_MAIN), ly = lv_obj_get_style_y(lbl, LV_PART_MAIN);
+  const int x = lx + col * lv_font_get_glyph_width(font, '0', '0');
   for (int i = 0; i < cap; i++) {
     const flags::Flag *f = (i < n && iso3[i] && iso3[i][0]) ? flags::find(iso3[i]) : nullptr;
     if (f == nullptr) {
@@ -419,7 +485,7 @@ inline void place_flags(lv_obj_t *lbl, lv_obj_t **img, lv_image_dsc_t *dsc, cons
     d.data_size = flags::CARD_W * flags::CARD_H * 2;
     d.data = (const uint8_t *) f->card;
     lv_image_set_src(img[i], &d);
-    lv_obj_set_pos(img[i], x, lv_obj_get_y(lbl) + i * pitch + (pitch - flags::CARD_H) / 2);
+    lv_obj_set_pos(img[i], x, ly + i * pitch + (pitch - flags::CARD_H) / 2);
     lv_obj_remove_flag(img[i], LV_OBJ_FLAG_HIDDEN);
   }
 }
@@ -452,7 +518,7 @@ inline void refresh_data() {
   // RACE-13d/e: the carousel follows who is racing THIS season, so a
   // retirement or a rookie needs no rebuild (decision 98).
   {
-    static roster::View rv;
+    static PSRAM_BSS roster::View rv;
     roster::build(g.data, rv);
     if (!roster::same(rv, ui::g.roster)) ui::set_roster(rv);
   }
@@ -474,6 +540,10 @@ inline void refresh_data() {
     g.cal.season = g.data.season;
     g.cal.fetched = true;
   }
+
+  // Decision 202: an empty entry list is not a page - the order page leaves the tap-through
+  // order until the list arrives, and comes back with it.
+  if (g.w.order_skip) *g.w.order_skip = g.data.n_entries <= 0;
 
   // The watched driver's row highlight and the ambient marker (4.14.3).
   if (g.data.n_entries > 0) {
@@ -498,7 +568,11 @@ inline void refresh_data() {
   // live window.
   if (g.w.summary) {
     const auto &sm = g.data.summary;
-    if (sm.have_fastest || sm.have_stops) {
+    const bool have = sm.have_fastest || sm.have_stops;
+    // Decision 202: a page that only says "waiting for a completed session" is not a page -
+    // it leaves the tap-through order until there is a summary, and comes back when there is.
+    if (g.w.summary_skip) *g.w.summary_skip = !have;
+    if (have) {
       char b[760];
       int k = 0;
       if (sm.event[0])

@@ -9,6 +9,7 @@
 #include <cstring>
 
 #include "f1_json.h"
+#include "f1_mem.h"
 #include "f1_state.h"
 
 namespace f1 {
@@ -221,7 +222,7 @@ inline bool parse_calendar(const char *s, size_t n, Store &out) {
   // still points at the previous parse's strings while this one is written, and a parse
   // comes once a day, long after every reader has moved on to the new snapshot.
   struct Bank { char names[MAX_ROUNDS][48], cids[MAX_ROUNDS][28], countries[MAX_ROUNDS][28], locals[MAX_ROUNDS][28]; };
-  static Bank banks[2];
+  static PSRAM_BSS Bank banks[2];                   // 6.9 kB, in PSRAM (decision 203)
   static int bank_i = 0;
   Bank &b = banks[bank_i ^= 1];
   char (&names)[MAX_ROUNDS][48] = b.names;

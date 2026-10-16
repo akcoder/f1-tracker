@@ -25,3 +25,5 @@ tests/test_anim
 tests/test_png
 tests/test_headshot
 test_dino
+test_toucan
+test_tz

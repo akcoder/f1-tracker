@@ -1,0 +1,277 @@
+#pragma once
+// A visitor that crosses the screen now and then, stops in the middle, says a word in a speech bubble
+// and goes on: the dinosaur's walk (f1_dino.h) and the toucan's flight (f1_toucan.h) are two Traits
+// of this one engine. A Traits supplies the timing (its logic header), the pictures and the words:
+//
+//   using Walk;                          // make(seed) -> Walk with .flip and .word
+//   using Frame;                         // at(walk, ms) -> Frame with .x .y .pose .bubble
+//   static constexpr int W, H;           // the sprite; N_POSES of them, from pose 0
+//   static constexpr int SCREEN_W, N_POSES;
+//   static constexpr const char *TAG;
+//   static Walk make(uint32_t seed);   static Frame at(const Walk &, uint32_t ms);
+//   static bool finished(const Walk &, uint32_t ms);   static uint32_t gap(uint32_t seed);
+//   static const char *word(const Walk &);   static const uint8_t *pose(int p);   // RGB565A8, facing right
+//
+// What keeps it fast (what sky-tracker's launch and plane-tracker's cheer learned on this panel):
+//  * A SNAPSHOT of the screen is the visit's opaque backdrop, an image that sits on the active screen
+//    as its top child. LVGL then culls everything beneath it, so a dirty box costs one image blit and
+//    the sprite, not a redraw of the page's rows, flags and bars (plane-tracker's UI-66b). The page
+//    stands still for the visit. With no memory for the snapshot, no visit.
+//  * frame() runs on the display's LV_EVENT_REFR_START, from the clock at that moment, so every frame
+//    drawn shows a fresh position; the objects it moves re-arm the next refresh. A 40 ms timer only
+//    covers a stretch with no refresh (sky-tracker's UI-69a).
+//  * Opaque, small, nothing translucent but the sprite's own antialiased edge; the sprite is an
+//    RGB565A8 image drawn 1:1 (LVGL's fast path); a visit to the left uses mirrored copies made once,
+//    in PSRAM, for that visit. The bubble is drawn once, when it appears.
+//  * A visit logs its frames, rate and longest gap, as sky-tracker's animations do.
+//
+// Needs the build flag -DLV_USE_SNAPSHOT=1, the font for the bubble, `enabled` (the visitor's switch);
+// the application tick calls tick() about once a second with whether a visit is welcome now (no card
+// over the screen, not the boot, settings, About or debug page, the panel not blank). A touch ends a
+// visit. The speech bubble's two pointers are the dinosaur's (f1_dino_data.h), for both.
+#include <cstdint>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+
+#include "f1_dino_data.h"
+
+#if defined(USE_ESP32) && !defined(F1_HOST_TEST)
+#include "esp_heap_caps.h"
+#include "esphome/core/log.h"
+namespace f1 {
+namespace critter {
+
+inline void *big_alloc(size_t n) { return heap_caps_malloc(n, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT); }
+inline void big_free(void *p) { heap_caps_free(p); }
+
+// An RGB565A8 image flipped left to right: its RGB plane (2 bytes a pixel), then its alpha plane.
+inline void mirror_into(uint8_t *dst, const uint8_t *src, int w, int h) {
+  const uint16_t *s565 = (const uint16_t *) src;
+  uint16_t *d565 = (uint16_t *) dst;
+  const uint8_t *sa = src + (size_t) w * h * 2;
+  uint8_t *da = dst + (size_t) w * h * 2;
+  for (int y = 0; y < h; y++)
+    for (int x = 0; x < w; x++) {
+      d565[(size_t) y * w + x] = s565[(size_t) y * w + (w - 1 - x)];
+      da[(size_t) y * w + x] = sa[(size_t) y * w + (w - 1 - x)];
+    }
+}
+
+inline void describe(lv_image_dsc_t &d, const uint8_t *data, int w, int h) {
+  std::memset(&d, 0, sizeof(d));
+  d.header.magic = LV_IMAGE_HEADER_MAGIC;
+  d.header.cf = LV_COLOR_FORMAT_RGB565A8;
+  d.header.w = w;
+  d.header.h = h;
+  d.header.stride = w * 2;                 // the RGB plane's
+  d.data_size = (uint32_t) w * h * 3;
+  d.data = data;
+}
+
+inline constexpr int TAIL_W = dino::TAIL_W, TAIL_H = dino::TAIL_H;
+
+template <class T>
+struct Critter {
+  static constexpr int N = T::N_POSES, SCREEN_W = T::SCREEN_W;
+  static constexpr size_t POSE_BYTES = (size_t) T::W * T::H * 3;
+
+  struct St {
+    bool running = false, done = false;
+    typename T::Walk w;
+    uint32_t t0 = 0, last_frame = 0, next_at = 0, seed = 1;
+    lv_draw_buf_t *snap = nullptr;
+    lv_obj_t *root = nullptr, *img = nullptr, *bubble = nullptr, *label = nullptr, *tail = nullptr;
+    lv_timer_t *timer = nullptr;
+    uint8_t *mirror = nullptr;                  // the poses facing left: one block in PSRAM, per visit
+    lv_image_dsc_t pose_dsc[N];
+    lv_image_dsc_t tail_dsc;
+    int pose = -1, x = -99999, y = -99999;
+    bool bubble_on = false;
+    uint32_t frames = 0, max_gap = 0;
+  };
+  static inline St st;
+  static inline bool (*enabled)() = nullptr;           // the project's switch (null: always on)
+  static inline const lv_font_t *bubble_font = nullptr;
+
+  // Move everything for this refresh, from the clock at this moment.
+  static void frame() {
+    if (!st.running || st.done) return;
+    const uint32_t now = lv_tick_get();
+    const uint32_t t = now - st.t0;
+    if (st.last_frame) {
+      const uint32_t gap = now - st.last_frame;
+      if (gap > st.max_gap) st.max_gap = gap;
+    }
+    st.last_frame = now;
+    st.frames++;
+    // a touch since the start ends the visit; so does the page changing under it
+    if (lv_display_get_inactive_time(nullptr) + 100 < t || lv_obj_get_parent(st.root) != lv_screen_active() ||
+        T::finished(st.w, t)) {
+      st.done = true;                        // torn down by the timer, outside the refresh
+      return;
+    }
+    const auto f = T::at(st.w, t);
+    if ((int) f.pose != st.pose) {
+      st.pose = (int) f.pose;
+      lv_image_set_src(st.img, &st.pose_dsc[st.pose]);
+    }
+    if (f.x != st.x || f.y != st.y) {
+      st.x = f.x;
+      st.y = f.y;
+      lv_obj_set_pos(st.img, f.x, f.y);
+    }
+    if (f.bubble != st.bubble_on) {
+      st.bubble_on = f.bubble;
+      if (f.bubble) {
+        lv_obj_update_layout(st.bubble);
+        const int bw = lv_obj_get_width(st.bubble), bh = lv_obj_get_height(st.bubble);
+        // over the head: right edge to the sprite's right edge going right, left edge to its left edge going left
+        int bx = st.w.flip ? f.x - 6 : f.x + T::W + 6 - bw;
+        if (bx < 4) bx = 4;
+        if (bx + bw > SCREEN_W - 4) bx = SCREEN_W - 4 - bw;
+        const int by = f.y - bh - TAIL_H + 4;
+        lv_obj_set_pos(st.bubble, bx, by);
+        lv_obj_set_pos(st.tail, st.w.flip ? bx + 14 : bx + bw - TAIL_W - 14, by + bh - 2);
+        lv_obj_remove_flag(st.bubble, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_remove_flag(st.tail, LV_OBJ_FLAG_HIDDEN);
+      } else {
+        lv_obj_add_flag(st.bubble, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(st.tail, LV_OBJ_FLAG_HIDDEN);
+      }
+    }
+  }
+
+  static void on_refr(lv_event_t *) { frame(); }
+
+  static void end_visit() {
+    if (!st.running) return;
+    if (lv_display_t *d = lv_display_get_default()) lv_display_remove_event_cb_with_user_data(d, on_refr, nullptr);
+    if (st.timer) lv_timer_delete(st.timer);
+    st.timer = nullptr;
+    const uint32_t ms = lv_tick_get() - st.t0;
+    if (st.root) lv_obj_delete(st.root);                         // and its children
+    st.root = st.img = st.bubble = st.label = st.tail = nullptr;
+    if (st.snap) lv_draw_buf_destroy(st.snap);
+    st.snap = nullptr;
+    big_free(st.mirror);
+    st.mirror = nullptr;
+    ESP_LOGI(T::TAG, "visit: %u frames in %u ms (%.1f fps), longest gap %u ms", (unsigned) st.frames, (unsigned) ms,
+             ms ? st.frames * 1000.0f / ms : 0.0f, (unsigned) st.max_gap);
+    st.running = false;
+    st.done = false;
+  }
+
+  // Start a visit now (the seed picks it). False: no visit (no memory).
+  static bool begin_visit(uint32_t seed) {
+    if (st.running || bubble_font == nullptr) return false;
+    lv_obj_t *scr = lv_screen_active();
+    st.w = T::make(seed);
+    // the screen as it is, as the opaque backdrop
+    st.snap = lv_snapshot_take(scr, LV_COLOR_FORMAT_RGB565);
+    if (st.snap == nullptr) {
+      ESP_LOGW(T::TAG, "no memory for the snapshot: no visit");
+      return false;
+    }
+    const uint8_t *pose_src[N], *tail_src = st.w.flip ? dino::TAIL_L : dino::TAIL_R;
+    for (int p = 0; p < N; p++) pose_src[p] = T::pose(p);
+    if (st.w.flip) {                                             // facing left: mirrored copies for this visit
+      st.mirror = (uint8_t *) big_alloc(POSE_BYTES * N);
+      if (st.mirror == nullptr) {
+        lv_draw_buf_destroy(st.snap);
+        st.snap = nullptr;
+        return false;
+      }
+      for (int p = 0; p < N; p++) {
+        mirror_into(st.mirror + POSE_BYTES * p, T::pose(p), T::W, T::H);
+        pose_src[p] = st.mirror + POSE_BYTES * p;
+      }
+    }
+    for (int p = 0; p < N; p++) describe(st.pose_dsc[p], pose_src[p], T::W, T::H);
+    describe(st.tail_dsc, tail_src, TAIL_W, TAIL_H);   // the pointer is not mirrored: there is one for each side
+
+    st.root = lv_image_create(scr);
+    lv_image_set_src(st.root, st.snap);
+    lv_obj_set_pos(st.root, 0, 0);
+    lv_obj_set_size(st.root, SCREEN_W, T::SCREEN_H);   // not SIZE_CONTENT: a sprite past x=480 would widen it and shift the picture
+    lv_obj_remove_flag(st.root, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_remove_flag(st.root, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_move_foreground(st.root);
+
+    st.img = lv_image_create(st.root);
+    lv_image_set_src(st.img, &st.pose_dsc[0]);
+    lv_obj_remove_flag(st.img, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_set_pos(st.img, -T::W - 10, -T::H - 10);   // off screen until the first frame
+
+    st.bubble = lv_obj_create(st.root);
+    lv_obj_remove_style_all(st.bubble);
+    lv_obj_set_size(st.bubble, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+    lv_obj_set_style_bg_color(st.bubble, lv_color_hex(0xF2F5FC), 0);
+    lv_obj_set_style_bg_opa(st.bubble, LV_OPA_COVER, 0);
+    lv_obj_set_style_border_color(st.bubble, lv_color_hex(0xFF8A1F), 0);
+    lv_obj_set_style_border_width(st.bubble, 2, 0);
+    lv_obj_set_style_radius(st.bubble, 10, 0);
+    lv_obj_set_style_pad_hor(st.bubble, 10, 0);
+    lv_obj_set_style_pad_ver(st.bubble, 5, 0);
+    lv_obj_remove_flag(st.bubble, LV_OBJ_FLAG_CLICKABLE);
+    st.label = lv_label_create(st.bubble);
+    lv_obj_set_style_text_font(st.label, bubble_font, 0);
+    lv_obj_set_style_text_color(st.label, lv_color_hex(0x101420), 0);
+    lv_label_set_text(st.label, T::word(st.w));
+    lv_obj_add_flag(st.bubble, LV_OBJ_FLAG_HIDDEN);
+
+    st.tail = lv_image_create(st.root);
+    lv_image_set_src(st.tail, &st.tail_dsc);
+    lv_obj_remove_flag(st.tail, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_add_flag(st.tail, LV_OBJ_FLAG_HIDDEN);
+
+    st.pose = -1;
+    st.x = st.y = -99999;
+    st.bubble_on = false;
+    st.frames = st.max_gap = st.last_frame = 0;
+    st.done = false;
+    st.running = true;
+    st.t0 = lv_tick_get();
+    if (lv_display_t *d = lv_display_get_default()) lv_display_add_event_cb(d, on_refr, LV_EVENT_REFR_START, nullptr);
+    st.timer = lv_timer_create(
+        [](lv_timer_t *) {
+          if (st.done) { end_visit(); return; }
+          if (lv_tick_get() - st.last_frame >= 150) frame();     // no refresh came: cover the gap
+        },
+        40, nullptr);
+    if (st.timer == nullptr) {                                   // no timer, no way to end the visit
+      ESP_LOGW(T::TAG, "no memory for the timer: no visit");
+      end_visit();                                               // running is set, so this tears it down
+      return false;
+    }
+    frame();
+    return true;
+  }
+
+  // About once a second from the project: starts a visit when one is due, and ends one that is no longer
+  // welcome. `welcome`: nothing over the screen, a page where a visitor is fun, the panel lit.
+  static void tick(uint32_t now_ms, bool welcome) {
+    if (st.next_at == 0) {                                       // first call: the first gap
+      st.seed = now_ms * 2654435761u + 12345u;
+      st.next_at = now_ms + T::gap(st.seed);
+      return;
+    }
+    if (st.running) {
+      if (!welcome) st.done = true;
+      return;
+    }
+    if (!welcome || (enabled && !enabled()) || (int32_t) (now_ms - st.next_at) < 0) return;
+    st.seed = st.seed * 1664525u + 1013904223u + now_ms;         // a new visit each time
+    begin_visit(st.seed);
+    st.next_at = now_ms + T::gap(st.seed ^ 0x9E3779B9u);
+  }
+
+  static bool active() { return st.running; }
+
+  // Decision 202: a web button asks for a visit - the next tick that finds the panel free starts one.
+  static void visit_now() { if (st.next_at != 0 && !st.running) st.next_at = 1; }
+};
+
+}  // namespace critter
+}  // namespace f1
+#endif  // device only

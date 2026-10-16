@@ -5,7 +5,10 @@ firmware's data header; the timing is f1_dinologic.h's twin (the host tests pin 
 same numbers).
 """
 import math
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image
+import os, sys
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from critter_common import Rng, next_gap_ms, GAP_MIN_MS, GAP_MAX_MS, raster as _raster
 
 BODY = (0x5D, 0xB7, 0x4B); DARK = (0x3E, 0x8A, 0x35); BELLY = (0xA8, 0xD8, 0x8A)
 EYE = (0x10, 0x14, 0x20); SPOT = (0x4A, 0xA0, 0x3E); MOUTH = (0x7A, 0x2E, 0x3A)
@@ -81,12 +84,6 @@ def tail_svg(flip):
             '<rect x="3.2" y="0" width="15.6" height="1.8" fill="#F2F5FC"/></svg>')
 
 
-def _raster(svg_text, w, h):
-    import io, subprocess
-    out = subprocess.run(["rsvg-convert", "-w", str(w), "-h", str(h)], input=svg_text.encode(), capture_output=True, check=True).stdout
-    return Image.open(io.BytesIO(out)).convert("RGBA")
-
-
 def sprite(pose):
     """The dinosaur facing right, rasterised from its vector art (antialiased), RGBA, SW x SH."""
     return _raster(svg(pose), SW, SH)
@@ -102,20 +99,6 @@ LANE_MIN, LANE_MAX = 60, 340
 STOP_MIN, STOP_MAX = 150, 330
 STEP_PX = 9.75                     # one of the four walk poses per this much distance: 8 steps a second at 78 px/s
 ROAR_DELAY_MS, ROAR_STEP_MS = 300, 250
-GAP_MIN_MS, GAP_MAX_MS = 3 * 60000, 12 * 60000
-
-
-class Rng:
-    def __init__(self, seed):
-        self.s = (seed or 1) & 0xFFFFFFFF
-
-    def next(self):
-        x = self.s
-        x ^= (x << 13) & 0xFFFFFFFF
-        x ^= x >> 17
-        x ^= (x << 5) & 0xFFFFFFFF
-        self.s = x
-        return (x >> 8) / 16777216.0
 
 
 class Walk:
@@ -167,10 +150,6 @@ class Walk:
         if self.flip:
             x = SCREEN_W - x - SW
         return int(math.floor(x + 0.5)), self.lane, pose, bubble
-
-
-def next_gap_ms(seed):
-    return GAP_MIN_MS + int(Rng(seed).next() * (GAP_MAX_MS - GAP_MIN_MS))
 
 
 if __name__ == "__main__":
