@@ -351,7 +351,9 @@ with an HTML error page. It is not a candidate.
 | `/ergast/f1/current/next/?format=json` | 200 | **821 B** | 0.3 s | one race, full session times |
 | 201 | **The backlight is the same entity set on every tracker** (`tracker-common` v0.4.2): the globals `bright_day`, `bright_day_open`, `bright_on_open`, the `Backlight` number `backlight_pct` (was `Brightness` here; with auto-dim on it sets the DAYTIME level and the light follows it scaled by the night factor, as sky-tracker's did), the light's slider sync (new here: HA and web changes now move the settings slider) and the touch wake come from `boards/backlight.yaml`; the project sets `tracker::display::auto_on` and `factor_now` once. **The fallback AP starts 30 s after Wi-Fi fails and Wi-Fi never reboots the device** (`ap_timeout`, `wifi_reboot_timeout` in the board package, from sky-tracker; ESPHome's 90 s and 15 min were the defaults this project had kept) | 2026-10-11 | **asked for by owner**, implements 200 |
 | 202 | **The auto switch is sky-tracker's `Auto Brightness`** (`tracker-common` v0.4.3, in `boards/backlight.yaml`): id `auto_bright`, default OFF, turning it on takes the current brightness as the daytime level; the settings row reads `Auto bright` with the hint `dims after sunset`. Was `auto_dim`, `Auto-dim Display`, default on. Supersedes the wording of decision 44's auto-dim entity | 2026-10-11 | **asked for by owner**, implements 201 |
-| 203 | **A dinosaur walks across the screen now and then**, for fun (the owner's request, 2026-10-11): vector art, antialiased, with a stop in the middle and a roar in a speech bubble; its speed varies and its arm swings. This project's own, not shared (`f1_dinologic.h`, `f1_dino.h`, `f1_dino_data.h`, `tools/dino_art.py`, `tools/gen_dino.py`, `art/dino`, `tests/test_dino.cpp`); the `Dinosaur` switch (default on, settings Display tab, HA) and the walk's tick are this project's. Costs about 290 KB of flash (46.0 % of the slot) and a 460 KB PSRAM snapshot while it walks | 2026-10-11 | **asked for by owner**, implements MOTION-5 |
+| 205 | **A time-zone dropdown on the settings Location tab, and a 12h/24h switch on the Display tab (UI-8b, as sky-tracker's, not plane-tracker's; the `Clock Format` select and Zulu are gone), **the clock in the upper right of every content page and the same header size on all of them** (UI-112)** (owner's request, 2026-10-15), after sky-tracker's UI-70: 20 zones plus Auto (Home Assistant's), staged and applied on Save, and a `Time Zone` select in the web UI and HA; `f1_tz.h`, `tools/check_tz.py`, `tests/test_tz.cpp`. **The detail card is 440 px tall** (was 400): the longest circuit card (16 lines, Yas Marina, 20 of 40 circuits have 16) ran into "tap anywhere to close" (owner: "Country value overlaps"). **The toucan is 180 x 140** (owner, twice: "make toucan bigger"; was 108 x 84), its perch limited to 150-300 px so the whole bird stays on screen | 2026-10-15 | **asked for by owner** |
+| 204 | **A toucan flies across the screen now and then**, for fun (the owner's request, 2026-10-15): vector art like the dinosaur's, with swoops, a perch, a beak that clacks and a speech bubble (`Just follow your nose!` among its lines). This project's own (`f1_toucanlogic.h`, `f1_toucan.h`, `f1_toucan_data.h`, `tools/toucan_art.py`, `tools/gen_toucan.py`, `art/toucan`, `tests/test_toucan.cpp`); the `Toucan` switch (default on; web UI and HA) and a `Toucan visit` web button. **Neither animation has a row on the settings screen** (owner, 2026-10-15): the `Dinosaur` row came off too, and both switches stay in the web UI and HA only. The drawing, snapshot and timers are one engine with the dinosaur's, `f1_critter.h` (a template over each one's traits); each keeps its own timing, art and data. About 530 KB of flash | 2026-10-15 | **asked for by owner**, implements MOTION-6 |
+| 203 | **A dinosaur walks across the screen now and then**, for fun (the owner's request, 2026-10-11): vector art, antialiased, with a stop in the middle and a roar in a speech bubble; its speed varies and its arm swings. This project's own, not shared (`f1_dinologic.h`, `f1_dino.h`, `f1_dino_data.h`, and, shared with the toucan (decision 204), `f1_critter.h`, `f1_critterlogic.h`, `tools/critter_common.py`; `tools/dino_art.py`, `tools/gen_dino.py`, `art/dino`, `tests/test_dino.cpp`); the `Dinosaur` switch (default on; web UI and HA, no settings-screen row since decision 204) and the walk's tick are this project's. Costs about 290 KB of flash (46.0 % of the slot) and a 460 KB PSRAM snapshot while it walks | 2026-10-11 | **asked for by owner**, implements MOTION-5 |
 | `/ergast/f1/2026/races/?format=json&limit=40` | 200 | 14.3 KB | 0.33 s | **23 rounds** |
 | `/ergast/f1/2026/circuits/?format=json&limit=100` | 200 | 5.3 KB | 0.70 s | **24 circuits**, with lat/lon + country |
 | `/ergast/f1/2026/drivers/?format=json&limit=100` | 200 | 5.6 KB | 0.67 s | **32 drivers** |
@@ -1005,7 +1007,7 @@ own as drivers retire, which is why the rule is evaluated at runtime.
 
 DATA-73  [ ] **Show each driver once.** A driver in both sets gets their
          **current-driver card**, not a second legend card, and that card carries
-         a **`LEGEND` badge** beside the `DRIVER` type badge (§4.4, UI-20b) plus
+         a **`Legend` badge** beside the `Driver` type badge (§4.4, UI-20b) plus
          the full career record. One card, both facts.
 DATA-74  [ ] **Resolve the overlap at _runtime_ against the live entry list**
          (RACE-13d) — **not** at build time, which was decision 86's original
@@ -1052,9 +1054,11 @@ UI-2a  [ ] The rotation order changes with state. The *first* page after
 NET-2b  [x] / BOOT-2: the boot page. (decision 178), ported from
         `sky-tracker` 4.6.27 (its NET-2b, NET-2c and BOOT-2) and driven by
         `f1_boot.h`, which is pure and host-tested:
-        - a centred 380 px column: the mark (200 px), **"F1 Tracker"**
-          (`setup_title`), a status line and a body line (`setup_body`), firmware
-          version lower right;
+        - a 380 px column anchored 40 px from the top (not centred: the body
+          grows to two lines in AP mode, and nothing on the page may move -
+          decision 202): the mark (200 px), **"F1 Tracker"** (`setup_title`), a
+          status line and a body line (`setup_body`), firmware version lower
+          right;
         - **"Loading"** from the first frame until start-up ends, then
           **"Connecting to Wi-Fi"** over the network being tried (NET-2c: the
           entry ESPHome selected — saved to flash by Improv — and
@@ -1267,8 +1271,10 @@ UI-91  [ ] Rotate **one card at a time**, advancing on a timer. **Interval is a
 UI-20a  [ ] Card types are interleaved deterministically, not shuffled.
         With 40 circuits, 22 drivers and ~32 legends, a random draw clusters —
         three legends in a row, then eleven circuits. Walk the three lists in
-        parallel on a fixed pattern (**circuit → driver → circuit → legend**,
-        repeating), so each type appears at a predictable rhythm and every card
+        parallel on a fixed pattern (**circuit → driver → legend**, repeating;
+        it was circuit → driver → circuit → legend until the board showed how
+        rarely a legend came round, decision 202), so each type appears at a
+        predictable rhythm and every card
         is reached. Each list advances its own cursor, so the lists need not be
         the same length.
 UI-92  [ ] **Setting: `Carousel content`** — `all` (default) / `circuits only` /
@@ -1295,10 +1301,38 @@ UI-98  [ ] **Photographer credit on every card carrying a photograph** (§3.10.3
 UI-20b  [ ] The three card types must be instantly distinguishable. — a
         glance should never leave a reader unsure whether they are looking at a
         circuit or a person. Use a consistent **type badge** in the same corner
-        on all three (`CIRCUIT` / `DRIVER` / `LEGEND`) rather than relying on
+        on all three (`Circuit` / `Driver` / `Legend` - sentence case, UI-194;
+        the first circuit card said `CIRCUIT` until the board showed it,
+        decision 202) rather than relying on
         layout alone, because a portrait and a map already differ so much that
         the *layout* carries no signal when the card changes.
-UI-99  [ ] **Circuit order is calendar order**, and in `RACE_WEEK` the cycle
+UI-20c  [x] **Swipe through the carousel** (owner, on the board: "carousel allows swipe
+        right/left, let's try that" - decision 202). On the carousel page a swipe steps
+        to the neighbouring card **of the same kind**: on a circuit, left is the next
+        circuit and right the one before; on a driver or a legend, the next or
+        previous of those, wrapping round the list. The rotation's cursor follows,
+        so the walk resumes from the card chosen, and either swipe restarts the
+        dwell. (The first cut walked the rotation - circuit, driver, circuit, legend -
+        which the owner read as random.) **A swipe up or down changes the kind**:
+        circuit, driver, legend, round again, to the next card of that kind the
+        rotation would have shown; kinds the content setting excludes are skipped.
+        Without it a legend could only be waited for (owner: "legends never show in
+        taps list"). The swipe is read from the
+        press and the release on the page and on the map box (the one clickable
+        child): a release at least 40 px left or right of its press, mostly
+        sideways and within 700 ms. Not LVGL's gesture, which never fired on the
+        board (the GT911 reports too few points for its velocity test), so the
+        release fell through to the short click and flipped the page instead. A
+        swipe is not a tap: for 600 ms after one, a release neither flips the
+        page nor opens the detail card.
+UI-20f  [x] **The carousel page is three stops in the tap order** (decision 202; owner,
+        asked repeatedly: circuits and legends must be part of the screen-tapping
+        rotation). Arriving on the page shows a circuit, a tap shows a driver, the
+        next a legend, and the one after goes to the next page: race, order, circuit,
+        driver, legend, standings, summary, round again. A kind the content setting
+        excludes or that has nothing to show is skipped. The automatic rotation, the
+        swipes and hold-to-pause are unchanged.
+UI-99  [x] **Circuit order is calendar order** (decision 202: the rotation walks positions in a calendar-ordered list, as do the swipes), and in `RACE_WEEK` the cycle
        **starts at the next round** so the upcoming circuit is the first thing
        seen. Driver order is championship order; legend order is the curated
        table's order.
@@ -1387,9 +1421,12 @@ UI-110  [ ] Record the flag-icons licence and version in `reference/CREDITS.md`,
 UI-111  [ ] **Current local time in the upper-right corner**, `mono24`, showing
         `--:--` before time sync. Port `sky-tracker`'s widget directly, including
         the `y` offset that aligns the digit tops with the title's capitals.
-UI-112  [ ] Format is a **three-state dropdown**, as `plane-tracker` settled (its
-        decision 21): **24 h local** (default) / 12 h local / **UTC-Zulu**
-        (`2235Z`, no colon, trailing `Z`).
+UI-112  [ ] Format is **24 h local** (default, `14:05`) or **12 h local** (`2:05 PM`), a `24-hour Clock`
+        switch as `sky-tracker`'s UI-17 (owner, decision 205: not `plane-tracker`'s three-way dropdown, and
+        **no Zulu**: UTC time is not appropriate for this project). The clock is in the upper right of
+        **every** content page (race, order, circuit/driver/legend, standings, summary) and the page
+        headers are the same size on all of them: an orange `mono16` title at y 4, a white `mono16` line
+        under it (owner).
 UI-113  [ ] Monospace keeps the glyph count stable so the clock does not jitter.
         Roboto Mono is monospaced by construction.
 UI-114  [ ] Omit seconds. They force a 1 Hz redraw of the corner for no value.
@@ -1397,6 +1434,7 @@ UI-115  [ ] **Session times are the interesting case here, and they are not the
         clock.** Every session time arrives in **UTC** (§3.3) and must be shown in
         the reader's local time, or the countdown is meaningless. Convert once,
         centrally.
+UI-8b  [ ] **A `Time format` row on the settings Display tab** (decision 205), as sky-tracker's: `12h [switch] 24h`, on = 24 h. It drives the `24-hour Clock` switch entity (UI-112), applied on Save.
 UI-8a  [ ] Offer track local time too. OpenF1 `sessions` carries
        `gmt_offset` (measured, e.g. `"03:00:00"`), so showing "14:00 local ·
        03:00 your time · 11:00 at the track" costs nothing and is genuinely
@@ -1407,8 +1445,9 @@ UI-116  [ ] Time source: **SNTP** plus a second `time:` platform `homeassistant`
         SNTP on Wi-Fi** (`sky-tracker`'s NET-8): hold at boot, kick from
         `on_connect`, hold on `on_disconnect`.
 UI-117  [ ] Timezone: the owner's IANA zone (see `REQUIREMENTS.private.md`), handling DST automatically. ESPHome's
-        `timezone:` must be a **literal**, so it is compile-time — see the
-        caveat in §4.8.
+        `timezone:` must be a **literal**, so it is compile-time — and is now only the zone before
+        Home Assistant's first sync: the zone is chosen at runtime by UI-117a.
+UI-117a [ ] **A time-zone dropdown on the settings Location tab** (decision 205), ported from sky-tracker's UI-70: 20 choices (Auto from Home Assistant, Hawaii, Alaska, Pacific, Mountain, Arizona, Central, Eastern, Atlantic, Newfoundland, UTC, London, Central Europe, Eastern Europe, Moscow, India, China, Japan, Sydney, Auckland), staged like the other fields and applied on Save, and the `Time Zone` select in the web UI and HA (default Alaska, the build's zone). The zones are pre-parsed POSIX rules (`f1_tz.h`), set with ESPHome's `set_global_tz`; HA re-sends its own zone with every time sync, so a 500 ms timer puts a chosen one back. `tools/check_tz.py` checks the table against the IANA database; `tests/test_tz.cpp` the logic.
 UI-118  [ ] Show a clear **unsynced** indication rather than a plausible-but-wrong
         time. The state machine depends on the clock, so an unsynced clock must
         also suppress the state machine rather than letting it guess.
@@ -1459,7 +1498,8 @@ UI-126  [ ] **UI-44a: the lat/lon and the timezone are independent, and that is 
         correct in UTC while the clock stays on the home time zone, so the display will
         dim at the right absolute moment and the wrong apparent hour. **State
         this on the settings page** next to the coordinate fields — one line, so
-        nobody has to discover it.
+        nobody has to discover it. (Since UI-117a the zone is a runtime choice, still not
+        derived from the position; the note says so.)
 UI-44b  [ ] Decline the DMS entry widget. Both siblings carry a
         decimal⟷DMS toggle with hemisphere buttons and a three-field entry per
         axis. Here the coordinates are not the instrument — they feed one
@@ -1724,7 +1764,7 @@ and `on_long_press` opens the debug page. Ported from `sky-tracker` exactly.
 | Auto off overnight | checkbox | blank the panel between two hours (UI-44c) |
 | Auto off from / until | entry | local hours, default 23 → 07 |
 | Brightness | slider | 1–100 % (the **daytime** level while auto is on) |
-| Clock format | dropdown | 24 h local / 12 h local / UTC-Zulu |
+| Clock format | switch | 24 h local / 12 h local |
 | Carousel interval | slider | 15–120 s, step 15, default **45** |
 | Carousel order | dropdown | calendar / random / current season only |
 | Carousel content | dropdown | all (default) / circuits / drivers / legends / circuits + drivers (§4.4) |
@@ -1786,7 +1826,7 @@ UI-177  [ ] Prefer the HA **native API** over MQTT.
 | Auto off overnight | `switch` (UI-44c) |
 | Auto off from / until | two `number` (local hours) |
 | Brightness | `number` (1–100 %, slider) |
-| Clock format | `select` (24 h / 12 h / Zulu) |
+| 24-hour Clock | `switch` |
 | Carousel interval | `number` (15–120, step 15, slider) |
 | Carousel order | `select` |
 | Carousel content | `select` |
@@ -1852,20 +1892,35 @@ MOTION-2  The boot page and the About page show a pack of three small cars (oran
           (sky-tracker PERF-9). Pure timing and path in `f1_animlogic.h` (host test `test_anim`)
           (decision 190).
 MOTION-2a  The boot page also has the start lights: five lamps, 600 ms apart, held 1 s, then out
-           over 4 s, below the status text, played once. The About page has none (decision 190).
-MOTION-3  The cars run at different, changing speeds: each averages a lap per 5 s, its speed
-          swinging `1 + a cos(...)` (a 0.62-0.93, one or two swings a lap, a phase of its own), so it
-          always moves forward and is exactly one lap further on after a lap. The numbers come from
+           over 4 s, played once, centred on y 442 - under the body line even when it is the
+           two-line AP instruction (decision 202). The About page has none (decision 190).
+MOTION-3  The cars run at different, changing speeds: the pack averages a lap per 5 s, each car's
+          speed swinging `1 + a cos(...)` (a 0.22-0.40 - on the board 0.62-0.93 read as stalling,
+          decision 202 - one or two swings a lap, a phase of its own), so it always moves forward
+          and, in the opening lap, is exactly one lap further on after a lap. The numbers come from
           a seed taken from the tick each time the page opens. The faster of two cars within 0.045
           of a lap pulls out up to 4 px per 100 px of logo and is drawn on top, then tucks back in
           after passing (decision 192).
+MOTION-3a  Every lap gets a new set (decision 202: on the board a lap looked like the last, and
+          the cars crossed the line in the same order every time, because the swing is periodic
+          in the lap and every car covered exactly one lap per lap). At each line crossing the
+          order is re-dealt, any of the six equally likely, and each car's net pace over the lap
+          carries it to its new slot, so the pack is nose to tail at every line. The hand-over
+          keeps each car's position and its speed (the new phase is chosen to match, the swing
+          widened up to 0.55 if it must be), so nothing jumps. The sets come from a xorshift
+          chain off the opening's seed, so the renders can ask for any lap; lap 0 is the grid
+          with no gain, so a one-lap render still loops.
 MOTION-4  A portrait appears top-down as it decodes: a short-lived task on core 0 decodes into one
           reused PSRAM buffer and reports a band at a time, a 40 ms timer redraws it, rows not yet
           done are black, and a card closed or replaced mid-decode cancels it (decisions 188, 189).
+          The reveal runs at the decode's own pace: the 14 ms sleep between bands that made it
+          "visible" added over half a second to every portrait and read as slow loading on the
+          board (decision 202). The decode time is logged at DEBUG.
 MOTION-4a  A headshot fetched at run time appears the same way, row by row as it downloads, shown
            from the network task's own buffer (decision 193, 198).
 MOTION-5  [ ] A dinosaur walks across the screen now and then (the `Dinosaur` switch, on by default; `f1::dino`, this project's own, decision 203). A walk starts at a random time 3 to 12 minutes after the last, in a random direction at a random height (its top edge 60 to 340 px), at a random pace; it stops somewhere in the middle, stands and roars (a speech bubble with a random word, such as Rawr!, Grrr! or Chomp!, and its mouth opening and closing) for 2 to 3 s, then walks on and leaves. Its speed is never steady (`base * (1 + a cos(...))`, always forward) and its legs step by distance, so they hurry and dawdle with it; its little arm swings with each step and lifts while it roars. It never walks over the update or install card, the settings, About, debug or boot pages, or a blank panel, and a touch ends the walk.
 MOTION-5a [ ] The walk is drawn the way sky-tracker's and plane-tracker's animations are made fast: the screen is snapshotted and shown as an opaque backdrop on the active screen (LVGL then culls everything beneath it, so a frame costs one blit of the dirty box and the sprite, not a redraw of the page), the frame is moved on the display's refresh-start event from the clock at that moment (a 40 ms timer only covers a gap), only the sprite's own antialiased edge is translucent, and a walk logs its frames, rate and longest gap. With no memory for the snapshot there is no walk. The art is vector (`art/dino/*.svg`, rasterised at build time by `tools/gen_dino.py` to seven RGB565A8 poses, about 290 KB); a walk to the left uses mirrored copies made in PSRAM for that walk.
+MOTION-6  [ ] A toucan flies across the screen now and then (the `Toucan` switch, on by default; `f1::toucan`, this project's own, decision 204). A visit starts at a random time 3 to 12 minutes after the last, in a random direction at a random height, at a random pace; it swoops up and down on the way, perches on a branch somewhere in the middle, clacks its beak and says something in a speech bubble for 2 to 3 s, then flies on and leaves. What it says is one of `Just follow your nose!` (twice as likely as the others), `Squawk!`, `Toucan do it!`, `Got any fruit?`, `Nice beak, huh?`, `Rrrk! Rrrk!` or `Fruit salad time!`. Its wings beat by distance, so they hurry and dawdle with its speed. It is drawn by the same engine as MOTION-5a's dinosaur (snapshot backdrop, per-refresh frame, 180 x 140 RGB565A8 poses, the dinosaur's bubble pointers) and obeys MOTION-5's rules about where it never appears; the toucan and the dinosaur never share the screen (each waits while the other is out).
 
 
 ## 6. Performance and stability (PERF)
@@ -2405,7 +2460,7 @@ exists.
 | 37 | Team colours are a **bar, never the text colour** — several liveries have poor contrast on black | 2026-10-01 | active |
 | 38 | Settings use **staged Save/Cancel**; brightness is the live exception | 2026-10-01 | active |
 | 39 | **All settings exposed to the web UI and HA**; entities are the source of truth, widgets are views | 2026-10-01 | active |
-| 40 | Clock is a **three-state dropdown** (24 h local / 12 h local / UTC-Zulu), default 24 h local | 2026-10-01 | active |
+| 40 | Clock is a **three-state dropdown** (24 h local / 12 h local / UTC-Zulu), default 24 h local | 2026-10-01 | superseded by 205: a 24 h / 12 h switch, no Zulu |
 | 41 | Session times are converted from **UTC once, centrally**; track local time from `gmt_offset` is offered on the detail card | 2026-10-01 | active |
 | 42 | **The lat/lon and the timezone are independent**, and the settings page says so in one line | 2026-10-01 | active |
 | 43 | **Attribution is displayed regardless** of what the terms turn out to require: on-screen credit plus links in the web UI | 2026-10-01 | active |
@@ -2565,6 +2620,8 @@ exists.
 | 197 | **Font roles, one set across the trackers** (audit against `sky-tracker` and `plane-tracker`): page names (`About`, `Display`, `Debug`) mono16 orange; settings rows, labels and text fields **mono16** (were mono14), hints mono12; About: `Version` mono16, `This device` and `Data from` mono12 orange headings over mono14 bodies, `About` header top left; debug page body **mono16** (was mono12); card titles mono18, card bodies mono14, order rows mono12 (22 rows need it); boot/About title Roboto 50 for f1 only (sized to the F1 logo, sky/plane use Roboto 34). Not shared: sky's mono15 alerts and mono72 countdown | 2026-10-10 | **asked for by owner**, implements 194 |
 | 198 | **The detail card shows a headshot for a driver with no compiled portrait** (a tap in the order list or the championship table): the same F1 media-server picture as the carousel (decision 193), wanted when the card opens, shown as its rows arrive and scaled from 206 to 120 px beside the text, credited `photo: formula1.com` (decision 72). Closing the card cancels nothing the network task is doing; the picture stays cached for the next card | 2026-10-10 | **asked for by owner**, closes the gap left by 188 |
 | 199 | **Titles are sentence case** (`About`, `Display`, `Race`, `Location`, `This device`, `Data from`), not capitals, on every page and in `tracker-common`'s shared text; abbreviations and acronyms keep theirs. The owner's convention for the three trackers, passed on by the `sky-tracker` session (its commit 2bba6b3). Supersedes the capitals in decisions 187, 196 and 197 | 2026-10-11 | **asked for by owner**, implements UI-194 |
+| 203 | **Internal RAM, from the first board.** The Bluetooth controller logged `BLE_INIT: Malloc failed` / `Memory Full` at every advertisement, a phone could not join the fallback AP, and a station join (credentials sent over USB Improv) failed with `Probe Request Unsuccessful` / `Auth Leave`. Static DRAM was 136 kB, ~57 kB of it this project's own tables (`app::g` 13.7 kB, the two stores 12 kB each, the calendar banks 6.9 kB, `ui::g` 5.6 kB, the two scenes, the roster view, the headshot chunk). Those now carry `PSRAM_BSS` (`f1_mem.h`, `CONFIG_SPIRAM_ALLOW_BSS_SEG_EXTERNAL_MEMORY`) and the Bluetooth host allocates from PSRAM first (`CONFIG_BT_ALLOCATION_FROM_SPIRAM_FIRST`, `CONFIG_BT_BLE_DYNAMIC_ENV_MEMORY`); mbedTLS and lwIP were already there. Start-up logs the free internal heap and its largest block, and a DEBUG line repeats it every 10 min. Provisioning over USB does not change any of this: the radio starves the same way whichever way the credentials arrive | 2026-10-15 | active |
+| 202 | **First boot on a board (2026-10-15): what the renders could not show.** (1) The Wi-Fi body read fragments of its own buffer (`join 'join 'pick - 1C20'`): ESPHome's `get_sta()`/`get_ap()` return a copy of the entry and `get_ssid()` a `StringRef` into it, so a ref taken off the temporary pointed at freed memory. The copies are now held for the call (plane-tracker already did; sky-tracker has the same line). (2) The start lights sat on the second line of the AP instruction: `BOOT_LAMP_Y` 404 → 442, under the two-line body. (3) **Nothing on the boot page moves** (owner: "shifting things is bad form"): the column is anchored 40 px from the top instead of centred, so the body growing to two lines no longer lifts the logo and title by 13 px. That reflow was also why cars rode the bottom of the line on horizontal stretches - the animation had read the logo's origin once, at its first frame; it now reads it every frame. (4) MOTION-3a: every lap a new set, the order at the line re-dealt, the swing 0.22-0.40 instead of 0.62-0.93 (owner: "cars are predictable", "they kind of stall", "always finish in the same order"). (5) **Layout is only known once a screen has been laid out**, and two things read it before their page had ever been shown: the standings flags took the label's `lv_obj_get_x/y` (0, so every flag sat over the header and the position column) and now take its style x/y; the circuit card's trace sized itself from `lv_obj_get_width` of the map box (0 x 0, so the card had no trace) and now calls `lv_obj_update_layout` first. (6) UI-44c: with *Auto off overnight* off, its hours are dimmed to 40 % and not tappable, on open and as the switch moves (owner). (7) The race page's facts (length, fastest lap, last winner) are `mono13`, a point up, the project's own font (owner, reading the board). (8) The first circuit card's badge said `CIRCUIT`: `Circuit`, as the others already were (UI-194). (9) UI-20c: the carousel swipes, left for the next card and right for the one before, within the card's own kind. (10) **The circuit card**: the trace fills the card (440 x 292 px from y 52, was 300 x 240), the facts sit under it from y 350 in `mono14` (was `mono12`) as four lines with a 13-character label column, no blank line and no wrapped continuation (owner: "weird spacing", "increase the font size of the track info", "increase track size to fill space"). (11) The card commit moved a circuit's body to a hardcoded y 300, the old layout, so on a tall trace (Baku) the text lay across the map while the renders, which read the YAML, did not: it now reads the label's YAML position once and uses that. (12) **The gear is on every content page** (race, order, circuit, standings, summary), as the renders and the update icon (UI-68a) always assumed; the firmware had it on the race page only. (13) **The summary page is skipped while it has nothing to show**: `skip: true` at boot and the app clears or sets the page's `skip` as the summary comes and goes, so a tap-through never lands on "waiting for a completed session" (owner). (14) **The race page's map box had no trace in the firmware** - an empty container, while the renders drew one into it (owner: "no track", R18 United States GP). It now holds its own three lines and `draw_race_map` fits the round's circuit into it, through the same `draw_trace` the circuit card uses, redrawn when the round changes. (15) **Portraits load at the decode's pace**: the 14 ms sleep between bands (20-40 of them per 240x320 portrait, decisions 188/189's "so the reveal can be seen") is gone; the pictures were already pre-scaled JPEGs, and raw RGB565 (7.4 MB for 48) would not fit the flash. The decode time is logged (owner: "why driver images so slow to load?"). (16) **The north arrow is an arrow**: shaft, two barbs and an "N" under it, on both maps - the bare 14 px line read as "a random fragment" in the corner (owner); the renders had always drawn the N. (17) **The card's flag follows the end of the title** (+12 px, clamped to the page), never a fixed x: at x 300 a long circuit name ran under it (owner: "don't do fixed flag location"). (18) **The order page is skipped while the entry list is empty**, as the summary page is (13): `skip: true` at boot, cleared when entries arrive and set again when a season's list goes (owner: "entry list is empty. why show?"). (19) **Race-week focus is a priority, not a filter** (supersedes the narrowing of 166): in the week of the United States GP the board showed one circuit and no legends ("track details always shows Circuit of the Americas", "tapping through screens never shows legends"). The weekend's circuit now takes the rotation's priority slot every 4 draws (a birthday, when there is one, keeps it) and the circuit walk starts from it; everything else, legends included, rotates as the content setting says. (20) **The carousel's top-right line is about the card**: a circuit's round this season (or not on the calendar), a driver's championship place and points ("Championship P4 · 186 pts"), a legend's seasons and titles. It was the season progress, the same on every card ("never changes when legend or circuit shown"); that count now sits with the race page's facts as "6 of 23 to go". (21) **The trace lines are not clickable**: LVGL hit-tests by bounding box and a line sizes itself to its points, so with the trace filling the card every press on the map went to the line and the swipe never saw it ("can't swipe through tracks, can swipe through legends"). (22) `tracker_common_ref` v0.4.5 → **v0.4.6** (sky-tracker): the shared update card puts the Firmware entity back to "no update" when the manifest is not newer than the installed build, so the web page and Home Assistant stop saying UPDATE AVAILABLE for a dev build ahead of the published release. (23) **Tapping a circuit card's map opens THAT circuit's detail.** It opened the next round's circuit whatever card was showing, so every detail said Circuit of the Americas this week (owner: "circuit details not accurate, always shows Austin"); the round, the date and the flag come from the live calendar when the circuit has a round this season. (24) **Legends one card in three** (the pattern is circuit, driver, legend; it was circuit, driver, circuit, legend) and **a swipe up or down on the carousel changes the kind** (UI-20c): with the weekend's circuit as a priority card a legend came round one draw in five, and with the tap order being pages and the sideways swipe staying within a kind, a legend could only be waited for (owner: "legends never show in taps list"). (25) **A circuit card's flag sits by the place name**, the first word of the facts, the flag after the place name, in a gap the first line leaves for it; a person's stays by their name (owner: "remove flag from circuit title, put next to country name"). (26) The detail overlay's body is `mono16` (was `mono14`; owner). (27) UI-99 is in effect: **circuits in calendar order**, in the rotation and in the swipes - the rotation's circuit cursor is a position in a calendar-ordered list, translated to a table index at the boundary (owner: "show circuits in order instead of random when swiping"). (28) **A swipe is 28 px** (was 40) and **a drag of 10 px or more is never a tap**, swipe or not: a short swipe used to flip the page (owner). LVGL's own gesture event was the first thing tried and did not fire on this panel. (29) **Web UI group "Animations"**: buttons for a dinosaur walk, the alert banner and the alert takeover (owner); the boot lights, About cars and portrait reveal buttons were added and removed the same day (owner: "remove"). The alert demos switch to the race page first, as the banner lives only there - from any other page they showed nothing. (30) The circuit card's flag moved AFTER the city name (owner), not before it. (31) UI-20f: the carousel page is three stops in the tap order, a circuit, a driver and a legend (owner). (37) The championship tables scroll: both sit in a vertical scroll area under fixed headers, rows 22 px apart (was 16), so 17 of the 22 drivers show at once and the rest are a drag away; a tap off a row still turns the page (owner: "more spacing between rows ... maybe the list needs to be scrollable"). (36) LVGL's own gesture is now the swipe: its minimum velocity is 0 and its distance 28 px, because the GT911 reports every 50 ms against LVGL's 16 ms reads and two reads in three zeroed the gesture sum; the press-and-release detection stays as the fallback and skips a press the gesture already handled (owner). (35) The debug page Data section and the Weekend State, Order Mode and Calendar Source rows were empty: no code published those text sensors; a 2 s interval now does (owner). (34) The alert banner and the takeover are the same size, 92 px at y 330 (owner). (33) The championship tables have 2 px of line space (rows were packed at the bare line height; owner). (32) The alert banner flag is pre-scaled to 48x36 and drawn 1:1: LVGL draws nothing for scaled RGB565 on this board ("lv_draw_sw_transform: Color format 0x12 is not enabled"), which was the "jacked" banner (owner) | 2026-10-15 | active |
 | 201 | **The code review's findings, fixed in one pass.** (1) A body cut short - reset or timeout mid-download, or larger than the buffer - is a failed poll, never parsed (DATA-35; half a calendar used to publish as a whole one). (2) A failed parse or a half-done two-request resource puts the back store back to what is published, so a later success cannot carry an older race's figures. (3) The order list records the season and round it is for; the watched driver's result alert fires only for a race or sprint, only from THIS round's list, and nothing is latched until a result is readable (6.14.2). (4) NET-12 is now in effect: the two API sessions stay open, a kept connection the server closed gets one fresh retry; the headshot session is not kept (6a.2). (5) UI-181: one `apply_settings` script, called by every entity's trigger and at boot; the watched driver, favourite team, alert switches, carousel interval and content now take effect without a reboot. (6) NET-25: restored numbers are clamped at boot and the hours at the point of use. (7) The circuit page flips on a short click only, so a hold no longer also turns the page. (8) The hourly update check starts an hour after boot. (9) `session_live` and `race_day` publish their first value. (10) Calendar strings are double-banked under the UI's snapshot; a shown headshot is pinned against recycling; the logo animation folds its clock by whole laps; a dinosaur without a timer is torn down; the data task has 12 KB of stack; the unused `mdi_setup` font is gone | 2026-10-13 | active |
 | 200 | **More is shared through `tracker-common` v0.4.0**: the board (`boards/guition-4848s040.yaml`, including Improv, the 30 kHz backlight - sky-tracker adopts it - and its tunables as substitutions), the diagnostic entities, the auto-dim curve, Auto Off and the 30 s backlight pass (`tracker_display.h`, with its tests; `f1_display.h` is gone), the install page template (`site/index.template.html`, `tools/make_site.py`, `docs/site.json`; `docs/index.html` is gone) and **one install card for every firmware install**: the old Uploading/Upgrading panel (`ota_panel`) is gone, the ESPHome and web-upload OTA drive the same card as the internet update, and this project's data task pauses and resumes through `tracker::upd::ota_hook_begin` and `ota_hook_error`. Supersedes the OTA panel of FAIL-12 | 2026-10-11 | **asked for by owner**, implements BUILD-14, BUILD-15 |
 

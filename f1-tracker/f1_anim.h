@@ -11,6 +11,7 @@
 // Cost (sky-tracker PERF-9, UI-69i): three small images and five opaque discs, set_pos'd at 25 Hz, only while
 // their page is the active screen. No resizing, no blending of anything large.
 #include "f1_animlogic.h"
+#include "f1_mem.h"
 #include "f1_cars.h"
 
 namespace f1 {
@@ -18,7 +19,9 @@ namespace anim {
 
 // Read by tools/render_pages.py so the renders cannot drift from the firmware.
 inline constexpr int BOOT_LOGO = 200, ABOUT_LOGO = 112;
-inline constexpr int BOOT_LAMP_D = 20, BOOT_LAMP_GAP = 32, BOOT_LAMP_Y = 404;      // screen y of the centres
+// Screen y of the lamp centres: under the body line even when it is the two-line AP
+// instruction (which ends near y 410 on the panel) - at 404 the lamps sat on its second line.
+inline constexpr int BOOT_LAMP_D = 20, BOOT_LAMP_GAP = 32, BOOT_LAMP_Y = 442;
 inline constexpr uint32_t LAMP_OFF = 0x2A1417, LAMP_ON = 0xE53935;
 // The pack: the logo's orange, then two plain colours. Generic silhouettes, no liveries.
 inline constexpr uint32_t CAR_COL[animlogic::N_CARS] = {0xFF8A1F, 0x4FC3F7, 0xFFD54A};
@@ -34,13 +37,14 @@ struct Scene {
   int shown_lit = -2;
   lv_image_dsc_t sprite[animlogic::HEADINGS]{};      // the alpha masks of f1_cars.h, one per heading
   int car_px = 0;                                    // sprite size
-  animlogic::Pack pack;                              // this opening's speeds
+  animlogic::Pack pack;                              // this lap's set (MOTION-3a); pack.lap says which
+  uint32_t chain = 1;                                // the xorshift chain the laps' seeds come from
   int shown_head[animlogic::N_CARS] = {-1, -1, -1};
   bool active = false, ready = false;
   uint32_t t0 = 0;
   int lx = 0, ly = 0;                                // the logo's top-left on its screen
 };
-inline Scene boot_, about_;
+inline PSRAM_BSS Scene boot_, about_;               // 2.5 kB each, in PSRAM (decision 203)
 
 inline lv_obj_t *disc(lv_obj_t *parent, int d, uint32_t col) {
   lv_obj_t *o = lv_obj_create(parent);
@@ -78,7 +82,9 @@ inline void begin(Scene &s) {
   for (int &h : s.shown_head) h = -1;
   s.shown_lit = -2;
   s.t0 = lv_tick_get();
-  s.pack = animlogic::make_pack(s.t0 ^ (s.t0 << 7));    // different speeds each time the page opens
+  const uint32_t seed = s.t0 ^ (s.t0 << 7);              // different speeds each time the page opens
+  s.pack = animlogic::make_pack(seed);                   // lap 0: the grid
+  s.chain = seed ? seed : 1;
   s.active = true;
 }
 
@@ -90,6 +96,14 @@ inline void step(Scene &s) {
     return;
   }
   if (!s.active) begin(s);
+  {
+    // Read afresh each frame: on the first board the column reflowed when the Wi-Fi body grew
+    // to two lines, and cars placed from the opening's origin sat 13 px under the line.
+    lv_area_t a;
+    lv_obj_get_coords(s.logo, &a);
+    s.lx = a.x1;
+    s.ly = a.y1;
+  }
   int32_t t = (int32_t) (lv_tick_get() - s.t0);
   // A page left open for days: `t` would overflow at 24.8 days, and long before that the float
   // lap count loses the sub-millisecond steps and the cars judder. Each car's position is
@@ -99,6 +113,7 @@ inline void step(Scene &s) {
     const int32_t fold = (t - animlogic::GANTRY_END_MS) / animlogic::LAP_MS * animlogic::LAP_MS;
     s.t0 += (uint32_t) fold;
     t -= fold;
+    s.pack.lap -= (int) (fold / animlogic::LAP_MS);       // the set's lap index moves with the origin
   }
 
   // the start lights: once, as the boot page opens
@@ -119,6 +134,9 @@ inline void step(Scene &s) {
   // the pack: each car at its own pace, turned to the way the track runs under it; the
   // faster of two close cars pulls out to the side to pass
   const float u = animlogic::lap_u(t);
+  // MOTION-3a: a new set of swings each lap, handed over at the line without a jump
+  for (const int lap = (int) u; s.pack.lap < lap;)
+    s.pack = animlogic::next_pack(s.pack, animlogic::xorshift(s.chain));
   const float side = animlogic::SIDE_PX_PER_100 * (float) s.size / 100.0f;
   for (int k = 0; k < animlogic::N_CARS; k++) {
     const float fk = animlogic::car_pos(s.pack, k, u);

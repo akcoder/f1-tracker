@@ -23,7 +23,10 @@
 namespace f1 {
 namespace photo {
 
-inline constexpr int PACE_MS = 14;     // between bands, so the reveal can be seen
+// Between bands. It was 14 ms "so the reveal can be seen": with 20-40 bands a portrait that
+// is a 240x320 JPEG took over half a second more than its decode, and on the board that read
+// as slow loading (decision 202). The top-down reveal is the decode's own pace now.
+inline constexpr int PACE_MS = 0;
 
 struct Photo {
   int w = 0, h = 0;
@@ -46,7 +49,7 @@ struct Photo {
 
 inline void on_rows(int done, void *ctx) {
   static_cast<Photo *>(ctx)->rows.store(done);
-  vTaskDelay(pdMS_TO_TICKS(PACE_MS));
+  if (PACE_MS > 0) vTaskDelay(pdMS_TO_TICKS(PACE_MS));
 }
 inline void task(void *arg) {
   auto *ph = static_cast<Photo *>(arg);
@@ -54,8 +57,14 @@ inline void task(void *arg) {
   pr.rows = on_rows;
   pr.ctx = ph;
   pr.cancel = &ph->cancel;
-  if (ph->half) tracker::jpg::decode_half(ph->p->jpeg, ph->p->len, ph->buf, ph->w, ph->h, &pr);
-  else tracker::jpg::decode_full(ph->p->jpeg, ph->p->len, ph->buf, ph->w, ph->h, &pr);
+  const TickType_t t0 = xTaskGetTickCount();
+  const char *err;
+  if (ph->half) err = tracker::jpg::decode_half(ph->p->jpeg, ph->p->len, ph->buf, ph->w, ph->h, &pr);
+  else err = tracker::jpg::decode_full(ph->p->jpeg, ph->p->len, ph->buf, ph->w, ph->h, &pr);
+  // Decision 202: how long a portrait really takes, so "slow" is a number
+  ESP_LOGD("photo", "%dx%d decoded in %u ms%s%s", ph->w, ph->h,
+           (unsigned) ((xTaskGetTickCount() - t0) * portTICK_PERIOD_MS),
+           err ? ": " : "", err ? err : "");
   ph->running.store(false);
   vTaskDelete(nullptr);
 }

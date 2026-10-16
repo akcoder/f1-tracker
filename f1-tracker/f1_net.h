@@ -10,6 +10,7 @@
 #include <cstring>
 
 #include "f1_json.h"
+#include "f1_mem.h"
 #include "f1_state.h"
 #include "f1_store.h"
 
@@ -223,7 +224,7 @@ inline bool fetch_headshot(const char *url, headshot::Slot &sl) {
     dec.row_ctx = &sl;
     ok = dec.begin(sl.buf, headshot::W, headshot::H, 0x000000);
   }
-  static uint8_t chunk[2048];
+  static PSRAM_BSS uint8_t chunk[2048];
   int r;
   while (ok && (r = esp_http_client_read(s.h, (char *) chunk, sizeof(chunk))) > 0) {
     ok = dec.feed(chunk, (size_t) r);
@@ -391,7 +392,7 @@ inline Res pick(const Plan &p) {
 // Double-buffered: the task parses into `back` and swaps under the lock, so the
 // UI thread never reads a half-written store (section 6 - a fetch must never
 // block rendering, and a render must never see a torn parse).
-inline store::Store g_front, g_back;
+inline PSRAM_BSS store::Store g_front, g_back;     // 12 kB each, in PSRAM (decision 203)
 inline volatile bool g_wifi_up = false;
 inline volatile uint32_t g_published = 0;
 

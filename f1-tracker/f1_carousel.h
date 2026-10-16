@@ -16,8 +16,10 @@ enum CardType : uint8_t { CIRCUIT = 0, DRIVER = 1, LEGEND = 2, N_TYPES = 3 };
 
 // UI-20a: circuit -> driver -> circuit -> legend, repeating. Circuits appear
 // twice as often because there are more of them and they are the subject.
-inline constexpr CardType PATTERN[] = {CIRCUIT, DRIVER, CIRCUIT, LEGEND};
-inline constexpr int PATTERN_LEN = 4;
+// Decision 202: one legend in three, not one in four - with the weekend's circuit as a
+// priority card a legend came round one draw in five, and on the board that read as never.
+inline constexpr CardType PATTERN[] = {CIRCUIT, DRIVER, LEGEND};
+inline constexpr int PATTERN_LEN = 3;
 
 // Which types the Carousel Content setting admits (section 4.15).
 enum Content : uint8_t {
@@ -100,6 +102,11 @@ class Rotation {
   }
 
   int cursor(CardType t) const { return cur_[t]; }
+  int count(CardType t) const { return n_[t]; }
+  // UI-20c: after a swipe the walk resumes from the card the owner chose.
+  void set_cursor(CardType t, int i) {
+    if (n_[t] > 0 && i >= 0 && i < n_[t]) cur_[t] = i;
+  }
 
  private:
   int n_[N_TYPES] = {0, 0, 0};

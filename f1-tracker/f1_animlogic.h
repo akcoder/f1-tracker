@@ -103,13 +103,22 @@ inline int heading(const Track &t, float frac) {
 // per car, so one gains on the one ahead, draws alongside and goes past. The numbers come
 // from a seed (the device picks one each time the page opens; the renders use DEMO_SEED).
 inline constexpr uint32_t DEMO_SEED = 7;
-inline constexpr float SWING_MIN = 0.62f, SWING_MAX = 0.93f;    // a_k
+// a_k: with the mean pace 1, a car's speed swings between 1 - a and 1 + a. On the first board
+// 0.62-0.93 read as stalling ("that's not how F1 drivers race"), so no car drops under ~0.6.
+inline constexpr float SWING_MIN = 0.22f, SWING_MAX = 0.40f;
+inline constexpr float SWING_CAP = 0.55f;                       // the most a hand-over may ask for (next_pack)
 inline constexpr float SIDE_PX_PER_100 = 4.0f;                  // the passer's sideways step, px per 100 px of logo
 inline constexpr float PASS_ZONE = 0.045f;                      // laps: closer than this, the faster car pulls out
 
 struct Pack {
   float a[N_CARS] = {0}, phase[N_CARS] = {0};
   int n[N_CARS] = {1, 1, 1};
+  // MOTION-3a: the lap this set is for, where each car stands at its start (laps, relative to
+  // the leader's line crossing) and the net laps it gains over the lap to reach its next slot.
+  // Lap 0 is the grid with no gain, so a one-lap render loops cleanly.
+  int lap = 0;
+  float off[N_CARS] = {0.0f, -CAR_GAP, -2.0f * CAR_GAP};
+  float gain[N_CARS] = {0};
 };
 
 inline uint32_t xorshift(uint32_t &x) {
@@ -130,19 +139,65 @@ inline Pack make_pack(uint32_t seed) {
   return p;
 }
 
+// MOTION-3a: the next lap's set, so no lap repeats the one before. The order at the line is
+// re-dealt (any of the N! orders, by the seed; on the first board the cars always crossed in
+// the same order) and each car's net pace over the lap carries it to its new slot, so the
+// pack is nose to tail at every line. The hand-over keeps each car's position (the lap ends
+// where the next set starts) and its speed: the new phase is chosen so gain + a cos(2 pi phase)
+// is the pace it crossed the line with, the swing widened up to SWING_CAP if it must be.
+inline Pack next_pack(const Pack &prev, uint32_t seed) {
+  Pack p = make_pack(seed);
+  p.lap = prev.lap + 1;
+  uint32_t x = seed * 2246822519u + 0x3C6EF372u;
+  if (x == 0) x = 1;
+  for (int i = 0; i < 4; i++) xorshift(x);
+  int slot[N_CARS];                                                // slot[k]: car k's place at the next line
+  for (int k = 0; k < N_CARS; k++) slot[k] = k;
+  for (int i = N_CARS - 1; i > 0; i--) {                           // Fisher-Yates: every order equally likely
+    const int j = (int) (xorshift(x) % (uint32_t) (i + 1));
+    const int tmp = slot[i]; slot[i] = slot[j]; slot[j] = tmp;
+  }
+  for (int k = 0; k < N_CARS; k++) {
+    p.off[k] = prev.off[k] + prev.gain[k];
+    p.gain[k] = -(float) slot[k] * CAR_GAP - p.off[k];
+    const float v = prev.gain[k] + prev.a[k] * std::cos(6.28318531f * prev.phase[k]);   // pace - 1 at the line
+    const float need = v - p.gain[k];
+    const float an = std::fabs(need);
+    if (p.a[k] < an) p.a[k] = an < SWING_CAP ? an : SWING_CAP;
+    float c = need / p.a[k];
+    c = c < -1.0f ? -1.0f : (c > 1.0f ? 1.0f : c);
+    const float ph = std::acos(c) / 6.28318531f;                           // 0 .. 0.5
+    p.phase[k] = p.phase[k] < 0.5f ? ph : 1.0f - ph;                       // either branch, by the seed
+  }
+  return p;
+}
+
+// The pack for lap `lap` of an opening seeded `seed`: lap 0 is make_pack(seed), each later lap
+// follows from the one before through a xorshift chain. The device walks the chain a lap at a
+// time; the renders and the tests ask for a lap outright.
+inline Pack lap_pack(uint32_t seed, int lap) {
+  Pack p = make_pack(seed);
+  uint32_t x = seed ? seed : 1;
+  for (int l = 1; l <= lap; l++) p = next_pack(p, xorshift(x));
+  return p;
+}
+
 inline float swing(const Pack &p, int k, float u) {
   const float tau = 6.28318531f * (float) p.n[k];
   return p.a[k] * std::sin(6.28318531f * ((float) p.n[k] * u + p.phase[k])) / tau;
 }
 
-// Car k's position round the lap, in laps, `u` laps after the page opened (u = t / LAP_MS).
+// Car k's position round the lap, in laps, `u` laps after the page opened (u = t / LAP_MS),
+// with the set for the lap `u` is in.
 inline float car_pos(const Pack &p, int k, float u) {
-  return u - (float) k * CAR_GAP + swing(p, k, u) - swing(p, k, 0.0f);
+  const float f = u - (float) p.lap;                                       // into this lap
+  return u + p.off[k] + p.gain[k] * f + swing(p, k, f) - swing(p, k, 0.0f);
 }
 
-// Its speed, in laps per lap-time (the mean is 1).
+// Its speed, in laps per lap-time (the pack's mean is 1).
 inline float car_speed(const Pack &p, int k, float u) {
-  return 1.0f + p.a[k] * std::cos(6.28318531f * ((float) p.n[k] * u + p.phase[k]));
+  const float f = u - (float) p.lap;
+  return 1.0f + p.gain[k] + p.a[k] * std::cos(6.28318531f * ((float) p.n[k] * f + p.phase[k]));
 }
 
 // Laps since the page opened, for a time `t` ms after it (0 before).
