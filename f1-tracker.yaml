@@ -4,7 +4,7 @@
 # M0 scope: hardware, platform tuning, entities, page shells. No data layer yet.
 
 substitutions:
-  fw_version: "1.0.0"         # bump on every install; shown in HA, settings and the status page
+  fw_version: "1.0.1"         # bump on every install; shown in HA, settings and the status page
   name: f1-tracker
   friendly_name: F1 Tracker
   # UI-44: the ONLY use of a position is computing sunrise/sunset for auto-dim
@@ -243,6 +243,24 @@ esphome:
 # Assistant all change the ENTITIES; each entity's trigger below lands here, and so
 # does boot. Validation stays at Save and at boot (UI-182, NET-25).
 script:
+  - id: screen_sleep           # UI-62: the shield is shown while asleep and swallows the waking touch
+    then:
+      - lambda: |-
+          id(screen_asleep) = true;
+          id(bright_before_sleep) = std::max(0.01f, id(backlight).current_values.get_brightness());
+          lv_obj_remove_flag(id(wake_shield), LV_OBJ_FLAG_HIDDEN);
+      - light.turn_off:
+          id: backlight
+          transition_length: 1s
+  - id: screen_wake
+    then:
+      - lambda: |-
+          id(screen_asleep) = false;
+          id(last_touch_ms) = esphome::millis();
+      - light.turn_on:
+          id: backlight
+          brightness: !lambda return id(bright_before_sleep);
+          transition_length: 250ms
   - id: autooff_dim             # UI-44c: with Auto off overnight off, its hours are dimmed and
     then:                       # not editable (decision 202) - the switch is what to touch
       - lambda: |-
@@ -354,6 +372,15 @@ globals:
   - id: from_about            # set by About's Close so the settings page does NOT
     type: bool                # re-stage on return - that would discard unsaved edits and
     initial_value: "false"     # re-capture a live-changed brightness as Cancel's baseline
+  - id: last_touch_ms         # UI-62: last touch or wake, for the screen-off timeout
+    type: uint32_t
+    initial_value: "0"
+  - id: screen_asleep         # UI-62: backlight off by the after-sunset timeout
+    type: bool
+    initial_value: "false"
+  - id: bright_before_sleep   # UI-62: level to restore on wake
+    type: float
+    initial_value: "0.5"
 
 # ---------------------------------------------------------------- entities
 # 7.1.2: entities are the single source of truth; LVGL widgets are one VIEW of
@@ -482,6 +509,18 @@ switch:
     optimistic: true
     restore_mode: RESTORE_DEFAULT_OFF
     web_server: {sorting_group_id: grp_display, sorting_weight: 7}
+  - platform: template        # UI-62 (plane-tracker): after sunset the backlight goes off after a
+    id: screen_off_night      # minute without a touch; a touch brings it back. Off by default - a
+    name: Screen Off After Sunset   # dark screen reads as a dead one to anyone who did not turn this on.
+    icon: mdi:monitor-off
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_OFF
+    web_server: {sorting_group_id: grp_display, sorting_weight: 8}
+    on_turn_off:
+      - lambda: |-
+          if (!id(screen_asleep)) return;
+          id(screen_wake)->execute();
+          lv_obj_add_flag(id(wake_shield), LV_OBJ_FLAG_HIDDEN);   // no touch to eat
   - platform: template        # MOTION-5: a dinosaur walks across the screen now and then
     id: dino_on
     name: Dinosaur
@@ -696,6 +735,23 @@ sensor:
     update_interval: never
     web_server: {sorting_group_id: grp_display, sorting_weight: 20}
 
+touchscreen:
+  - id: !extend touch
+    on_touch:                 # UI-62: every touch is activity; a touch on a dark screen wakes it
+      - lambda: |-
+          id(last_touch_ms) = esphome::millis();
+          if (id(screen_asleep)) id(screen_wake)->execute();
+
+light:
+  - id: !extend backlight
+    on_state:                 # UI-62: lit from elsewhere (the Backlight number in HA) while asleep is a wake
+      - lambda: |-
+          if (id(screen_asleep) && id(backlight).remote_values.is_on()) {
+            id(screen_asleep) = false;
+            id(last_touch_ms) = esphome::millis();
+            lv_obj_add_flag(id(wake_shield), LV_OBJ_FLAG_HIDDEN);
+          }
+
 lvgl:
   id: lvgl_comp
   displays: main_display
@@ -804,6 +860,21 @@ lvgl:
                 text_align: LEFT
           on_click:              # a tap dismisses EARLY; never the only way out
             - lambda: f1::app::dismiss_banner();
+      - obj:                     # UI-62 (plane-tracker): eats the touch that wakes the screen
+          id: wake_shield
+          x: 0
+          y: 0
+          width: 480
+          height: 480
+          hidden: true
+          bg_opa: TRANSP
+          border_width: 0
+          pad_all: 0
+          radius: 0
+          scrollable: false
+          clickable: true
+          on_release:
+            - lvgl.widget.hide: wake_shield
   pages:
     - id: wifi_page             # NET-2b: first page, so it is what boots
       skip: true
@@ -2128,11 +2199,33 @@ interval:
     then:                       # first run lands 0-5 s after boot, a third TLS session
       - lambda: |-              # beside the boot fetches (6a.2); on_boot does the first
           if (id(wifi_comp).is_connected()) tracker::upd::check_quiet("hourly");
+  - interval: 1s                # UI-62: screen off after 1 min idle, after sunset
+    then:
+      - lambda: |-
+          // Unknown time (no NTP yet) counts as DAY here: an offline boot must not put the screen
+          // to sleep a minute later.
+          const auto t = id(sntp_time).now();
+          const bool night = t.is_valid() && tracker::sun::elevation((double) t.timestamp,
+              (double) id(obs_lat).state, (double) id(obs_lon).state) < -0.833;   // standard sunset
+          if (!(id(screen_off_night).state && night)) {
+            // Sunrise, or the switch went off: never leave it dark. No touch woke it, so there is
+            // none for the shield to eat.
+            if (id(screen_asleep)) {
+              id(screen_wake)->execute();
+              lv_obj_add_flag(id(wake_shield), LV_OBJ_FLAG_HIDDEN);
+            }
+            return;
+          }
+          if (id(screen_asleep)) return;
+          if (tracker::upd::ui_.root != nullptr) return;     // never blank an update in progress
+          if (esphome::millis() - id(last_touch_ms) < 60000) return;
+          id(screen_sleep)->execute();
   - interval: 30s               # UI-44 / UI-44c: auto-dim follows the Sun, and
     then:                       # Auto Off blanks the panel overnight.
       - lambda: |-
           const auto t = id(sntp_time).now();
           if (!t.is_valid()) return;
+          if (id(screen_asleep)) return;   // UI-62: the shared pass would relight a screen we put out
           // UI-44: the position is read from the ENTITIES every pass, never cached - the
           // settings page, the web UI and Home Assistant can all change it.
           id(sun_elevation).publish_state(tracker::sun::elevation(
