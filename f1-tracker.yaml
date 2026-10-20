@@ -4,7 +4,7 @@
 # M0 scope: hardware, platform tuning, entities, page shells. No data layer yet.
 
 substitutions:
-  fw_version: "1.0.9"         # bump on every install; shown in HA, settings and the status page
+  fw_version: "1.0.11"         # bump on every install; shown in HA, settings and the status page
   name: f1-tracker
   friendly_name: F1 Tracker
   # UI-44: the ONLY use of a position is computing sunrise/sunset for auto-dim
@@ -383,6 +383,11 @@ button:
     on_press:                 # quiet: no card on the panel - the Firmware row and the
       - lambda: |-            # icon beside the gear show the result
           tracker::upd::check_quiet("button");
+  - platform: restart         # decision 210: a reboot from the web UI / HA (sky-tracker's, same group)
+    name: Reboot
+    icon: mdi:restart
+    entity_category: config
+    web_server: {sorting_group_id: grp_system, sorting_weight: 5}
   # Decision 202: the animations, each on demand from the web UI (group Animations), so they
   # can be looked at without waiting for a boot, a race or the dinosaur's own timer.
   - platform: template

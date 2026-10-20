@@ -184,9 +184,16 @@ struct Critter {
       const auto m = h.mouth(t);
       return {x, y, m == Hunger::OPEN ? T::P_OPEN : (m == Hunger::HALF ? T::P_HALF : T::P_REST), t >= h.t_say};
     }
-    const double d = (t - h.t_exit) * h.speed / 1000.0;
+    const double d = h.exit_walked(t);
     const Pt last = h.pt[h.n - 1];
     const double x0 = last.x - st.mdx;
+    if (h.exit_standing(t)) {                                    // the afterthought: stopped, a bite
+      const double e = h.lunge(t);
+      const auto m = h.mouth(t);
+      return {(int) std::lround((flip ? x0 - d : x0 + d) + (flip ? -1 : 1) * T::LUNGE_X * e),
+              (int) std::lround(last.y - T::MOUTH_DY + T::LUNGE_Y * e),
+              m == Hunger::OPEN ? T::P_OPEN : (m == Hunger::HALF ? T::P_HALF : T::P_REST), false};
+    }
     return {(int) std::lround(flip ? x0 - d : x0 + d), last.y - T::MOUTH_DY, (int) (d / T::STEP) % 4, false};
   }
 
@@ -236,7 +243,23 @@ struct Critter {
     st.hungry_text = T::hungry_word(seed);
     st.hg.plan(pts, got, st.w.t_stop, T::MOVE_SPEED, 1500, rng);
     const Pt last = pts[got - 1];
-    st.hg.t_end = st.hg.t_exit + (uint32_t) (((flip ? last.x + 40 + T::W : 520 - last.x + mdx)) / T::MOVE_SPEED * 1000.0) + 300;
+    // ... and on its way out it may stop at a random spot over the picture for one more bite
+    {
+      int xs[SCREEN_W], nx = 0;
+      if (!box.trace) {
+        for (int x = item.x + 14; x <= last.x - 30; x += 4) xs[nx++] = x;
+      } else {
+        for (int x = last.x + 30; x <= item.x + item.w - 6 && x < SCREEN_W - 4; x += 3)
+          for (int y = last.y - 7; y <= last.y + 7; y++)
+            if (y >= item.y && y < item.y + item.h && lum565(st.snap, x, y) > 128) { xs[nx++] = x; break; }
+      }
+      if (nx > 0) {
+        const int x = xs[(int) (rng.next() * nx) % nx];
+        st.hg.plan_extra(Pt{x, last.y}, std::fabs((double) (x - last.x)), rng);
+      }
+    }
+    st.hg.t_end = st.hg.t_exit + (st.hg.extra ? st.hg.ex_pause : 0) +
+                  (uint32_t) (((flip ? last.x + 40 + T::W : 520 - last.x + mdx)) / T::MOVE_SPEED * 1000.0) + 300;
     st.item = item;
     st.mdx = mdx;
     return true;

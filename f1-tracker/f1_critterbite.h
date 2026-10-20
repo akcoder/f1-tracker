@@ -117,17 +117,22 @@ inline int trace_walk(IsTrace is_trace, const Food &box, int min_x, Pt p0, int n
 // The visit once the critter has arrived at the first bite (t0): chomp k at tb[k], a chew of its own
 // length after it, a move along the item to the next point; then the word, then away.
 struct Hunger {
-  int n = 0;
-  Pt pt[BITES_MAX];
-  int r[BITES_MAX] = {0};
-  uint32_t tb[BITES_MAX] = {0};
+  int n = 0;                                             // the bites at the item, with moves between them
+  int nb = 0;                                            // all the bites: n, and the afterthought on the way out
+  Pt pt[BITES_MAX + 1];
+  int r[BITES_MAX + 1] = {0};
+  uint32_t tb[BITES_MAX + 1] = {0};
   uint32_t mv0[BITES_MAX] = {0}, mv1[BITES_MAX] = {0};   // move k -> k+1
   uint32_t t0 = 0, t_say = 0, t_exit = 0, t_end = 0;
   double speed = 70.0;
+  bool extra = false;                                    // one more bite on the way out (owner: stops at a random point)
+  uint32_t ex_walk = 0, ex_pause = 0;                    // ms of walking from t_exit to the stop; ms stood there
 
   // pts: where the mouth goes, first to last; t0: when the critter is at the first.
   void plan(const Pt *pts, int count, uint32_t t_arrive, double move_speed, uint32_t bubble_ms, Rng &rng) {
     n = count > BITES_MAX ? BITES_MAX : count;
+    nb = n;
+    extra = false;
     t0 = t_arrive;
     speed = move_speed;
     for (int i = 0; i < n; i++) { pt[i] = pts[i]; r[i] = BITE_R_MIN + (int) (rng.next() * BITE_R_SPAN); }
@@ -147,6 +152,27 @@ struct Hunger {
     t_exit = t_say + bubble_ms;
   }
 
+  // After the word, walking off, it stops `dist` px along the way out and takes one more bite at p (the mouth
+  // there, on the item). Call after plan().
+  void plan_extra(Pt p, double dist, Rng &rng) {
+    pt[n] = p;
+    r[n] = BITE_R_MIN + (int) (rng.next() * BITE_R_SPAN);
+    ex_walk = (uint32_t) (dist / speed * 1000.0);
+    tb[n] = t_exit + ex_walk + OPEN_MS + 100;
+    ex_pause = OPEN_MS + 100 + CHEW_MS + 250;
+    extra = true;
+    nb = n + 1;
+  }
+
+  // Px walked on the way out at t (the stop at the afterthought bite takes no distance), and whether it is stood.
+  double exit_walked(uint32_t t) const {
+    if (t <= t_exit) return 0;
+    const uint32_t u = t - t_exit;
+    const uint32_t ms = !extra || u <= ex_walk ? u : (u < ex_walk + ex_pause ? ex_walk : u - ex_pause);
+    return ms * speed / 1000.0;
+  }
+  bool exit_standing(uint32_t t) const { return extra && t > t_exit + ex_walk && t < t_exit + ex_walk + ex_pause; }
+
   // Where the mouth is at t, and whether it is travelling.
   struct Anchor { double x, y; bool moving; };
   Anchor anchor(uint32_t t) const {
@@ -163,7 +189,7 @@ struct Hunger {
   // 0..1: the head going into a bite (fast), then back (slower).
   double lunge(uint32_t t) const {
     double e = 0;
-    for (int k = 0; k < n; k++) {
+    for (int k = 0; k < nb; k++) {
       if (t + 130 < tb[k]) continue;
       const uint32_t u = t + 130 - tb[k];
       if (u < 130) e = std::fmax(e, smooth(u / 130.0));
@@ -174,14 +200,14 @@ struct Hunger {
 
   int bites_done(uint32_t t) const {
     int c = 0;
-    for (int k = 0; k < n; k++) c += t >= tb[k];
+    for (int k = 0; k < nb; k++) c += t >= tb[k];
     return c;
   }
 
   enum Mouth { SHUT, HALF, OPEN };
   // The beak: open going in to a bite, working while it chews, shut at rest.
   Mouth mouth(uint32_t t) const {
-    for (int k = 0; k < n; k++) {
+    for (int k = 0; k < nb; k++) {
       if (t + OPEN_MS >= tb[k] && t < tb[k]) return OPEN;
       if (t >= tb[k] && t < tb[k] + CHEW_MS) return (t / 140) % 2 ? HALF : SHUT;
     }
