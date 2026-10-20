@@ -27,7 +27,7 @@ struct Pt { int x = 0, y = 0; };
 // The shape of a bite is the shape of the mouth that took it (owner: "toucan does not have a round mouth,
 // neither does the dinosaur"): the toucan's long bill makes a narrow lens-shaped notch, pointing in; the
 // dinosaur's wide jaw a broad bite with a toothed edge. Both are drawn forward from the mouth point P.
-enum MouthKind { JAW = 0, BILL = 1 };
+enum MouthKind { JAW = 0, BILL = 1, WOUND = 2 };   // WOUND: Carl's, drawn by f1_wound.h
 inline constexpr int BITE_REACH_X10 = 28;               // a bite reaches no further than this x 0.1 r from P (+ the rim)
 
 // Is the pixel (dx, dy) from the mouth point inside a bite of size r? `left`: the critter faces left.
@@ -51,6 +51,7 @@ inline bool bite_in(int kind, bool left, int dx, int dy, int r) {
 struct Food {
   int x = 0, y = 0, w = 0, h = 0;
   bool trace = false;
+  int fx = 0, fy = 0, fw = 0, fh = 0;      // a portrait with a known face: the face's box on the screen (fw 0: none)
 };
 
 inline double smooth(double u) {
@@ -72,6 +73,19 @@ inline int edge_points(const Food &f, int n, Rng &r, Pt *out) {
     const int t = ys[i]; ys[i] = ys[j]; ys[j] = t;
   }
   for (int i = 0; i < n; i++) { out[i].x = f.x + f.w - (int) (r.next() * 10); out[i].y = ys[i]; }
+  return n;
+}
+
+// A face (Carl's): n bites in the box, on the side the biter comes from (it faces left, so the right of the
+// face), spread from the brow to the chin in no particular order, each at its own depth in.
+inline int face_points(const Food &f, int n, Rng &r, Pt *out) {
+  int ys[BITES_MAX];
+  for (int i = 0; i < n; i++) ys[i] = f.fy + (int) (f.fh * (0.28 + 0.56 * (n > 1 ? (double) i / (n - 1) : 0.5)) + (r.next() - 0.5) * 0.12 * f.fh);
+  for (int i = n - 1; i > 0; i--) {
+    const int j = (int) (r.next() * (i + 1));
+    const int t = ys[i]; ys[i] = ys[j]; ys[j] = t;
+  }
+  for (int i = 0; i < n; i++) { out[i].x = f.fx + (int) (f.fw * (0.45 + 0.38 * r.next())); out[i].y = ys[i]; }
   return n;
 }
 

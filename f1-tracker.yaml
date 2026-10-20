@@ -4,7 +4,7 @@
 # M0 scope: hardware, platform tuning, entities, page shells. No data layer yet.
 
 substitutions:
-  fw_version: "1.0.11"         # bump on every install; shown in HA, settings and the status page
+  fw_version: "1.0.17"         # bump on every install; shown in HA, settings and the status page
   name: f1-tracker
   friendly_name: F1 Tracker
   # UI-44: the ONLY use of a position is computing sunrise/sunset for auto-dim
@@ -96,6 +96,8 @@ esphome:
     - f1-tracker/f1_tz.h          # the time zone picker (decision 205)
     - f1-tracker/f1_critterlogic.h
     - f1-tracker/f1_critterbite.h  # a hungry visit's plan: where the bites are and when
+    - f1-tracker/f1_wound.h        # what Carl's bite looks like (MOTION-8)
+    - f1-tracker/f1_faces.h        # where the face is in each portrait
     - f1-tracker/f1_dinologic.h
     - f1-tracker/f1_dino_data.h
     - f1-tracker/f1_critter.h     # the shared engine of the two below
@@ -103,6 +105,8 @@ esphome:
     - f1-tracker/f1_toucanlogic.h
     - f1-tracker/f1_toucan_data.h
     - f1-tracker/f1_toucan.h      # the toucan's visit (decision 204)
+    - f1-tracker/f1_carl_data.h
+    - f1-tracker/f1_carl.h        # Carl, who bites a face (MOTION-8)
     - f1-tracker/f1_anim.h         # animated logos: start lights and a car lapping the circuit
     - f1-tracker/f1_map.h
     - f1-tracker/f1_state.h
@@ -215,7 +219,9 @@ esphome:
             f1::tz::init();                                             // UI-70: the zone picker
             f1::toucan::C::bubble_font = id(mono16)->get_lv_font();        // MOTION-6
             f1::toucan::C::enabled = [] { return id(toucan_on).state; };
-            f1::dino::C::food_hook = f1::toucan::C::food_hook = f1::ui::food;   // MOTION-7: what a hungry visit can eat
+            f1::dino::C::food_hook = f1::toucan::C::food_hook = f1::carl::C::food_hook = f1::ui::food;   // MOTION-7: what a hungry visit can eat
+            f1::carl::C::bubble_font = id(mono16)->get_lv_font();          // MOTION-8
+            f1::carl::C::enabled = [] { return id(carl_on).state; };
             tracker::upd::ota_hook_begin = [] { f1::net::ota_begin(); };   // 2.4.6: pause the data task
             tracker::upd::ota_hook_error = [] { f1::net::ota_error(); };   // resume it if the install failed
             f1::anim::init(id(wifi_page)->obj, id(boot_mark), id(about_page)->obj, id(about_mark));
@@ -406,6 +412,16 @@ button:
     on_press:
       - lvgl.page.show: circuit_page
       - lambda: f1::dino::eat_now();
+  - platform: template        # MOTION-8: a driver's card is shown, and Carl comes for the face
+    name: Carl bites
+    icon: mdi:sheep
+    entity_category: diagnostic
+    web_server: {sorting_group_id: grp_anim, sorting_weight: 9}
+    on_press:
+      - lvgl.page.show: circuit_page
+      - lambda: |-
+          f1::ui::show_kind(f1::carousel::DRIVER, esphome::millis());
+          f1::carl::visit_now();
   - platform: template
     name: Toucan eats
     icon: mdi:food-apple
@@ -515,6 +531,13 @@ switch:
     optimistic: true
     restore_mode: RESTORE_DEFAULT_ON       # this project's default stays 24 h (UI-112)
     web_server: {sorting_group_id: grp_display, sorting_weight: 2}
+  - platform: template        # MOTION-8: Carl bites a driver or legend in the face, rarely
+    id: carl_on
+    name: Carl
+    icon: mdi:sheep
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_ON
+    web_server: {sorting_group_id: grp_display, sorting_weight: 22}
   - platform: template        # MOTION-6: a toucan flies by now and then
     id: toucan_on
     name: Toucan
@@ -2106,9 +2129,11 @@ interval:
           // MOTION-5: a dinosaur walks by now and then, where nothing is over the page and the panel is lit
           const bool critter_ok = tracker::upd::page_ok && tracker::upd::ui_.root == nullptr &&
                                   !f1::detail::is_open() && id(backlight).current_values.is_on();
-          f1::dino::tick(esphome::millis(), critter_ok && !f1::toucan::flying());
+          f1::dino::tick(esphome::millis(), critter_ok && !f1::toucan::flying() && !f1::carl::walking());
           // MOTION-6: the toucan, never over the dinosaur (each draws over a snapshot of the screen)
-          f1::toucan::tick(esphome::millis(), critter_ok && !f1::dino::walking());
+          f1::toucan::tick(esphome::millis(), critter_ok && !f1::dino::walking() && !f1::carl::walking());
+          // MOTION-8: Carl, about one visit in a hundred, and only where there is a face to bite
+          f1::carl::tick(esphome::millis(), critter_ok && !f1::dino::walking() && !f1::toucan::flying());
           switch (st.page) {
             case f1::boot::TO_RACE:
               id(lvgl_comp)->show_page(id(race_page)->index, LV_SCREEN_LOAD_ANIM_FADE_IN, 300); break;
