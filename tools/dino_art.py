@@ -96,6 +96,7 @@ def tail_image(flip):
 # ---- the walk's timing: f1_dinologic.h's twin
 WORDS = ["Rawr!", "RAWR!", "Grrr!", "Roarrr!", "Raaawr!", "Rawr rawr!", "Chomp!", "Grrrawr!", "Rrraaah!", "Rarrr!"]
 LANE_MIN, LANE_MAX = 60, 340
+HUNGRY_WORDS = ["Me hungry!", "Me so hungry!", "Dino hungry!", "Hungry! Rawr!", "Me want food!", "Me eat now!", "Mmm, me hungry!", "Rawr! Me hungry!"]
 STOP_MIN, STOP_MAX = 150, 330
 STEP_PX = 9.75                     # one of the four walk poses per this much distance: 8 steps a second at 78 px/s
 ROAR_DELAY_MS, ROAR_STEP_MS = 300, 250

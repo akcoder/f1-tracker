@@ -4,7 +4,7 @@
 # M0 scope: hardware, platform tuning, entities, page shells. No data layer yet.
 
 substitutions:
-  fw_version: "1.0.1"         # bump on every install; shown in HA, settings and the status page
+  fw_version: "1.0.9"         # bump on every install; shown in HA, settings and the status page
   name: f1-tracker
   friendly_name: F1 Tracker
   # UI-44: the ONLY use of a position is computing sunrise/sunset for auto-dim
@@ -95,6 +95,7 @@ esphome:
     - f1-tracker/f1_animlogic.h
     - f1-tracker/f1_tz.h          # the time zone picker (decision 205)
     - f1-tracker/f1_critterlogic.h
+    - f1-tracker/f1_critterbite.h  # a hungry visit's plan: where the bites are and when
     - f1-tracker/f1_dinologic.h
     - f1-tracker/f1_dino_data.h
     - f1-tracker/f1_critter.h     # the shared engine of the two below
@@ -214,6 +215,7 @@ esphome:
             f1::tz::init();                                             // UI-70: the zone picker
             f1::toucan::C::bubble_font = id(mono16)->get_lv_font();        // MOTION-6
             f1::toucan::C::enabled = [] { return id(toucan_on).state; };
+            f1::dino::C::food_hook = f1::toucan::C::food_hook = f1::ui::food;   // MOTION-7: what a hungry visit can eat
             tracker::upd::ota_hook_begin = [] { f1::net::ota_begin(); };   // 2.4.6: pause the data task
             tracker::upd::ota_hook_error = [] { f1::net::ota_error(); };   // resume it if the install failed
             f1::anim::init(id(wifi_page)->obj, id(boot_mark), id(about_page)->obj, id(about_mark));
@@ -234,8 +236,6 @@ esphome:
             };
             clamp(id(obs_lat), -90, 90, ${obs_lat});
             clamp(id(obs_lon), -180, 180, ${obs_lon});
-            clamp(id(off_from), 0, 23, 23);
-            clamp(id(off_to), 0, 23, 7);
             clamp(id(carousel_secs), 15, 120, ${carousel_default});
         - script.execute: apply_settings   # UI-181: the restored settings, once, now that the UI exists
 
@@ -261,17 +261,6 @@ script:
           id: backlight
           brightness: !lambda return id(bright_before_sleep);
           transition_length: 250ms
-  - id: autooff_dim             # UI-44c: with Auto off overnight off, its hours are dimmed and
-    then:                       # not editable (decision 202) - the switch is what to touch
-      - lambda: |-
-          const bool on = lv_obj_has_state(id(sw_autooff), LV_STATE_CHECKED);
-          lv_obj_t *group[] = {id(lbl_off_icon), id(lbl_off_from), id(lbl_off_until), id(ta_off_from), id(ta_off_to)};
-          for (lv_obj_t *o : group) lv_obj_set_style_opa(o, on ? LV_OPA_COVER : LV_OPA_40, LV_PART_MAIN);
-          lv_obj_t *fields[] = {id(ta_off_from), id(ta_off_to)};
-          for (lv_obj_t *o : fields) {
-            if (on) lv_obj_add_flag(o, LV_OBJ_FLAG_CLICKABLE);
-            else lv_obj_remove_flag(o, LV_OBJ_FLAG_CLICKABLE);
-          }
   - id: apply_settings
     then:
       - lambda: |-
@@ -405,6 +394,22 @@ button:
       - lvgl.page.show: circuit_page
       - lambda: f1::dino::walk_now();
   - platform: template
+    name: Dinosaur eats
+    icon: mdi:food-drumstick
+    entity_category: diagnostic
+    web_server: {sorting_group_id: grp_anim, sorting_weight: 5}
+    on_press:
+      - lvgl.page.show: circuit_page
+      - lambda: f1::dino::eat_now();
+  - platform: template
+    name: Toucan eats
+    icon: mdi:food-apple
+    entity_category: diagnostic
+    web_server: {sorting_group_id: grp_anim, sorting_weight: 8}
+    on_press:
+      - lvgl.page.show: circuit_page
+      - lambda: f1::toucan::eat_now();
+  - platform: template
     name: Toucan visit
     icon: mdi:bird
     entity_category: diagnostic
@@ -458,34 +463,6 @@ number:
     initial_value: ${obs_lon}
     entity_category: config
     web_server: {sorting_group_id: grp_location, sorting_weight: 2}
-  - platform: template        # UI-44c: the Auto Off window, local hours
-    id: off_from
-    name: Auto Off From
-    icon: mdi:weather-night
-    min_value: 0
-    max_value: 23
-    step: 1
-    unit_of_measurement: h
-    mode: box
-    optimistic: true
-    restore_value: true
-    initial_value: 23
-    entity_category: config
-    web_server: {sorting_group_id: grp_display, sorting_weight: 8}
-  - platform: template
-    id: off_to
-    name: Auto Off Until
-    icon: mdi:weather-sunny
-    min_value: 0
-    max_value: 23
-    step: 1
-    unit_of_measurement: h
-    mode: box
-    optimistic: true
-    restore_value: true
-    initial_value: 7
-    entity_category: config
-    web_server: {sorting_group_id: grp_display, sorting_weight: 9}
   - platform: template        # UI-20: brief asked 30 s - 1 min; range brackets it
     id: carousel_secs
     name: Carousel Interval
@@ -502,25 +479,23 @@ number:
     on_value: [script.execute: apply_settings]
 
 switch:
-  - platform: template        # UI-44c: blank the panel overnight. Separate from
-    id: auto_off              # auto-dim: dim is about light, off is about the
-    name: Auto Off            # household being asleep.
-    icon: mdi:power-sleep
+  - platform: template        # UI-44c / UI-62: the panel is dark from sunset to sunrise (plane-tracker's
+    id: auto_off              # rules): after sunset it goes out after a minute without a touch, and a
+    name: Auto Off            # touch brings it back. Exclusive with Auto Brightness (a dark panel has
+    icon: mdi:power-sleep     # nothing to dim).
     optimistic: true
     restore_mode: RESTORE_DEFAULT_OFF
     web_server: {sorting_group_id: grp_display, sorting_weight: 7}
-  - platform: template        # UI-62 (plane-tracker): after sunset the backlight goes off after a
-    id: screen_off_night      # minute without a touch; a touch brings it back. Off by default - a
-    name: Screen Off After Sunset   # dark screen reads as a dead one to anyone who did not turn this on.
-    icon: mdi:monitor-off
-    optimistic: true
-    restore_mode: RESTORE_DEFAULT_OFF
-    web_server: {sorting_group_id: grp_display, sorting_weight: 8}
+    on_turn_on:
+      - switch.turn_off: auto_bright
     on_turn_off:
       - lambda: |-
           if (!id(screen_asleep)) return;
           id(screen_wake)->execute();
           lv_obj_add_flag(id(wake_shield), LV_OBJ_FLAG_HIDDEN);   // no touch to eat
+  - id: !extend auto_bright
+    on_turn_on:
+      - switch.turn_off: auto_off
   - platform: template        # MOTION-5: a dinosaur walks across the screen now and then
     id: dino_on
     name: Dinosaur
@@ -1480,9 +1455,7 @@ lvgl:
               if (on) lv_obj_add_state(o, LV_STATE_CHECKED);
               else lv_obj_remove_state(o, LV_STATE_CHECKED);
             };
-            set(id(sw_autodim), id(auto_bright).state);
-            set(id(sw_autooff), id(auto_off).state);
-            id(autooff_dim).execute();                 // UI-44c: the window reads as off with the switch
+            lv_dropdown_set_selected(id(dd_bright)->obj, id(auto_bright).state ? 0 : (id(auto_off).state ? 1 : 2));
             if (auto ix = id(time_zone).active_index()) lv_dropdown_set_selected(id(dd_tz)->obj, *ix);   // UI-70
             set(id(sw_alerts), id(watched_alerts).state);
             set(id(sw_milestone), id(milestone_only).state);
@@ -1497,10 +1470,6 @@ lvgl:
             lv_textarea_set_text(id(ta_lat), nb);
             snprintf(nb, sizeof(nb), "%.3f", (double) id(obs_lon).state);
             lv_textarea_set_text(id(ta_lon), nb);
-            snprintf(nb, sizeof(nb), "%d", (int) id(off_from).state);
-            lv_textarea_set_text(id(ta_off_from), nb);
-            snprintf(nb, sizeof(nb), "%d", (int) id(off_to).state);
-            lv_textarea_set_text(id(ta_off_to), nb);
             lv_label_set_text(id(settings_err), "");
             lv_obj_add_flag(id(settings_kb)->obj, LV_OBJ_FLAG_HIDDEN);
             lv_obj_t *pnl[3] = {id(pnl_display), id(pnl_race), id(pnl_location)};
@@ -1552,7 +1521,7 @@ lvgl:
               - if:
                   condition:
                     lambda: |-
-                      float lat = 0, lon = 0, from = 0, until = 0;
+                      float lat = 0, lon = 0;
                       auto field = [&](lv_obj_t *ta, float lo, float hi, const char *name,
                                        const char *fmt, float *out) -> bool {
                         const char *t = lv_textarea_get_text(ta);
@@ -1577,13 +1546,15 @@ lvgl:
                       };
                       if (!field(id(ta_lat), -90, 90, "Latitude", "%.3f", &lat)) return false;
                       if (!field(id(ta_lon), -180, 180, "Longitude", "%.3f", &lon)) return false;
-                      if (!field(id(ta_off_from), 0, 23, "Off from", "%.0f", &from)) return false;
-                      if (!field(id(ta_off_to), 0, 23, "Off until", "%.0f", &until)) return false;
                       auto sw = [](lv_obj_t *o, switch_::Switch *e) {
                         if (lv_obj_has_state(o, LV_STATE_CHECKED)) e->turn_on(); else e->turn_off();
                       };
-                      sw(id(sw_autodim), id(auto_bright));
-                      sw(id(sw_autooff), id(auto_off));
+                      // Display Brightness: auto dim, auto off, or no change. The two switches exclude each
+                      // other (their own triggers), so this sets both explicitly.
+                      const uint32_t bm = lv_dropdown_get_selected(id(dd_bright)->obj);
+                      if (bm == 0) { id(auto_off).turn_off(); id(auto_bright).turn_on(); }
+                      else if (bm == 1) { id(auto_bright).turn_off(); id(auto_off).turn_on(); }
+                      else { id(auto_bright).turn_off(); id(auto_off).turn_off(); }
                       sw(id(sw_alerts), id(watched_alerts));
                       sw(id(sw_milestone), id(milestone_only));
                       id(carousel_secs).make_call()
@@ -1592,8 +1563,6 @@ lvgl:
                       id(time_zone).make_call().set_index(lv_dropdown_get_selected(id(dd_tz)->obj)).perform();   // UI-70
                       id(obs_lat).make_call().set_value(lat).perform();
                       id(obs_lon).make_call().set_value(lon).perform();
-                      id(off_from).make_call().set_value(from).perform();
-                      id(off_to).make_call().set_value(until).perform();
                       return true;
                   then:
                     - lvgl.page.show: race_page
@@ -1663,67 +1632,40 @@ lvgl:
             scrollable: false
             widgets:
               - label: {x: 16, y: 6, text: "\U000F00E1", text_font: mdi18, text_color: 0x7E8BB3}
-              - label: {x: 44, y: 6, text: "Auto bright", text_font: mono16, text_color: 0xC9D3F2}
-              - label: {x: 44, y: 28, text: "dims after sunset", text_font: mono12, text_color: 0x7E8BB3}
-              - switch: {id: sw_autodim, x: 380, y: 0, width: 72, height: 32}
-              - label: {x: 16, y: 56, text: "\U000F0904", text_font: mdi18, text_color: 0x7E8BB3}
-              - label: {x: 44, y: 56, text: "Auto off overnight", text_font: mono16, text_color: 0xC9D3F2}
-              - switch:
-                  id: sw_autooff
-                  x: 380
-                  y: 50
-                  width: 72
-                  height: 32
-                  on_value:
-                    - script.execute: autooff_dim     # the window's controls follow the switch
-              - label: {id: lbl_off_icon, x: 16, y: 106, text: "\U000F0594", text_font: mdi18, text_color: 0x7E8BB3}
-              - label: {id: lbl_off_from, x: 44, y: 106, text: "Off from", text_font: mono16, text_color: 0xC9D3F2}
-              - textarea:
-                  id: ta_off_from
-                  x: 150
-                  y: 100
-                  width: 64
+              - label: {x: 44, y: 6, text: "Display Brightness", text_font: mono16, text_color: 0xC9D3F2}
+              - dropdown:             # staged like the other fields, applied on Save
+                  id: dd_bright
+                  x: 250
+                  y: 0
+                  width: 200
                   height: 40
-                  pad_top: 5
-                  pad_bottom: 5
-                  one_line: true
-                  max_length: 2
-                  accepted_chars: "0123456789"
+                  options:
+                    - "Auto dim"
+                    - "Auto off"
+                    - "No change"
                   text_font: mono16
                   text_color: 0xEEF2FF
                   bg_color: 0x0E1836
                   border_color: 0x3A4E86
                   border_width: 2
+                  pad_all: 6
+                  dropdown_list:
+                    text_font: mono16
+                    text_color: 0xEEF2FF
+                    bg_color: 0x0E1836
+                    border_color: 0x3A4E86
+                  indicator:
+                    text_font: montserrat_14
+                    text_color: 0x7E8BB3
                   on_click:
-                    - lvgl.keyboard.update: { id: settings_kb, textarea: ta_off_from }
-                    - lvgl.widget.show: settings_kb
-              - label: {id: lbl_off_until, x: 224, y: 106, text: "until", text_font: mono16, text_color: 0x7E8BB3}
-              - textarea:
-                  id: ta_off_to
-                  x: 290
-                  y: 100
-                  width: 64
-                  height: 40
-                  pad_top: 5
-                  pad_bottom: 5
-                  one_line: true
-                  max_length: 2
-                  accepted_chars: "0123456789"
-                  text_font: mono16
-                  text_color: 0xEEF2FF
-                  bg_color: 0x0E1836
-                  border_color: 0x3A4E86
-                  border_width: 2
-                  on_click:
-                    - lvgl.keyboard.update: { id: settings_kb, textarea: ta_off_to }
-                    - lvgl.widget.show: settings_kb
-              - label: {x: 364, y: 106, text: "local h", text_font: mono12, text_color: 0x7E8BB3}
-              - label: {x: 16, y: 162, text: "\U000F00DF", text_font: mdi18, text_color: 0x7E8BB3}
-              - label: {x: 44, y: 162, text: "Brightness", text_font: mono16, text_color: 0xC9D3F2}
+                    - lvgl.widget.hide: settings_kb
+              - label: {x: 44, y: 46, text: "dims after sunset, or dark from sunset to sunrise", text_font: mono12, text_color: 0x7E8BB3}
+              - label: {x: 16, y: 72, text: "\U000F00DF", text_font: mdi18, text_color: 0x7E8BB3}
+              - label: {x: 44, y: 72, text: "Brightness", text_font: mono16, text_color: 0xC9D3F2}
               - slider:
                   id: sl_bright
                   x: 150
-                  y: 164
+                  y: 74
                   width: 300
                   height: 18
                   min_value: 1
@@ -1739,11 +1681,11 @@ lvgl:
                         auto call = id(backlight).turn_on();
                         call.set_brightness(v);
                         call.perform();
-              - label: {x: 16, y: 206, text: "\U000F0150", text_font: mdi18, text_color: 0x7E8BB3}   # clock-outline (as sky-tracker's Time format row)
-              - label: {x: 44, y: 206, text: "Time format", text_font: mono16, text_color: 0xC9D3F2}
-              - label: {x: 250, y: 206, text: "12h", text_font: mono16, text_color: 0xC9D3F2}
-              - switch: {id: sw_24h, x: 296, y: 200, width: 72, height: 32}
-              - label: {x: 378, y: 206, text: "24h", text_font: mono16, text_color: 0xC9D3F2}
+              - label: {x: 16, y: 116, text: "\U000F0150", text_font: mdi18, text_color: 0x7E8BB3}   # clock-outline (as sky-tracker's Time format row)
+              - label: {x: 44, y: 116, text: "Time format", text_font: mono16, text_color: 0xC9D3F2}
+              - label: {x: 250, y: 116, text: "12h", text_font: mono16, text_color: 0xC9D3F2}
+              - switch: {id: sw_24h, x: 296, y: 110, width: 72, height: 32}
+              - label: {x: 378, y: 116, text: "24h", text_font: mono16, text_color: 0xC9D3F2}
 
         - obj:
             id: pnl_race
@@ -2207,7 +2149,7 @@ interval:
           const auto t = id(sntp_time).now();
           const bool night = t.is_valid() && tracker::sun::elevation((double) t.timestamp,
               (double) id(obs_lat).state, (double) id(obs_lon).state) < -0.833;   // standard sunset
-          if (!(id(screen_off_night).state && night)) {
+          if (!(id(auto_off).state && night)) {
             // Sunrise, or the switch went off: never leave it dark. No touch woke it, so there is
             // none for the shield to eat.
             if (id(screen_asleep)) {
@@ -2230,11 +2172,7 @@ interval:
           // settings page, the web UI and Home Assistant can all change it.
           id(sun_elevation).publish_state(tracker::sun::elevation(
               (double) t.timestamp, (double) id(obs_lat).state, (double) id(obs_lon).state));
-          tracker::display::g_state.window.enabled = id(auto_off).state;
-          // NET-25: clamped at the point of use as well as at boot
-          auto hour = [](float v) { return (uint8_t) (v >= 0 && v <= 23 ? v : 0); };
-          tracker::display::g_state.window.from_hour = hour(id(off_from).state);
-          tracker::display::g_state.window.to_hour = hour(id(off_to).state);
+          tracker::display::g_state.window.enabled = false;   // Auto Off is sunset-sunrise (above), not hours
           tracker::display::Pass p;
           p.unix_s = t.timestamp;
           p.hour = t.hour;

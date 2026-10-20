@@ -512,17 +512,9 @@ inline void update_constructor_flags() {
 
 inline void refresh_data() {
   const uint32_t gen = net::snapshot(g.data);
-  if (gen == g.data_gen) return;
-  g.data_gen = gen;
-
-  // RACE-13d/e: the carousel follows who is racing THIS season, so a
-  // retirement or a rookie needs no rebuild (decision 98).
-  {
-    static PSRAM_BSS roster::View rv;
-    roster::build(g.data, rv);
-    if (!roster::same(rv, ui::g.roster)) ui::set_roster(rv);
-  }
-
+  // The snapshot copies the whole store EVERY tick, which wipes the iso3 resolved below (the
+  // parse leaves it empty), so the calendar is resolved every tick, not only when a new
+  // generation arrives: gated, the race page's flag showed for one tick and then vanished.
   // DATA-3: a fetched calendar supersedes the compiled floor. The ISO3 for the
   // flag is resolved against the compiled table, because the feed gives a
   // country NAME and the flag is keyed on a code.
@@ -539,6 +531,16 @@ inline void refresh_data() {
     g.cal.n = g.data.n_rounds;
     g.cal.season = g.data.season;
     g.cal.fetched = true;
+  }
+  if (gen == g.data_gen) return;
+  g.data_gen = gen;
+
+  // RACE-13d/e: the carousel follows who is racing THIS season, so a
+  // retirement or a rookie needs no rebuild (decision 98).
+  {
+    static PSRAM_BSS roster::View rv;
+    roster::build(g.data, rv);
+    if (!roster::same(rv, ui::g.roster)) ui::set_roster(rv);
   }
 
   // Decision 202: an empty entry list is not a page - the order page leaves the tap-through
