@@ -100,6 +100,18 @@ int main() {
   bool teeth = false;
   for (int dy = -16; dy <= 16 && !teeth; dy++) teeth |= bite_in(JAW, false, 20, dy, R) != bite_in(JAW, false, 20, 0, R);
   OK(teeth, "the jaw's inner edge is toothed");
+  // the afterthought: stops partway along the way out, one more bite, then goes on
+  Hunger e;
+  Rng r4(5);
+  e.plan(pts, 4, 3000, 70.0, 1500, r4);
+  const uint32_t plain_end = e.t_exit;
+  e.plan_extra(Pt{120, 215}, 70.0, r4);
+  OK(e.nb == e.n + 1 && e.pt[e.n].x == 120 && e.pt[e.n].y == 215, "the extra bite is at the coordinates given");
+  OK(e.tb[e.n] > plain_end + e.ex_walk && e.bites_done(e.tb[e.n] - 1) == e.n && e.bites_done(e.tb[e.n]) == e.n + 1, "it lands after the walk to the spot");
+  OK(e.exit_walked(e.t_exit + e.ex_walk) == e.exit_walked(e.t_exit + e.ex_walk + e.ex_pause) && e.exit_standing(e.tb[e.n]), "it stands still for it");
+  OK(std::fabs(e.exit_walked(e.t_exit + e.ex_walk) - 70.0) < 1.0, "having walked as far as the spot");
+  OK(e.exit_walked(e.t_exit + e.ex_walk + e.ex_pause + 1000) > 70.0 && !e.exit_standing(e.t_exit + e.ex_walk + e.ex_pause + 5), "then walks on");
+  OK(e.mouth(e.tb[e.n] - 100) == Hunger::OPEN && e.lunge(e.tb[e.n] - 130 + 130) > 0.9, "beak opens and head lunges into it");
   std::printf("\n%d checks, %d failures\n", checks, failures);
   return failures ? 1 : 0;
 }
