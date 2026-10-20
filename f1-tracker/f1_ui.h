@@ -10,6 +10,7 @@
 #include <initializer_list>
 
 #include "f1_birthday.h"
+#include "f1_critter.h"
 #include "f1_mem.h"
 #include "f1_calendar.h"
 #include "f1_carousel.h"
@@ -432,10 +433,24 @@ inline bool prepare(const carousel::Card &c) {
   }
 }
 
+// MOTION-7: what a hungry visitor could eat now: the circuit card's trace (the map box), or a person's
+// portrait. Only while the carousel page is the one showing and the picture is on it.
+inline bool food(critter::Food &f) {
+  if (!g.has_shown || g.w.map_box == nullptr || lv_obj_get_screen(g.w.map_box) != lv_screen_active()) return false;
+  lv_obj_t *box = g.shown.type == carousel::CIRCUIT ? g.w.map_box : g.w.photo;
+  if (box == nullptr || lv_obj_has_flag(box, LV_OBJ_FLAG_HIDDEN)) return false;
+  lv_obj_update_layout(box);
+  lv_area_t a;
+  lv_obj_get_coords(box, &a);
+  f = critter::Food{a.x1, a.y1, a.x2 - a.x1 + 1, a.y2 - a.y1 + 1, g.shown.type == carousel::CIRCUIT};
+  return f.w > 100 && f.h > 100;
+}
+
 // Swap the prepared card onto the screen. Everything it needs is already
 // resolved, so this is only widget updates - no lookups, no decoding, nothing
 // that could leave the card half-built.
 inline void commit() {
+  critter::clear_marks();          // MOTION-7: a hungry visitor's bite marks go with the card they were on
   g.shown = g.staged;              // UI-20c: what the screen shows from now on
   g.has_shown = true;
   if (g.w.badge) {
@@ -579,6 +594,10 @@ inline void advance(uint32_t now_ms, bool force = false) {
   // is only widget updates - no lookups, no decode, nothing that could leave a
   // card half-built on screen.
   prepare_next();
+  // MOTION-7: a hungry visitor is eating THIS card; it stays until the visit is over, and then for a
+  // whole dwell, so the bite marks are seen. (Held here, the card cannot change under the visit and put
+  // the old card's bites on the new picture.)
+  if (critter::eating && !force) { g.last_advance_ms = now_ms; return; }
   if (g.paused && !force) return;
   if (!force && (now_ms - g.last_advance_ms) < (uint32_t) g.interval_s * 1000u) return;
   // Hold the current card rather than show an unready one. A card that is late

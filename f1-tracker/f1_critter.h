@@ -29,11 +29,18 @@
 // the application tick calls tick() about once a second with whether a visit is welcome now (no card
 // over the screen, not the boot, settings, About or debug page, the panel not blank). A touch ends a
 // visit. The speech bubble's two pointers are the dinosaur's (f1_dino_data.h), for both.
+//
+// HUNGRY visits (MOTION-7, f1_critterbite.h): one in four, and only where the project says there is
+// something to eat (`food_hook`: the circuit card's trace, a person's portrait), the visitor eats it in 3-5
+// bites instead of just standing and speaking. A Traits then also supplies the aim, the mouth and the
+// lunge (see the constants below). The bite marks are left as an image on the page when the visit ends,
+// and `clear_marks()` takes them away: the project calls it when the card changes.
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 
+#include "f1_critterbite.h"
 #include "f1_dino_data.h"
 
 #if defined(USE_ESP32) && !defined(F1_HOST_TEST)
@@ -71,6 +78,62 @@ inline void describe(lv_image_dsc_t &d, const uint8_t *data, int w, int h) {
 
 inline constexpr int TAIL_W = dino::TAIL_W, TAIL_H = dino::TAIL_H;
 
+// ---- the bite marks, left on the page after a hungry visit ---------------------------------------
+inline lv_obj_t *marks_obj = nullptr;
+inline lv_draw_buf_t *marks_buf = nullptr;
+inline bool eating = false;          // a hungry visit is on: the project holds the card it is eating
+
+inline void clear_marks() {
+  if (marks_obj) lv_obj_delete(marks_obj);
+  marks_obj = nullptr;
+  if (marks_buf) lv_draw_buf_destroy(marks_buf);
+  marks_buf = nullptr;
+}
+
+inline int lum565(const lv_draw_buf_t *s, int x, int y) {
+  const uint16_t p = ((const uint16_t *) ((const uint8_t *) s->data + (size_t) y * s->header.stride))[x];
+  return (((p >> 11) & 31) * 8 * 30 + ((p >> 5) & 63) * 4 * 59 + (p & 31) * 8 * 11) / 100;
+}
+
+// The marks as an image the size of the item: black where it was bitten, pale along the bite (the flesh),
+// painted from the snapshot taken when the visit began, so it is only the item that is touched. It is made
+// when a hungry visit starts (empty, behind the visitor), repainted as each bite lands, and kept on the
+// page when the visit ends.
+inline bool marks_begin(lv_obj_t *parent, const Food &it) {
+  clear_marks();
+  marks_buf = lv_draw_buf_create(it.w, it.h, LV_COLOR_FORMAT_ARGB8888, 0);
+  if (marks_buf == nullptr) return false;
+  lv_draw_buf_clear(marks_buf, nullptr);
+  marks_obj = lv_image_create(parent);
+  lv_image_set_src(marks_obj, marks_buf);
+  lv_obj_set_pos(marks_obj, it.x, it.y);
+  lv_obj_remove_flag(marks_obj, LV_OBJ_FLAG_CLICKABLE);
+  return true;
+}
+
+// Paints bites from..k-1 (those before are on it already): black where the mouth took it, the rim around.
+inline void marks_paint(const lv_draw_buf_t *snap, const Food &it, int kind, bool left, const Pt *pt, const int *r, int from, int k) {
+  if (marks_obj == nullptr || marks_buf == nullptr) return;
+  for (int i = from; i < k; i++) {
+    const int ext = r[i] * BITE_REACH_X10 / 10 + 4;
+    for (int y = pt[i].y - ext; y <= pt[i].y + ext; y++)
+      for (int x = pt[i].x - ext; x <= pt[i].x + ext; x++) {
+        if (x < it.x || x >= it.x + it.w || y < it.y || y >= it.y + it.h) continue;
+        uint32_t *row = (uint32_t *) ((uint8_t *) marks_buf->data + (size_t) (y - it.y) * marks_buf->header.stride);
+        uint32_t &px = row[x - it.x];
+        if (bite_in(kind, left, x - pt[i].x, y - pt[i].y, r[i])) { px = 0xFF000000u; continue; }
+        if (px != 0 || lum565(snap, x, y) <= 24) continue;      // black already, or not part of the picture
+        bool near = false;                                      // within 3 px of the bite: the flesh
+        for (int d = 0; d < 8 && !near; d++) {
+          static const int8_t DX[8] = {3, -3, 0, 0, 2, -2, 2, -2}, DY[8] = {0, 0, 3, -3, 2, 2, -2, -2};
+          near = bite_in(kind, left, x + DX[d] - pt[i].x, y + DY[d] - pt[i].y, r[i]);
+        }
+        if (near) px = 0xFFEADCB4u;
+      }
+  }
+  lv_obj_invalidate(marks_obj);
+}
+
 template <class T>
 struct Critter {
   static constexpr int N = T::N_POSES, SCREEN_W = T::SCREEN_W;
@@ -89,10 +152,95 @@ struct Critter {
     int pose = -1, x = -99999, y = -99999;
     bool bubble_on = false;
     uint32_t frames = 0, max_gap = 0;
+    bool hungry = false;                         // this visit eats the card's picture
+    Hunger hg;
+    Food item;                                   // what it eats: the picture's own box
+    int mdx = 0;                                 // the mouth, from the sprite's left edge
+    int marks_k = 0;                             // bites painted so far
+    const char *hungry_text = nullptr;           // what it says while it eats
   };
   static inline St st;
   static inline bool (*enabled)() = nullptr;           // the project's switch (null: always on)
   static inline const lv_font_t *bubble_font = nullptr;
+  static inline bool (*food_hook)(Food &) = nullptr;   // the project: what could be eaten on the screen now
+  static inline bool force_hungry = false;             // the next visit eats (a web button)
+
+  struct Fr { int x, y, pose; bool bubble; };
+
+  // The visit's frame at t: the walk in to the first bite, then the bites, the word, the way out.
+  static Fr hungry_frame(uint32_t t) {
+    const Hunger &h = st.hg;
+    if (t < h.t0) {
+      const auto f = T::at(st.w, t);
+      return {f.x, f.y, (int) f.pose, false};
+    }
+    const bool flip = st.w.flip;
+    if (t < h.t_exit) {
+      const auto a = h.anchor(t);
+      const double e = h.lunge(t);
+      const int x = (int) std::lround(a.x - st.mdx + (flip ? -1 : 1) * T::LUNGE_X * e);
+      const int y = (int) std::lround(a.y - T::MOUTH_DY + T::LUNGE_Y * e);
+      if (a.moving) return {x, y, (int) (t / 90) % 4, false};
+      const auto m = h.mouth(t);
+      return {x, y, m == Hunger::OPEN ? T::P_OPEN : (m == Hunger::HALF ? T::P_HALF : T::P_REST), t >= h.t_say};
+    }
+    const double d = (t - h.t_exit) * h.speed / 1000.0;
+    const Pt last = h.pt[h.n - 1];
+    const double x0 = last.x - st.mdx;
+    return {(int) std::lround(flip ? x0 - d : x0 + d), last.y - T::MOUTH_DY, (int) (d / T::STEP) % 4, false};
+  }
+
+  // Decide whether this visit eats, and plan it from the snapshot. False: an ordinary visit.
+  static bool plan_hunger(uint32_t seed) {
+    Food box;
+    if (marks_obj != nullptr) return false;                      // this card has been bitten already
+    if (!food_hook || !food_hook(box) || box.w <= 0 || box.h <= 0 || st.snap == nullptr) return false;
+    Rng rng(seed ^ 0x51ED5u);
+    const int n = bite_count(seed);
+    Pt pts[BITES_MAX];
+    int got = 0;
+    bool flip = false;
+    Food item = box;
+    const int sw = (int) st.snap->header.w, sh = (int) st.snap->header.h;
+    if (box.trace) {
+      int x0 = sw, y0 = sh, x1 = -1, y1 = -1;                    // what is drawn in the box
+      for (int y = box.y; y < box.y + box.h && y < sh; y++)
+        for (int x = box.x; x < box.x + box.w && x < sw; x++)
+          if (lum565(st.snap, x, y) > 24) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+      if (x1 < x0) return false;
+      item = Food{x0, y0, x1 - x0 + 1, y1 - y0 + 1, true};
+      const int min_x = T::W + 2;                                // facing right: its left edge stays on screen
+      const int tx = x0 + (x1 - x0) / 3, ty = y0 + (y1 - y0) * 93 / 100;
+      long best = -1;
+      Pt p0;
+      for (int y = y0; y <= y1; y++)
+        for (int x = x0 > min_x ? x0 : min_x; x <= x1; x++)
+          if (lum565(st.snap, x, y) > 128) {
+            const long dd = (long) (x - tx) * (x - tx) + (long) (y - ty) * (y - ty);
+            if (best < 0 || dd < best) { best = dd; p0 = Pt{x, y}; }
+          }
+      if (best < 0) return false;
+      got = trace_walk([](int x, int y) { return lum565(st.snap, x, y) > 128; }, item, min_x, p0, n, rng, pts);
+    } else {
+      flip = true;                                               // the portrait's edge, the bird facing it
+      got = edge_points(item, n, rng, pts);
+    }
+    if (got < BITES_MIN) return false;
+    const int mdx = flip ? -2 : T::W + 2;
+    for (int i = 0; i < got; i++) {                              // the whole bird on screen at every bite
+      const int left = pts[i].x - mdx, top = pts[i].y - T::MOUTH_DY;
+      if (left < 0 || left + T::W > SCREEN_W || top < 0 || top + T::H > T::SCREEN_H) return false;
+    }
+    const int left0 = pts[0].x - mdx;
+    T::aim(st.w, pts[0].y - T::MOUTH_DY, flip ? SCREEN_W - T::W - left0 : left0, flip);
+    st.hungry_text = T::hungry_word(seed);
+    st.hg.plan(pts, got, st.w.t_stop, T::MOVE_SPEED, 1500, rng);
+    const Pt last = pts[got - 1];
+    st.hg.t_end = st.hg.t_exit + (uint32_t) (((flip ? last.x + 40 + T::W : 520 - last.x + mdx)) / T::MOVE_SPEED * 1000.0) + 300;
+    st.item = item;
+    st.mdx = mdx;
+    return true;
+  }
 
   // Move everything for this refresh, from the clock at this moment.
   static void frame() {
@@ -107,14 +255,21 @@ struct Critter {
     st.frames++;
     // a touch since the start ends the visit; so does the page changing under it
     if (lv_display_get_inactive_time(nullptr) + 100 < t || lv_obj_get_parent(st.root) != lv_screen_active() ||
-        T::finished(st.w, t)) {
+        (st.hungry ? t >= st.hg.t_end : T::finished(st.w, t))) {
       st.done = true;                        // torn down by the timer, outside the refresh
       return;
     }
-    const auto f = T::at(st.w, t);
-    if ((int) f.pose != st.pose) {
-      st.pose = (int) f.pose;
+    const Fr f = st.hungry ? hungry_frame(t) : [&] { const auto g = T::at(st.w, t); return Fr{g.x, g.y, (int) g.pose, g.bubble}; }();
+    if (f.pose != st.pose) {
+      st.pose = f.pose;
       lv_image_set_src(st.img, &st.pose_dsc[st.pose]);
+    }
+    if (st.hungry && marks_obj != nullptr) {                     // each bite shows the moment it lands
+      const int k = st.hg.bites_done(t);
+      if (k != st.marks_k) {
+        marks_paint(st.snap, st.item, T::MOUTH_KIND, st.w.flip, st.hg.pt, st.hg.r, st.marks_k, k);
+        st.marks_k = k;
+      }
     }
     if (f.x != st.x || f.y != st.y) {
       st.x = f.x;
@@ -150,6 +305,21 @@ struct Critter {
     if (st.timer) lv_timer_delete(st.timer);
     st.timer = nullptr;
     const uint32_t ms = lv_tick_get() - st.t0;
+    if (st.hungry) {                                             // the bites it took stay on the page
+      if (marks_obj != nullptr && st.snap != nullptr && st.root != nullptr) {
+        const int k = st.hg.bites_done(ms);
+        if (k > 0) {
+          if (k != st.marks_k) marks_paint(st.snap, st.item, T::MOUTH_KIND, st.w.flip, st.hg.pt, st.hg.r, st.marks_k, k);
+          lv_obj_set_parent(marks_obj, lv_obj_get_parent(st.root));   // out from under the snapshot, before it goes
+        } else {
+          clear_marks();
+        }
+      } else {
+        clear_marks();
+      }
+    }
+    st.hungry = false;
+    eating = false;
     if (st.root) lv_obj_delete(st.root);                         // and its children
     st.root = st.img = st.bubble = st.label = st.tail = nullptr;
     if (st.snap) lv_draw_buf_destroy(st.snap);
@@ -172,6 +342,12 @@ struct Critter {
     if (st.snap == nullptr) {
       ESP_LOGW(T::TAG, "no memory for the snapshot: no visit");
       return false;
+    }
+    st.hungry = false;
+    if (food_hook && (force_hungry || (seed >> 9) % HUNGRY_ONE_IN == 0)) {
+      force_hungry = false;
+      st.hungry = plan_hunger(seed);
+      if (!st.hungry) st.w = T::make(seed);                      // plan_hunger may have changed it before giving up
     }
     const uint8_t *pose_src[N], *tail_src = st.w.flip ? dino::TAIL_L : dino::TAIL_R;
     for (int p = 0; p < N; p++) pose_src[p] = T::pose(p);
@@ -217,13 +393,17 @@ struct Critter {
     st.label = lv_label_create(st.bubble);
     lv_obj_set_style_text_font(st.label, bubble_font, 0);
     lv_obj_set_style_text_color(st.label, lv_color_hex(0x101420), 0);
-    lv_label_set_text(st.label, T::word(st.w));
+    lv_label_set_text(st.label, st.hungry ? st.hungry_text : T::word(st.w));
     lv_obj_add_flag(st.bubble, LV_OBJ_FLAG_HIDDEN);
 
     st.tail = lv_image_create(st.root);
     lv_image_set_src(st.tail, &st.tail_dsc);
     lv_obj_remove_flag(st.tail, LV_OBJ_FLAG_CLICKABLE);
     lv_obj_add_flag(st.tail, LV_OBJ_FLAG_HIDDEN);
+    if (st.hungry) {                                             // the bites go behind the visitor
+      st.marks_k = 0;
+      if (marks_begin(st.root, st.item)) lv_obj_move_to_index(marks_obj, 0);
+    }
 
     st.pose = -1;
     st.x = st.y = -99999;
@@ -231,6 +411,7 @@ struct Critter {
     st.frames = st.max_gap = st.last_frame = 0;
     st.done = false;
     st.running = true;
+    eating = st.hungry;
     st.t0 = lv_tick_get();
     if (lv_display_t *d = lv_display_get_default()) lv_display_add_event_cb(d, on_refr, LV_EVENT_REFR_START, nullptr);
     st.timer = lv_timer_create(
@@ -267,6 +448,8 @@ struct Critter {
   }
 
   static bool active() { return st.running; }
+  // A web button: the next visit eats the card's picture, where there is one.
+  static void hungry_now() { force_hungry = true; visit_now(); }
 
   // Decision 202: a web button asks for a visit - the next tick that finds the panel free starts one.
   static void visit_now() { if (st.next_at != 0 && !st.running) st.next_at = 1; }

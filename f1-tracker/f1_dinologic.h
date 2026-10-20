@@ -29,6 +29,11 @@ inline constexpr int N_WORDS = 10;
 inline const char *const WORDS[N_WORDS] = {"Rawr!", "RAWR!", "Grrr!", "Roarrr!", "Raaawr!",
                                            "Rawr rawr!", "Chomp!", "Grrrawr!", "Rrraaah!", "Rarrr!"};
 
+// What it says when it is hungry (MOTION-7): a variation on "me hungry", picked per visit.
+inline constexpr int N_HUNGRY_WORDS = 8;
+inline const char *const HUNGRY_WORDS[N_HUNGRY_WORDS] = {"Me hungry!", "Me so hungry!", "Dino hungry!", "Hungry! Rawr!",
+                                                         "Me want food!", "Me eat now!", "Mmm, me hungry!", "Rawr! Me hungry!"};
+
 using critter::Rng;
 
 struct Walk {

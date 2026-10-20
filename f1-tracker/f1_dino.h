@@ -21,6 +21,18 @@ struct Traits {
   static uint32_t gap(uint32_t seed) { return next_gap_ms(seed); }
   static const char *word(const Walk &w) { return WORDS[w.word]; }
   static const uint8_t *pose(int p) { return POSES[p]; }
+  // a hungry visit (f1_critterbite.h): the poses, where the mouth is, how it moves and lunges, what it says
+  static constexpr int P_REST = STAND, P_HALF = ROAR_HALF, P_OPEN = ROAR_OPEN, MOUTH_DY = DATA_H * 30 / 100;
+  static constexpr int LUNGE_X = 12, LUNGE_Y = 5, MOUTH_KIND = critter::JAW;
+  static const char *hungry_word(uint32_t seed) { return HUNGRY_WORDS[(uint32_t) (Rng(seed ^ 0x4E6Fu).next() * N_HUNGRY_WORDS) % N_HUNGRY_WORDS]; }
+  static constexpr double STEP = STEP_PX, MOVE_SPEED = 70.0;
+  static void aim(Walk &w, int lane, int stop_x, bool flip) {
+    w.flip = flip;
+    w.lane = lane;
+    w.stop_x = stop_x;
+    w.t_stop = w.time_for(stop_x + SW);
+    w.t_end = w.t_stop + w.pause_ms + (w.time_for(dino::SCREEN_W + SW) - w.t_stop);
+  }
 };
 using C = critter::Critter<Traits>;     // C::bubble_font and C::enabled are the project's to set
 
@@ -28,6 +40,7 @@ inline void tick(uint32_t now_ms, bool welcome) { C::tick(now_ms, welcome); }
 inline bool walking() { return C::active(); }
 // Decision 202: a web button asks for a walk - the next tick that finds the panel free starts one.
 inline void walk_now() { C::visit_now(); }
+inline void eat_now() { C::hungry_now(); }      // MOTION-7: ... and it eats the card's picture
 
 }  // namespace dino
 }  // namespace f1

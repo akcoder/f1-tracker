@@ -15,8 +15,9 @@ without a board (section D.1).
 import argparse, glob, io, json, math, os, re, sys, textwrap
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import tracker_common
+import math
 import critter_common as cc
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
@@ -789,20 +790,16 @@ def _row_icon(d, px, py, y, cp):
 def page_settings(ctx):
     G = ctx["geo"]
     img, d, px, py = _settings_frame(ctx, "page-9-settings", 0,
-        ("sw_autodim", "sw_autooff", "sw_24h", "sl_bright", "ta_off_from", "ta_off_to"))
-    _row_icon(d, px, py, 6, 0xF00E1); d.text((px + 44, py + 6), "Auto bright", font=FONT[16], fill=TEXT); d.text((px + 44, py + 28), "dims after sunset", font=FONT[12], fill=MUTED)
-    _sw(d, px, py, "sw_autodim", G, True)
-    _row_icon(d, px, py, 56, 0xF0904); d.text((px + 44, py + 56), "Auto off overnight", font=FONT[16], fill=TEXT)
-    _sw(d, px, py, "sw_autooff", G, True)
-    _row_icon(d, px, py, 106, 0xF0594); d.text((px + 44, py + 106), "Off from", font=FONT[16], fill=TEXT)
-    _field(d, px, py, "ta_off_from", G, "23")
-    d.text((px + 224, py + 106), "until", font=FONT[16], fill=MUTED)
-    _field(d, px, py, "ta_off_to", G, "7")
-    d.text((px + 364, py + 106), "local h", font=FONT[12], fill=MUTED)
-    _row_icon(d, px, py, 162, 0xF00DF); d.text((px + 44, py + 162), "Brightness", font=FONT[16], fill=TEXT)
+        ("dd_bright", "sw_24h", "sl_bright"))
+    _row_icon(d, px, py, 6, 0xF00E1); d.text((px + 44, py + 6), "Display Brightness", font=FONT[16], fill=TEXT)
+    _field(d, px, py, "dd_bright", G, "Auto dim")
+    bx, by, bw, bh = box(G, "dd_bright", px, py)
+    d.polygon([(bx + bw - 26, by + bh // 2 - 3), (bx + bw - 14, by + bh // 2 - 3), (bx + bw - 20, by + bh // 2 + 4)], fill=MUTED)
+    d.text((px + 44, py + 46), "dims after sunset, or dark from sunset to sunrise", font=FONT[12], fill=MUTED)
+    _row_icon(d, px, py, 72, 0xF00DF); d.text((px + 44, py + 72), "Brightness", font=FONT[16], fill=TEXT)
     _slider(d, px, py, "sl_bright", G, 0.8)
-    _row_icon(d, px, py, 206, 0xF0150); d.text((px + 44, py + 206), "Time format", font=FONT[16], fill=TEXT)   # clock-outline
-    d.text((px + 250, py + 206), "12h", font=FONT[16], fill=TEXT); d.text((px + 378, py + 206), "24h", font=FONT[16], fill=TEXT)
+    _row_icon(d, px, py, 116, 0xF0150); d.text((px + 44, py + 116), "Time format", font=FONT[16], fill=TEXT)   # clock-outline
+    d.text((px + 250, py + 116), "12h", font=FONT[16], fill=TEXT); d.text((px + 378, py + 116), "24h", font=FONT[16], fill=TEXT)
     _sw(d, px, py, "sw_24h", G, True)
     return img, "page-9-settings"
 
@@ -1413,6 +1410,251 @@ def page_toucan_poses(ctx):
     return sheet, "toucan-poses"
 
 
+# ---------------------------------------------------------------- a hungry critter (MOTION-7)
+# After plane-tracker's UI-68: eating is not plowing through the screen. The visitor stops at ONE thing
+# - the circuit's trace, a driver's portrait - and eats that thing, bite by bite: each bite takes a
+# scalloped piece off the near edge and shows the flesh (a pale rim), crumbs fall from the mouth, it
+# chews, steps up to the rest, and when the last piece is gone it says its word and walks on. Nothing
+# else on the card is touched.
+CREAM = (0xEA, 0xDC, 0xB4)
+def _bite_in(kind, left, dx, dy, r):
+    """f1_critterbite.h bite_in: the shape of the mouth that took the bite (the bill's lens, the jaw's teeth)."""
+    u = -dx if left else dx; v = dy; R = float(r)
+    if kind == "bill":
+        L = 2.6 * R; H = 0.55 * R
+        t = (u + 0.3 * L) / L
+        if t < 0 or t > 1: return False
+        w = 2 * t - 1
+        return abs(v) <= H * (1 - w * w)
+    if u < -0.3 * R or abs(v) > 0.85 * R: return False
+    w = v / (0.42 * R) + 100.0; f = w - math.floor(w)
+    return u <= 1.1 * R - 0.35 * R * abs(f - 0.5) * 2
+
+
+def _eaten(bg, h, k):
+    """bg with the first k bites taken out of the item: each the shape of the mouth, the flesh a pale rim around it.
+    Only the item is touched; the marks stay until the card changes."""
+    if k == 0: return bg
+    xa, ya, xb, yb = h.rect
+    gone = Image.new("L", bg.size, 0); gp = gone.load()
+    for i in range(k):
+        (cx, cy), r = h.pts[i], h.radii[i]
+        ext = int(r * 2.8) + 4
+        for y in range(max(ya, cy - ext), min(yb, cy + ext) + 1):
+            for x in range(max(xa, cx - ext), min(xb, cx + ext) + 1):
+                if _bite_in(h.kind, h.flip, x - cx, y - cy, r): gp[x, y] = 255
+    item = bg.convert("L").point(lambda v: 255 if v > 24 else 0)
+    out = bg.copy()
+    out.paste(Image.new("RGB", bg.size, BG), (0, 0), gone)
+    rim = ImageChops.subtract(gone.filter(ImageFilter.MaxFilter(7)), gone)
+    rim = ImageChops.multiply(rim, item)
+    out.paste(Image.new("RGB", bg.size, CREAM), (0, 0), rim)
+    return out
+
+
+def _smooth(u):
+    u = max(0.0, min(1.0, u))
+    return u * u * (3 - 2 * u)
+
+
+class _Hungry:
+    """The visit: in to the first bite, then chomps (3 to 5, each a different size and place) with a chew after
+    each and a move along the item to the next; the head goes to each bite (a lunge); the word; away. The marks stay."""
+    def __init__(self, art, base, rect, pts, flip, word, speed, lunge, bubble_ms=1500):
+        self.art, self.base, self.rect, self.pts, self.word, self.flip = art, base, rect, pts, word, flip
+        self.words = [getattr(art, "HUNGRY_WORDS", art.WORDS)[word]] if hasattr(art, "HUNGRY_WORDS") else art.WORDS
+        r = cc.Rng(len(pts) * 7919 + pts[0][0] + pts[0][1])
+        self.radii = [17 + int(r.next() * 10) for _ in pts]
+        toucan = hasattr(art, "BEAK_OPEN")
+        self.kind = "bill" if toucan else "jaw"
+        self.P_OPEN, self.P_HALF, self.P_REST = ((art.BEAK_OPEN, art.BEAK_HALF, art.PERCH) if toucan
+                                                  else (art.ROAR_OPEN, art.ROAR_HALF, art.STAND))
+        self.mouth = (-2, art.MOUTH_DY) if flip else (art.SW + 2, art.MOUTH_DY)
+        self.speed, self.lunge = speed, lunge
+        P = pts[0]
+        base.flip = flip
+        base.lane = P[1] - self.mouth[1]
+        left = P[0] - self.mouth[0]
+        base.stop_x = 480 - art.SW - left if flip else left
+        base._finish()
+        self.T0 = base.t_stop
+        self.y_in = base.at(self.T0)[1]
+        # the timeline: chomp k at tb[k]; after its chew, a move to the next point
+        self.tb, self.moves = [], []
+        t = self.T0 + 500
+        for k in range(len(pts)):
+            self.tb.append(t)
+            t += 750 + int(r.next() * 500)                         # the chew, a different length each time
+            if k + 1 < len(pts):
+                d = math.hypot(pts[k + 1][0] - pts[k][0], pts[k + 1][1] - pts[k][1])
+                mv = int(d / speed * 1000) + 150
+                self.moves.append((t, t + mv, k)); t += mv + 150
+        self.t_say = t
+        self.t_exit = self.t_say + bubble_ms
+        self.end_pt = pts[-1]
+        self.t_end = self.t_exit + int(((self.end_pt[0] + 40 + art.SW) if flip else (520 - self.end_pt[0] + self.mouth[0])) / speed * 1000) + 300
+
+    def anchor(self, t):
+        """where the mouth is (the bite point) at t, and whether it is travelling"""
+        for t0, t1, k in self.moves:
+            if t0 <= t < t1:
+                u = _smooth((t - t0) / (t1 - t0)); a, b = self.pts[k], self.pts[k + 1]
+                return a[0] + (b[0] - a[0]) * u, a[1] + (b[1] - a[1]) * u, True
+        k = sum(1 for t0, t1, _ in self.moves if t >= t1)
+        return self.pts[k][0], self.pts[k][1], False
+
+    def lunging(self, t):
+        """0..1: the head going into a bite (fast), then back (slower)"""
+        e = 0.0
+        for tb in self.tb:
+            u = t - (tb - 130)
+            if 0 <= u < 130: e = max(e, _smooth(u / 130))
+            elif 130 <= u < 430: e = max(e, 1 - _smooth((u - 130) / 300))
+        return e
+
+    def at(self, t):
+        art = self.art
+        if t < self.T0:
+            x, y, pose, _ = self.base.at(t)
+            return x, y, pose, False
+        if t < self.t_exit:
+            ax, ay, moving = self.anchor(t)
+            e = self.lunging(t)
+            x = int(round(ax - self.mouth[0] + (-1 if self.flip else 1) * self.lunge[0] * e))
+            y = int(round(ay - self.mouth[1] + self.lunge[1] * e))
+            if moving:
+                return x, y, int(t / 90) % 4, False
+            for tb in self.tb:                                   # open wide going in, chew after
+                if tb - 260 <= t < tb: return x, y, self.P_OPEN, False
+                if tb <= t < tb + 600: return x, y, self.P_HALF if (t // 140) % 2 else self.P_REST, False
+            return x, y, self.P_REST, t >= self.t_say
+        d = (t - self.t_exit) * self.speed / 1000.0
+        ax, ay = self.end_pt
+        x0 = ax - self.mouth[0]
+        return int(round(x0 - d if self.flip else x0 + d)), int(round(ay - self.mouth[1])), int(d / art.STEP_PX) % 4, False
+
+    def bites_done(self, t):
+        return sum(1 for tb in self.tb if t >= tb)
+
+    def crumbs(self, t, bg):
+        """(x, y, colour) of the pieces falling from each bite in the last 800 ms."""
+        out = []
+        for k, tb in enumerate(self.tb):
+            u = (t - tb) / 1000.0
+            if u < 0 or u > 0.8: continue
+            r = cc.Rng(1000 + k)
+            (cx, cy), rad = self.pts[k], self.radii[k]
+            for j in range(9):
+                sx = cx + rad * 0.3 + (r.next() - 0.3) * 50 * u + (r.next() - 0.5) * 16
+                sy = cy + 6 - 70 * u * r.next() + 380 * u * u * (0.7 + 0.6 * r.next())
+                col = None
+                for _ in range(16):                               # a colour from the piece just taken
+                    px = bg.getpixel((int(cx + r.next() * rad * 0.8), int(cy + (r.next() - 0.5) * rad * 1.4)))
+                    if sum(px) > 90: col = px; break
+                out.append((int(sx), int(sy), col or (255, 255, 255)))
+        return out
+
+
+def _hungry_frame(h, bg, poses, tails, t):
+    img = _eaten(bg, h, h.bites_done(t))
+    img = cc.frame(img, _WordArt(h.art, h.words), poses, tails, _AtShim(h), t, FONT[16], W)
+    d = ImageDraw.Draw(img)
+    for x, y, col in h.crumbs(t, bg):
+        d.rectangle([x, y, x + 3, y + 3], fill=col)
+    return img
+
+
+class _WordArt:
+    """the art, but saying what a hungry visit says"""
+    def __init__(self, art, words): self._a, self.WORDS = art, words
+    def __getattr__(self, n): return getattr(self._a, n)
+
+
+class _AtShim:
+    """cc.frame wants .at(t), .flip and .word."""
+    def __init__(self, h): self.h, self.flip, self.word = h, h.flip, h.word
+    def at(self, t): return self.h.at(t)
+
+
+def _item_rect(bg, box):
+    """The bounding box of what is drawn inside `box` (the thing to eat)."""
+    xa, ya, xb, yb = bg.crop(box).convert("L").point(lambda v: 255 if v > 24 else 0).getbbox()
+    return (box[0] + xa, box[1] + ya, box[0] + xb, box[1] + yb)
+
+
+def _trace_walk(px, r1, p0, n, rng):
+    """n points along the trace from p0, each 34-52 px on, keeping the way it was going (up the line first)."""
+    pts = [p0]; dirv = (0.0, -1.0)
+    ys, xs = r1[3] - r1[1], r1[2] - r1[0]
+    cand = [(x + r1[0], y + r1[1]) for x in range(xs) for y in range(ys) if px[x, y] > 128 and x + r1[0] >= 146]
+    for _ in range(n - 1):
+        c = pts[-1]; best = []
+        for q in cand:
+            dx, dy = q[0] - c[0], q[1] - c[1]; d = math.hypot(dx, dy)
+            if 34 <= d <= 52:
+                best.append(((dx * dirv[0] + dy * dirv[1]) / d, q))
+        best.sort(reverse=True)
+        top = [q for cs, q in best[:6] if cs > 0.4] or [q for cs, q in best[:3]]
+        if not top: break
+        q = top[int(rng.next() * len(top))]
+        d = math.hypot(q[0] - c[0], q[1] - c[1]); dirv = ((q[0] - c[0]) / d, (q[1] - c[1]) / d)
+        pts.append(q)
+    return pts
+
+
+def _hungry_setups(ctx):
+    D = _dino(); T = _toucan()
+    D["art"].MOUTH_DY = int(D["art"].SH * 0.30); T["art"].MOUTH_DY = int(T["art"].SH * 0.45)
+    bg1, _ = page_circuit(ctx)
+    r1 = _item_rect(bg1, (0, 60, 420, 330))                  # the trace, not the north arrow
+    px = bg1.convert("L").crop(r1).load()
+    rng = cc.Rng(5)
+    n1 = 3 + int(rng.next() * 3)                              # 3 to 5 chomps
+    p0 = min(((x + r1[0], y + r1[1]) for x in range(r1[2] - r1[0]) for y in range(r1[3] - r1[1])
+              if px[x, y] > 128 and x + r1[0] >= 146), key=lambda p: (p[0] - 192) ** 2 + (p[1] - 318) ** 2)
+    pts1 = _trace_walk(px, r1, p0, n1, rng)
+    h1 = _Hungry(D["art"], D["art"].Walk(23), r1, pts1, False, 0, 70, (12, 5))
+    bg2, _ = page_driver(ctx)
+    r2 = _item_rect(bg2, (0, 50, 270, 380))                  # the portrait, bitten along its right edge, the bird facing it
+    rng2 = cc.Rng(9)
+    n2 = 3 + int(rng2.next() * 3)
+    ys = [140 + i * (170 // max(1, n2 - 1)) + int((rng2.next() - 0.5) * 24) for i in range(n2)]
+    for i in range(n2 - 1, 0, -1):                            # not top to bottom: the bird hops about
+        j = int(rng2.next() * (i + 1)); ys[i], ys[j] = ys[j], ys[i]
+    pts2 = [(r2[2] - int(rng2.next() * 10), y) for y in ys]
+    h2 = _Hungry(T["art"], T["art"].Flight(11), r2, pts2, True, 7, 130, (18, 9))
+    return (("hungry-dino", bg1, h1, D), ("hungry-toucan", bg2, h2, T))
+
+
+def _hungry_sheet(ctx, name):
+    n, bg, h, D = next(x for x in _hungry_setups(ctx) if x[0] == name)
+    ts = (h.tb[0] + 100, h.tb[len(h.tb) // 2] + 100, h.tb[-1] + 250, h.t_end - 100)
+    sheet = Image.new("RGB", (W * 2 + 4, H * 2 + 4), (0x2D, 0x5B, 0xD0))
+    for i, t in enumerate(ts):
+        sheet.paste(_hungry_frame(h, bg, D["poses"], D["tails"], t), ((i % 2) * (W + 4), (i // 2) * (H + 4)))
+    return sheet
+
+
+def page_hungry_dino(ctx):
+    """The dinosaur is hungry: three bites out of the circuit's trace, Chomp!, and the marks stay."""
+    return _hungry_sheet(ctx, "hungry-dino"), "hungry-dino"
+
+
+def page_hungry_toucan(ctx):
+    """The toucan is hungry: three bites out of the driver's portrait, and the marks stay."""
+    return _hungry_sheet(ctx, "hungry-toucan"), "hungry-toucan"
+
+
+def hungry_gifs(ctx, fps=15):
+    for name, bg, h, D in _hungry_setups(ctx):
+        frames = [_hungry_frame(h, bg, D["poses"], D["tails"], int(i * 1000 / fps)) for i in range(int(h.t_end * fps / 1000) + 1)]
+        pal = frames[len(frames) // 2].quantize(colors=128, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.NONE)
+        q = [f.quantize(palette=pal, dither=Image.Dither.NONE) for f in frames]
+        out = os.path.join(OUT, name + ".gif")
+        q[0].save(out, save_all=True, append_images=q[1:], duration=int(1000 / fps), loop=0, optimize=False, disposal=1)
+        print(f"  {name}.gif  {len(q)} frames, {os.path.getsize(out) // 1024} KB")
+
+
 def _critter_gif(ctx, name, frame_fn, visit, fps=12):
     """<name>.gif: one visit across the order page, with the stop and the bubble."""
     bg, _ = page_order(ctx)
@@ -1448,6 +1690,7 @@ def main():
     ap.add_argument("--font", default="/tmp/RobotoMono.ttf")
     ap.add_argument("--sans", default=None)
     ap.add_argument("--out", default=None, help="output directory (default docs/renders)")
+    ap.add_argument("--hungry-gif", action="store_true", help="only the hungry critter GIFs")
     ap.add_argument("--gif", action="store_true", help="also write the boot and About animations as GIFs (slow)")
     a = ap.parse_args()
     for sz in (10, 12, 13, 14, 15, 16, 18, 22, 24, 34):
@@ -1544,8 +1787,11 @@ def main():
              page_settings_location, page_about, page_about_cars, page_boot_cars, page_boot_strip, page_overtake, page_debug, page_offseason,
              overlay_detail, overlay_detail_loading, overlay_detail_rookie, overlay_alert, overlay_milestone,
              page_race_with_icon, overlay_update_checking, overlay_update_available,
-             overlay_update_installing, overlay_update_failed, page_dino_walks, page_dino_poses, page_toucan_flights, page_toucan_poses]
+             overlay_update_installing, overlay_update_failed, page_dino_walks, page_dino_poses, page_toucan_flights, page_toucan_poses, page_hungry_dino, page_hungry_toucan]
+    if a.hungry_gif:
+        hungry_gifs(ctx)
     if a.gif:
+        hungry_gifs(ctx)
         animation_gifs(ctx)
         dino_gif(ctx)
         toucan_gif(ctx)
