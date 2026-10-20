@@ -3,7 +3,9 @@
 #include <cstdio>
 #include <cstdlib>
 #include "../f1-tracker/f1_critterbite.h"
+#include "../f1-tracker/f1_wound.h"
 using namespace f1::critter;
+namespace wound = f1::wound;
 static int checks = 0, failures = 0;
 #define OK(c, m) do { checks++; if (!(c)) { failures++; std::printf("  FAIL  %s\n", m); } } while (0)
 int main() {
@@ -112,6 +114,58 @@ int main() {
   OK(std::fabs(e.exit_walked(e.t_exit + e.ex_walk) - 70.0) < 1.0, "having walked as far as the spot");
   OK(e.exit_walked(e.t_exit + e.ex_walk + e.ex_pause + 1000) > 70.0 && !e.exit_standing(e.t_exit + e.ex_walk + e.ex_pause + 5), "then walks on");
   OK(e.mouth(e.tb[e.n] - 100) == Hunger::OPEN && e.lunge(e.tb[e.n] - 130 + 130) > 0.9, "beak opens and head lunges into it");
+  // Carl: the bites go in the face, from its right, two or three of them
+  Food fd;
+  fd.fx = 100; fd.fy = 80; fd.fw = 90; fd.fh = 110;
+  bool inface = true, spread = true;
+  for (uint32_t sd = 1; sd < 60; sd++) {
+    Rng rf(sd);
+    Pt fp[BITES_MAX];
+    const int nf = 2 + (int) (sd % 2);
+    face_points(fd, nf, rf, fp);
+    for (int i = 0; i < nf; i++) {
+      inface &= fp[i].x >= fd.fx + fd.fw * 0.44 && fp[i].x <= fd.fx + fd.fw * 0.84 && fp[i].y >= fd.fy + fd.fh * 0.2 && fp[i].y <= fd.fy + fd.fh * 0.9;
+      for (int j = 0; j < i; j++) spread &= std::abs(fp[i].y - fp[j].y) > 8;
+    }
+  }
+  OK(inface, "every face bite is inside the face box, on its right");
+  OK(spread, "and no two are at the same height");
+
+  // the wound
+  wound::Wound wd;
+  wd.x = 150; wd.y = 120; wd.r = 20; wd.left = true; wd.seed = 5;
+  const wound::Shape sh = wound::shape(wd);
+  const uint32_t mid = wound::wound_argb(wd, (int) sh.cx, (int) sh.cy);
+  OK((mid >> 24) == 255 && ((mid >> 16) & 255) > ((mid >> 8) & 255) && ((mid >> 16) & 255) > (mid & 255), "the middle of a wound is opaque and red");
+  OK(wound::wound_argb(wd, 150 + 3 * wound::extent(wd), 120) == 0 && wound::wound_argb(wd, 150, 120 - 3 * wound::extent(wd)) == 0, "nothing far from it");
+  OK(sh.cx < wd.x, "facing left, it is on the left of the mouth");
+  int opaque = 0, soft = 0;
+  const int ex = wound::extent(wd);
+  for (int y = wd.y - ex; y <= wd.y + ex; y++)
+    for (int x = wd.x - 2 * ex; x <= wd.x + ex; x++) {
+      const uint32_t c = wound::wound_argb(wd, x, y);
+      opaque += (c >> 24) == 255;
+      soft += c && (c >> 24) < 255;
+    }
+  OK(opaque > 400 && soft > 150, "an opaque wound inside a translucent bruise");
+  OK(wound::wound_argb(wd, 120, 120) == wound::wound_argb(wd, 120, 120), "the same pixel every time");
+  Rng rd(3);
+  wound::Drip dr[wound::MAX_DRIPS];
+  const int nd = wound::plan_drips(wd, rd, dr);
+  OK(nd >= 2 && nd <= 4, "two to four drips");
+  bool drips_ok = true, wide = false;
+  for (int i = 0; i < nd; i++) {
+    drips_ok &= dr[i].len >= 14 && dr[i].len < 72 && dr[i].y > wd.y && dr[i].x > sh.cx - sh.a && dr[i].x < sh.cx + sh.a;
+    drips_ok &= wound::drip_len(dr[i], 0) == 0 && wound::drip_len(dr[i], wound::DRIP_MS) == dr[i].len && wound::drip_len(dr[i], wound::DRIP_MS / 2) > dr[i].len / 2;
+    wide |= dr[i].w == 3;
+  }
+  OK(drips_ok && wide, "each drip leaves the lower lip, grows to its length (fast, then slow), and the longest is thickest");
+  const uint32_t top = wound::drip_argb(dr[0], dr[0].len, true, dr[0].x, dr[0].y + 3);
+  const uint32_t beyond = wound::drip_argb(dr[0], dr[0].len / 2, false, dr[0].x, dr[0].y + dr[0].len - 2);
+  OK((top >> 24) == 255 && ((top >> 16) & 255) > 100 && beyond == 0, "a drip is red where it has run, and nothing further down");
+  OK(wound::over(0, 0x80FF0000u) == 0x80FF0000u && wound::over(0xFF102030u, 0xFF405060u) == 0xFF405060u, "over: onto nothing, and opaque on opaque");
+  const uint32_t half = wound::over(0xFF000000u, 0x80FF0000u);
+  OK((half >> 24) == 255 && ((half >> 16) & 255) > 120 && ((half >> 16) & 255) < 136, "over: half-red on black is half red");
   std::printf("\n%d checks, %d failures\n", checks, failures);
   return failures ? 1 : 0;
 }

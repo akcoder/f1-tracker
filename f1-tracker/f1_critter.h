@@ -39,9 +39,11 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <type_traits>
 
 #include "f1_critterbite.h"
 #include "f1_dino_data.h"
+#include "f1_wound.h"
 
 #if defined(USE_ESP32) && !defined(F1_HOST_TEST)
 #include "esp_heap_caps.h"
@@ -83,7 +85,17 @@ inline lv_obj_t *marks_obj = nullptr;
 inline lv_draw_buf_t *marks_buf = nullptr;
 inline bool eating = false;          // a hungry visit is on: the project holds the card it is eating
 
+// Carl's bites (MOUTH_KIND WOUND, f1_wound.h): each bite is a wound, and blood runs from it for a few seconds.
+inline wound::Drip wd_drip[BITES_MAX + 1][wound::MAX_DRIPS];
+inline int wd_n[BITES_MAX + 1] = {0};                    // drips of each bite
+inline int wd_len[BITES_MAX + 1][wound::MAX_DRIPS] = {{0}};   // how much of each is painted
+inline bool wd_bead[BITES_MAX + 1][wound::MAX_DRIPS] = {{false}};
+inline uint32_t wd_seed = 1;
+
 inline void clear_marks() {
+  std::memset(wd_n, 0, sizeof(wd_n));
+  std::memset(wd_len, 0, sizeof(wd_len));
+  std::memset(wd_bead, 0, sizeof(wd_bead));
   if (marks_obj) lv_obj_delete(marks_obj);
   marks_obj = nullptr;
   if (marks_buf) lv_draw_buf_destroy(marks_buf);
@@ -111,9 +123,56 @@ inline bool marks_begin(lv_obj_t *parent, const Food &it) {
   return true;
 }
 
+// One overlay pixel, in screen coordinates: `c` over what is there.
+inline void mark_put(const Food &it, int x, int y, uint32_t c) {
+  if (c == 0 || x < it.x || x >= it.x + it.w || y < it.y || y >= it.y + it.h) return;
+  uint32_t *row = (uint32_t *) ((uint8_t *) marks_buf->data + (size_t) (y - it.y) * marks_buf->header.stride);
+  row[x - it.x] = wound::over(row[x - it.x], c);
+}
+
+// Carl's bites from..k-1: the wound, and where its blood will run (painted by drips_paint as it grows).
+inline void wounds_paint(const Food &it, bool left, const Pt *pt, const int *r, int from, int k) {
+  for (int i = from; i < k; i++) {
+    wound::Wound w;
+    w.x = pt[i].x; w.y = pt[i].y; w.r = r[i] - 3; w.left = left; w.seed = wd_seed * 31u + (uint32_t) i;
+    const int ext = wound::extent(w);
+    for (int y = w.y - ext; y <= w.y + ext; y++)
+      for (int x = w.x - 2 * ext; x <= w.x + 2 * ext; x++) mark_put(it, x, y, wound::wound_argb(w, x, y));
+    Rng rng(w.seed ^ 0xB10Du);
+    wd_n[i] = wound::plan_drips(w, rng, wd_drip[i]);
+    for (int j = 0; j < wd_n[i]; j++) { wd_len[i][j] = 0; wd_bead[i][j] = false; }
+  }
+}
+
+// The blood, as far as it has run `t` ms into the visit (or all of it); the part not painted yet only.
+inline void drips_paint(const Food &it, const Hunger &h, uint32_t t, bool all) {
+  if (marks_obj == nullptr || marks_buf == nullptr) return;
+  bool any = false;
+  for (int i = 0; i < h.nb; i++) {
+    if (t < h.tb[i]) continue;                                   // a bite that never landed has no blood
+    for (int j = 0; j < wd_n[i]; j++) {
+      const wound::Drip &d = wd_drip[i][j];
+      const int now = all ? d.len : wound::drip_len(d, t - h.tb[i]);
+      const bool bead = now >= d.len && !wd_bead[i][j];
+      if (now <= wd_len[i][j] && !bead) continue;
+      for (int y = d.y + wd_len[i][j] - 1; y <= d.y + now + 4; y++)
+        for (int x = d.x - 6; x <= d.x + 6; x++) mark_put(it, x, y, wound::drip_argb(d, now, now >= d.len, x, y));
+      wd_len[i][j] = now;
+      if (now >= d.len) wd_bead[i][j] = true;
+      any = true;
+    }
+  }
+  if (any) lv_obj_invalidate(marks_obj);
+}
+
 // Paints bites from..k-1 (those before are on it already): black where the mouth took it, the rim around.
 inline void marks_paint(const lv_draw_buf_t *snap, const Food &it, int kind, bool left, const Pt *pt, const int *r, int from, int k) {
   if (marks_obj == nullptr || marks_buf == nullptr) return;
+  if (kind == WOUND) {
+    wounds_paint(it, left, pt, r, from, k);
+    lv_obj_invalidate(marks_obj);
+    return;
+  }
   for (int i = from; i < k; i++) {
     const int ext = r[i] * BITE_REACH_X10 / 10 + 4;
     for (int y = pt[i].y - ext; y <= pt[i].y + ext; y++)
@@ -133,6 +192,12 @@ inline void marks_paint(const lv_draw_buf_t *snap, const Food &it, int kind, boo
   }
   lv_obj_invalidate(marks_obj);
 }
+
+// A Traits that bites only a face (Carl): ONLY_FACE = true. The others need not say.
+template <class T, class = void>
+struct only_face : std::false_type {};
+template <class T>
+struct only_face<T, std::void_t<decltype(T::ONLY_FACE)>> : std::integral_constant<bool, T::ONLY_FACE> {};
 
 template <class T>
 struct Critter {
@@ -202,14 +267,20 @@ struct Critter {
     Food box;
     if (marks_obj != nullptr) return false;                      // this card has been bitten already
     if (!food_hook || !food_hook(box) || box.w <= 0 || box.h <= 0 || st.snap == nullptr) return false;
+    constexpr bool FACE = only_face<T>::value;
+    if (FACE && (box.trace || box.fw <= 0)) return false;        // Carl wants a face
     Rng rng(seed ^ 0x51ED5u);
-    const int n = bite_count(seed);
+    const int n = FACE ? 2 + (int) ((seed >> 5) % 2) : bite_count(seed);   // Carl: two or three
     Pt pts[BITES_MAX];
     int got = 0;
     bool flip = false;
     Food item = box;
     const int sw = (int) st.snap->header.w, sh = (int) st.snap->header.h;
-    if (box.trace) {
+    if (FACE) {
+      flip = true;                                               // he comes from the right, facing the face
+      got = face_points(box, n, rng, pts);
+      wd_seed = seed;
+    } else if (box.trace) {
       int x0 = sw, y0 = sh, x1 = -1, y1 = -1;                    // what is drawn in the box
       for (int y = box.y; y < box.y + box.h && y < sh; y++)
         for (int x = box.x; x < box.x + box.w && x < sw; x++)
@@ -232,7 +303,7 @@ struct Critter {
       flip = true;                                               // the portrait's edge, the bird facing it
       got = edge_points(item, n, rng, pts);
     }
-    if (got < BITES_MIN) return false;
+    if (got < (FACE ? 2 : BITES_MIN)) return false;
     const int mdx = flip ? -2 : T::W + 2;
     for (int i = 0; i < got; i++) {                              // the whole bird on screen at every bite
       const int left = pts[i].x - mdx, top = pts[i].y - T::MOUTH_DY;
@@ -244,7 +315,7 @@ struct Critter {
     st.hg.plan(pts, got, st.w.t_stop, T::MOVE_SPEED, 1500, rng);
     const Pt last = pts[got - 1];
     // ... and on its way out it may stop at a random spot over the picture for one more bite
-    {
+    if (!FACE) {
       int xs[SCREEN_W], nx = 0;
       if (!box.trace) {
         for (int x = item.x + 14; x <= last.x - 30; x += 4) xs[nx++] = x;
@@ -293,6 +364,7 @@ struct Critter {
         marks_paint(st.snap, st.item, T::MOUTH_KIND, st.w.flip, st.hg.pt, st.hg.r, st.marks_k, k);
         st.marks_k = k;
       }
+      if (T::MOUTH_KIND == WOUND) drips_paint(st.item, st.hg, t, false);       // the blood runs on
     }
     if (f.x != st.x || f.y != st.y) {
       st.x = f.x;
@@ -333,6 +405,7 @@ struct Critter {
         const int k = st.hg.bites_done(ms);
         if (k > 0) {
           if (k != st.marks_k) marks_paint(st.snap, st.item, T::MOUTH_KIND, st.w.flip, st.hg.pt, st.hg.r, st.marks_k, k);
+          if (T::MOUTH_KIND == WOUND) drips_paint(st.item, st.hg, ms, true);    // a visit cut short still leaves finished drips
           lv_obj_set_parent(marks_obj, lv_obj_get_parent(st.root));   // out from under the snapshot, before it goes
         } else {
           clear_marks();
@@ -367,10 +440,15 @@ struct Critter {
       return false;
     }
     st.hungry = false;
-    if (food_hook && (force_hungry || (seed >> 9) % HUNGRY_ONE_IN == 0)) {
+    if (food_hook && (only_face<T>::value || force_hungry || (seed >> 9) % HUNGRY_ONE_IN == 0)) {
       force_hungry = false;
       st.hungry = plan_hunger(seed);
       if (!st.hungry) st.w = T::make(seed);                      // plan_hunger may have changed it before giving up
+    }
+    if (only_face<T>::value && !st.hungry) {                     // Carl does not walk by: no face, no visit
+      lv_draw_buf_destroy(st.snap);
+      st.snap = nullptr;
+      return false;
     }
     const uint8_t *pose_src[N], *tail_src = st.w.flip ? dino::TAIL_L : dino::TAIL_R;
     for (int p = 0; p < N; p++) pose_src[p] = T::pose(p);
@@ -452,6 +530,12 @@ struct Critter {
     return true;
   }
 
+  // Is there a face on the screen that has not been bitten (checked before the snapshot, which is costly)?
+  static bool face_ready() {
+    Food box;
+    return marks_obj == nullptr && food_hook && food_hook(box) && !box.trace && box.fw > 0;
+  }
+
   // About once a second from the project: starts a visit when one is due, and ends one that is no longer
   // welcome. `welcome`: nothing over the screen, a page where a visitor is fun, the panel lit.
   static void tick(uint32_t now_ms, bool welcome) {
@@ -465,9 +549,10 @@ struct Critter {
       return;
     }
     if (!welcome || (enabled && !enabled()) || (int32_t) (now_ms - st.next_at) < 0) return;
+    if (only_face<T>::value && !face_ready()) return;            // he is due, and waits for a face
     st.seed = st.seed * 1664525u + 1013904223u + now_ms;         // a new visit each time
-    begin_visit(st.seed);
-    st.next_at = now_ms + T::gap(st.seed ^ 0x9E3779B9u);
+    const bool started = begin_visit(st.seed);
+    st.next_at = now_ms + (only_face<T>::value && !started ? 60000u : T::gap(st.seed ^ 0x9E3779B9u));
   }
 
   static bool active() { return st.running; }

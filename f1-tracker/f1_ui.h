@@ -17,6 +17,7 @@
 #include "f1_circuits.h"
 #include "f1_drivers.h"
 #include "f1_facts.h"
+#include "f1_faces.h"
 #include "f1_flags.h"
 #include "f1_legends.h"
 #include "f1_map.h"
@@ -79,6 +80,8 @@ struct State {
   headshot::Slot *staged_hs = nullptr;   // its picture, being fetched (f1_headshot.h)
   char staged_headshot[8] = {0};   // a driver with no compiled portrait: fetch theirs (f1_headshot.h)
   photo::Photo card_photo{240, 320};                // the carousel card's portrait, full size
+  int face_x = 0, face_y = 0, face_w = 0, face_h = 0;   // MOTION-8: where the face is in the shown picture (face_w 0: unknown)
+  headshot::Slot *face_hs = nullptr;                // ... when the picture is a headshot: Carl waits until it has arrived
   char staged_badge[12] = {0};
   char staged_title[48] = {0};
   char staged_body[320] = {0};
@@ -443,6 +446,9 @@ inline bool food(critter::Food &f) {
   lv_area_t a;
   lv_obj_get_coords(box, &a);
   f = critter::Food{a.x1, a.y1, a.x2 - a.x1 + 1, a.y2 - a.y1 + 1, g.shown.type == carousel::CIRCUIT};
+  if (g.shown.type != carousel::CIRCUIT && g.face_w > 0 && (g.face_hs == nullptr || g.face_hs->state.load() == headshot::READY)) {
+    f.fx = a.x1 + g.face_x; f.fy = a.y1 + g.face_y; f.fw = g.face_w; f.fh = g.face_h;
+  }
   return f.w > 100 && f.h > 100;
 }
 
@@ -557,6 +563,17 @@ inline void commit() {
       if (!photo::show_external(g.card_photo, g.staged_hs)) lv_obj_add_flag(g.w.credit, LV_OBJ_FLAG_HIDDEN);
     } else {
       photo::stop(g.card_photo);
+    }
+  }
+  // MOTION-8: where Carl will bite. A compiled portrait has its face annotated (f1_faces.h); the F1 media
+  // server's headshots are all framed alike.
+  g.face_w = 0;
+  g.face_hs = nullptr;
+  if (!is_circuit) {
+    const faces::Face *fc = g.staged_photo ? faces::find(g.staged_photo->driver_id) : (g.staged_hs ? &faces::HEADSHOT : nullptr);
+    if (fc) {
+      g.face_x = fc->x; g.face_y = fc->y; g.face_w = fc->w; g.face_h = fc->h;
+      if (!g.staged_photo) g.face_hs = g.staged_hs;
     }
   }
 }
