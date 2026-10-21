@@ -4,7 +4,7 @@
 # M0 scope: hardware, platform tuning, entities, page shells. No data layer yet.
 
 substitutions:
-  fw_version: "1.0.17"         # bump on every install; shown in HA, settings and the status page
+  fw_version: "1.0.18"         # bump on every install; shown in HA, settings and the status page
   name: f1-tracker
   friendly_name: F1 Tracker
   # UI-44: the ONLY use of a position is computing sunrise/sunset for auto-dim
@@ -1487,6 +1487,8 @@ lvgl:
             if (auto ix = id(time_zone).active_index()) lv_dropdown_set_selected(id(dd_tz)->obj, *ix);   // UI-70
             set(id(sw_alerts), id(watched_alerts).state);
             set(id(sw_milestone), id(milestone_only).state);
+            if (auto ix = id(watched_driver).active_index()) lv_dropdown_set_selected(id(dd_driver)->obj, *ix);
+            if (auto ix = id(favourite_team).active_index()) lv_dropdown_set_selected(id(dd_team)->obj, *ix);
             set(id(sw_24h), id(clock_24h).state);
             lv_slider_set_value(id(sl_carousel), (int) id(carousel_secs).state, LV_ANIM_OFF);
             lv_slider_set_value(id(sl_bright),
@@ -1585,6 +1587,8 @@ lvgl:
                       else { id(auto_bright).turn_off(); id(auto_off).turn_off(); }
                       sw(id(sw_alerts), id(watched_alerts));
                       sw(id(sw_milestone), id(milestone_only));
+                      id(watched_driver).make_call().set_index(lv_dropdown_get_selected(id(dd_driver)->obj)).perform();
+                      id(favourite_team).make_call().set_index(lv_dropdown_get_selected(id(dd_team)->obj)).perform();
                       id(carousel_secs).make_call()
                           .set_value(lv_slider_get_value(id(sl_carousel))).perform();
                       sw(id(sw_24h), id(clock_24h));
@@ -1720,7 +1724,7 @@ lvgl:
             x: 0
             y: 104
             width: 480
-            height: 224
+            height: 250
             hidden: true
             bg_opa: TRANSP
             border_width: 0
@@ -1747,6 +1751,74 @@ lvgl:
               - label: {x: 16, y: 106, text: "\U000F053A", text_font: mdi18, text_color: 0x7E8BB3}
               - label: {x: 44, y: 106, text: "Milestones only", text_font: mono16, text_color: 0xC9D3F2}
               - switch: {id: sw_milestone, x: 380, y: 100, width: 72, height: 32}
+              - label: {x: 16, y: 156, text: "\U000F0013", text_font: mdi18, text_color: 0x7E8BB3}
+              - label: {x: 44, y: 156, text: "Driver", text_font: mono16, text_color: 0xC9D3F2}
+              - dropdown:             # staged like the other fields, applied on Save
+                  id: dd_driver
+                  x: 200
+                  y: 150
+                  width: 250
+                  height: 40
+                  options:
+                    - "Max Verstappen"
+                    - "Lando Norris"
+                    - "Charles Leclerc"
+                    - "Oscar Piastri"
+                    - "George Russell"
+                    - "Lewis Hamilton"
+                    - "Fernando Alonso"
+                    - "(none)"
+                  text_font: mono16
+                  text_color: 0xEEF2FF
+                  bg_color: 0x0E1836
+                  border_color: 0x3A4E86
+                  border_width: 2
+                  pad_all: 6
+                  dropdown_list:
+                    text_font: mono16
+                    text_color: 0xEEF2FF
+                    bg_color: 0x0E1836
+                    border_color: 0x3A4E86
+                    max_height: 190
+                  indicator:
+                    text_font: montserrat_14
+                    text_color: 0x7E8BB3
+              - label: {x: 16, y: 206, text: "\U000F0AC1", text_font: mdi18, text_color: 0x7E8BB3}
+              - label: {x: 44, y: 206, text: "Team", text_font: mono16, text_color: 0xC9D3F2}
+              - dropdown:             # staged like the other fields, applied on Save
+                  id: dd_team
+                  x: 200
+                  y: 200
+                  width: 250
+                  height: 40
+                  options:
+                    - "(none)"
+                    - "Red Bull Racing"
+                    - "McLaren"
+                    - "Ferrari"
+                    - "Mercedes"
+                    - "Aston Martin"
+                    - "Alpine"
+                    - "Williams"
+                    - "Racing Bulls"
+                    - "Audi"
+                    - "Haas F1 Team"
+                    - "Cadillac"
+                  text_font: mono16
+                  text_color: 0xEEF2FF
+                  bg_color: 0x0E1836
+                  border_color: 0x3A4E86
+                  border_width: 2
+                  pad_all: 6
+                  dropdown_list:
+                    text_font: mono16
+                    text_color: 0xEEF2FF
+                    bg_color: 0x0E1836
+                    border_color: 0x3A4E86
+                    max_height: 190
+                  indicator:
+                    text_font: montserrat_14
+                    text_color: 0x7E8BB3
 
         - obj:
             id: pnl_location
